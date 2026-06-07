@@ -1,0 +1,132 @@
+<html>
+<head>
+    
+<!--Embed Code starts-->
+<script type="text/javascript">
+    window.mychat = window.mychat || {};
+    console.log(window.mychat);
+    // domain for widget code embed
+    window.mychat.server = 'https://localhost';
+    window.mychat.iframeWidth = '700px';
+    window.mychat.iframeHeight = '700px';
+    (function() {
+        var mychat = document.createElement('script'); mychat.type = 'text/javascript'; mychat.async = true;
+        mychat.src = window.mychat.server + '/WebBot/assets/js/widget.js';
+        var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(mychat, s);
+    })();
+</script>
+<!--Embed Code ends-->
+</head>
+<body>
+<!-- <h2>This is my website</h2>
+<div style="min-height:500px; background:#ccc; display:flex; padding:20px;">Something here</div> -->
+</body>
+<script type="text/javascript">
+    // /embed/widget.js
+/**
+* Widget Embed iframe code
+* (also external domain)
+*
+*/
+(function(){
+    window.mychat = window.mychat || {};
+    var iframe2 = document.createElement('div');
+    iframe2.id = "chat-widget-container";
+    // var styles = {
+        
+    // };
+    // Object.assign(iframe2.style, styles);
+    var iframe1 = document.createElement('iframe');
+    // chat source (external url)
+    // iframe1.src = 'https://sendbird.github.io/uikit-js-marketing/iframe.html?id=example-app--primary&viewMode=story';
+    iframe1.src = 'http://localhost/WebBot/tvaibwc-widget.html';
+    iframe1.id = "chat-widget-iframe";
+    iframe1.allow = "autoplay; camera; microphone";
+    // var styles = {
+    //     // "pointer-events": "all",
+    //     // "background": "none",
+    //     // "border": "0px",
+    //     // "float": "none",
+    //     // "position": "absolute",
+    //     // "inset": "0px",
+    //     // "width": "100%",
+    //     // "height": "100%",
+    //     // "margin": "0px",
+    //     // "padding": "0px",
+    //     // "min-height": "0px"
+    //     "width": '100%',
+    //     "height": '100%',
+    //     "min-height": '0px',
+    //     "min-width": '0px',
+    //     "margin": '0px',
+    //     "padding": "0px",
+    //     "background-image": "none",
+    //     "background-position": "0% 0%",
+    //     "background-size": "initial",
+    //     "background-attachment": "scroll",
+    //     "background-origin": "initial",
+    //     "background-clip": "initial",
+    //     "background-color": "rgba(0, 0, 0, 0)",
+    //     "border-width": '0px',
+    //     "float": "none",
+    //    " color-scheme": "normal",
+    //     "position": "absolute",
+    //     "inset": "0px",
+    //    " transition": "none 0s ease 0s !important",
+    //     "display": "block",
+    // };
+    // Object.assign(iframe1.style, styles);
+    iframe2.appendChild(iframe1);
+    document.querySelector('body').appendChild(iframe2);
+    
+})();
+    
+</script>
+<style>
+    body {
+        background:white;
+        border:12px solid blueviolet;
+        padding:20px;
+    }
+    #chat-widget-container{
+       /*  opacity: 1;
+        visibility: visible;
+        z-index: 2147483639;
+        position: fixed;
+        bottom: 0px;
+        width: 352px;
+        height: 652px;
+        max-width: 100%;
+        max-height: calc(100% - 0px);
+        min-height: 0px;
+        min-width: 0px;
+
+        border: 0px;
+        overflow: hidden;
+        right: 0px;
+        transition: none 0s ease 0s !important; */
+    }
+    #chat-widget-iframe{
+        width: 100%;
+height: 100%;
+min-height: 0px;
+min-width: 0px;
+margin: 0px;
+padding: 0px;
+background-image: none;
+background-position: 0% 0%;
+background-size: initial;
+background-attachment: scroll;
+background-origin: initial;
+background-clip: initial;
+background-color: rgba(0, 0, 0, 0);
+border-width: 0px;
+float: none;
+color-scheme: normal;
+position: absolute;
+inset: 0px;
+transition: none 0s ease 0s !important;
+display: block;
+    }
+</style>
+</html>

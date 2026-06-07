@@ -1,0 +1,159 @@
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Third Party Services
+    |--------------------------------------------------------------------------
+    |
+    | This file is for storing the credentials for third party services such
+    | as Mailgun, Postmark, AWS and more. This file provides the de facto
+    | location for this type of information, allowing packages to have
+    | a conventional file to locate the various service credentials.
+    |
+    */
+
+    'mailgun' => [
+        'domain' => env('MAILGUN_DOMAIN'),
+        'secret' => env('MAILGUN_SECRET'),
+        'endpoint' => env('MAILGUN_ENDPOINT', 'api.mailgun.net'),
+        'scheme' => 'https',
+    ],
+
+    'postmark' => [
+        'token' => env('POSTMARK_TOKEN'),
+    ],
+
+    'ses' => [
+        'key' => env('AWS_ACCESS_KEY_ID'),
+        'secret' => env('AWS_SECRET_ACCESS_KEY'),
+        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
+    ],
+    'ollama' => [
+        'url' => env('OLLAMA_URL', 'http://localhost:11434/api/generate'),
+        'model' => env('OLLAMA_MODEL', 'llama3'),
+    ],
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY'),
+    ],
+
+    'python' => [
+        'base_url'        => env('PYTHON_BASE_URL', 'http://127.0.0.1:8000'),
+        'ws_url'          => env('PYTHON_WS_URL', 'ws://127.0.0.1:8000/ws/turn'),
+        'internal_secret' => env('PYTHON_INTERNAL_SECRET'),
+        'jwt_secret'      => env('PYTHON_JWT_SECRET'),
+        'token_ttl'       => (int) env('PYTHON_TOKEN_TTL', 3600),
+    ],
+
+    'twilio' => [
+        'account_sid'  => env('TWILIO_ACCOUNT_SID'),
+        'auth_token'   => env('TWILIO_AUTH_TOKEN'),
+        'phone_number' => env('TWILIO_PHONE_NUMBER'),
+        // Public base URL where Twilio reaches our webhooks. For local
+        // dev this is your ngrok URL; in production it's the deployed
+        // Laravel hostname. NO trailing slash.
+        'webhook_base' => env('TWILIO_WEBHOOK_BASE'),
+        // Public URL Twilio uses to fetch <Play> audio (cached welcome
+        // wavs etc). Same ngrok tunnel that maps to Python's :8002.
+        // Defaults to PYTHON_WS_URL with scheme swapped so we don't
+        // need a separate env var when it's the same tunnel.
+        'python_public_url' => env('PYTHON_PUBLIC_URL'),
+    ],
+
+    // "Call me now" demo on the public landing page. When `enabled` is
+    // false the endpoint logs the lead and returns a friendly message
+    // instead of actually placing a call — safe to ship before the
+    // outbound-call wiring is finished.
+    'demo_call' => [
+        'enabled' => env('DEMO_CALL_ENABLED', false),
+    ],
+
+    // Public landing page — embed the real production widget via the
+    // standard loader.js snippet (same one customers paste on their
+    // own sites). Set this to the project_api_key of whichever project
+    // you want shown on the marketing site. Find the key on:
+    //   /c/{client}/widget-settings → "Embed on customer's site" card.
+    //
+    // Legacy LANDING_WIDGET_URL is still honoured if set (manual iframe
+    // fallback) — leave it unset to use the loader.js path.
+    'landing' => [
+        'demo_key'   => env('LANDING_DEMO_KEY', null),
+        'widget_url' => env('LANDING_WIDGET_URL', null),
+    ],
+
+    // Base URL of the public widget folder (the directory that contains
+    // webchat-app.php). Used by the widget-settings live preview to
+    // iframe the real widget. Defaults to swapping /admin/public out of
+    // app.url for /widget, which matches the local laragon layout.
+    'widget' => [
+        'base_url' => env('WIDGET_BASE_URL') ?:
+            preg_replace('#/admin/?public/?$#', '/widget', rtrim((string) env('APP_URL', ''), '/')),
+    ],
+
+    'voice' => [
+        'default_provider' => env('VOICE_DEFAULT_PROVIDER', 'coqui'),
+        // Absolute directory where speaker reference WAVs are stored.
+        // Python voice-engine reads files from this same path.
+        'speakers_dir' => env('VOICE_ENGINE_SPEAKERS_DIR',
+            base_path('../voice-engine/voice_outputs/speakers')),
+        'default_language' => env('VOICE_DEFAULT_LANGUAGE', 'en'),
+        // 17 languages XTTS-v2 supports
+        'supported_languages' => [
+            'en' => 'English',
+            'es' => 'Spanish',
+            'fr' => 'French',
+            'de' => 'German',
+            'it' => 'Italian',
+            'pt' => 'Portuguese',
+            'pl' => 'Polish',
+            'tr' => 'Turkish',
+            'ru' => 'Russian',
+            'nl' => 'Dutch',
+            'cs' => 'Czech',
+            'ar' => 'Arabic',
+            'zh-cn' => 'Chinese',
+            'hu' => 'Hungarian',
+            'ko' => 'Korean',
+            'ja' => 'Japanese',
+            'hi' => 'Hindi',
+        ],
+        'elevenlabs' => [
+            'api_key' => env('ELEVENLABS_API_KEY'),
+        ],
+    ],
+
+    'tenant' => [
+        'host'        => env('TENANT_DB_HOST', '127.0.0.1'),
+        'port'        => env('TENANT_DB_PORT', '3306'),
+        'username'    => env('TENANT_DB_USERNAME', 'root'),
+        'password'    => env('TENANT_DB_PASSWORD', ''),
+        'name_prefix' => env('TENANT_DB_NAME_PREFIX', 'ai-crm-client-'),
+    ],
+
+    'hubspot' => [
+        'client_id'     => env('HUBSPOT_CLIENT_ID'),
+        'client_secret' => env('HUBSPOT_CLIENT_SECRET'),
+        'redirect_uri'  => env('HUBSPOT_REDIRECT_URI', 'http://127.0.0.1:8001/oauth/hubspot/callback'),
+    ],
+
+    'salesforce' => [
+        'client_id'     => env('SALESFORCE_CLIENT_ID'),
+        'client_secret' => env('SALESFORCE_CLIENT_SECRET'),
+        'redirect_uri'  => env('SALESFORCE_REDIRECT_URI', 'http://127.0.0.1:8001/oauth/salesforce/callback'),
+        'login_host'    => env('SALESFORCE_LOGIN_HOST', 'https://login.salesforce.com'),
+    ],
+
+    'pipedrive' => [
+        'client_id'     => env('PIPEDRIVE_CLIENT_ID'),
+        'client_secret' => env('PIPEDRIVE_CLIENT_SECRET'),
+        'redirect_uri'  => env('PIPEDRIVE_REDIRECT_URI', 'http://127.0.0.1:8001/oauth/pipedrive/callback'),
+    ],
+
+    'zoho' => [
+        'client_id'     => env('ZOHO_CLIENT_ID'),
+        'client_secret' => env('ZOHO_CLIENT_SECRET'),
+        'redirect_uri'  => env('ZOHO_REDIRECT_URI', 'http://127.0.0.1:8001/oauth/zoho/callback'),
+        'auth_host'     => env('ZOHO_AUTH_HOST', 'https://accounts.zoho.com'),
+    ],
+];

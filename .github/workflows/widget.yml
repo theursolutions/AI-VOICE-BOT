@@ -1,0 +1,40 @@
+name: widget
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'widget/**'
+      - '.github/workflows/widget.yml'
+  pull_request:
+    paths:
+      - 'widget/**'
+      - '.github/workflows/widget.yml'
+
+defaults:
+  run:
+    working-directory: widget
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          coverage: none
+
+      - name: PHP syntax check
+        run: find app -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: JS syntax check
+        run: |
+          for f in $(find assets/js -name '*.js'); do
+            node --check "$f"
+          done

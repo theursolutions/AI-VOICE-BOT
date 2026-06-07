@@ -1,0 +1,21 @@
+{
+    "name": "ursolutions/tvaibwc",
+    "autoload": {
+        "psr-4": {
+            "Ursolutions\\Tvaibwc\\": "app/"
+        },
+        "files": [
+            "Helpers/Functions.php"
+        ]
+    },
+    "authors": [
+        {
+            "name": "Muhammad Umer",
+            "email": "rana87330@gmail.com"
+        }
+    ],
+    "require": {
+        "guzzlehttp/guzzle": "^7.10",
+        "vlucas/phpdotenv": "^5.6"
+    }
+}

@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intercom-like Chat Widget</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --dark-bg: #1e293b;
+            --dark-text: #f8fafc;
+            --light-bg: #ffffff;
+            --light-text: #1e293b;
+            --border-radius: 12px;
+            --box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 200vh; /* For demo purposes to show it works on scrolling */
+            padding: 20px;
+        }
+
+        /* Chat Widget Container */
+        .chat-widget-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        /* Chat Button */
+        .chat-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--box-shadow);
+            transition: all 0.3s ease;
+            border: none;
+        }
+
+        .chat-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .chat-button i {
+            font-size: 24px;
+        }
+
+        /* Chat Widget */
+        .chat-widget {
+            width: 350px;
+            height: 500px;
+            background-color: var(--light-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform-origin: bottom right;
+            transition: all 0.3s ease;
+        }
+
+        .chat-widget.expanded {
+            width: 700px;
+        }
+
+        .chat-widget.dark {
+            background-color: var(--dark-bg);
+            color: var(--dark-text);
+        }
+
+        /* Widget Header */
+        .widget-header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+        }
+
+        .widget-header::after {
+            content: '';
+            position: absolute;
+            bottom: -10px;
+            right: 20px;
+            width: 0;
+            height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 10px solid var(--primary-color);
+        }
+
+        .widget-header h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .header-actions button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .header-actions button:hover {
+            opacity: 1;
+        }
+
+        /* Widget Content */
+        .widget-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+            display: none;
+        }
+
+        .widget-content.active {
+            display: block;
+        }
+
+        /* Chat Messages */
+        .chat-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 70px; /* Space for input area */
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 10px 15px;
+            border-radius: 18px;
+            position: relative;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background-color: var(--primary-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.bot {
+            align-self: flex-start;
+            background-color: #e2e8f0;
+            color: var(--light-text);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.bot.dark {
+            background-color: #334155;
+            color: var(--dark-text);
+        }
+
+        .message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 4px;
+            text-align: right;
+        }
+
+        /* Chat Input */
+        .chat-input-container {
+            position: absolute;
+            bottom: 60px;
+            left: 0;
+            right: 0;
+            padding: 15px;
+            background-color: #1a365d; /* Dark blue */
+            transition: all 0.3s ease;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .chat-input-container:focus-within {
+            border: 1px solid white;
+            border-radius: 8px 8px 0 0;
+            margin: 0 10px;
+            padding-bottom: 5px;
+        }
+        .chat-input-container.dark {
+            background-color: var(--dark-bg);
+            border-top: 1px solid #334155;
+        }
+
+        .chat-input-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 10px 15px;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .chat-input:focus {
+            border-color: var(--primary-color);
+        }
+
+        .chat-input.dark {
+            background-color: #334155;
+            border-color: #475569;
+            color: var(--dark-text);
+        }
+
+        .send-button {
+        background: transparent;
+        border: none;
+        color: white;
+        cursor: pointer;
+        padding: 0 10px;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+
+    .send-button:hover {
+        opacity: 1;
+    }
+
+
+        .chat-actions {
+        display: flex;
+        padding: 0 5px;
+    }
+
+    .action-button {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        padding: 5px 10px;
+        transition: all 0.2s;
+    }
+
+    .action-button:hover {
+        color: white;
+    }
+
+        .action-button.dark {
+            color: #94a3b8;
+        }
+
+        .expand-button {
+            background: none;
+            border: none;
+            color: #64748b;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .expand-button.dark {
+            color: #94a3b8;
+        }
+
+        /* Widget Tabs */
+        .widget-tabs {
+            display: flex;
+            background-color: var(--primary-color);
+            height: 60px;
+        }
+
+        .widget-tab {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .widget-tab:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .widget-tab.active {
+            color: white;
+            opacity: 1;
+        }
+
+        .widget-tab i {
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+
+        .widget-tab span {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* FAQ Section */
+        .faq-item {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 15px;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .faq-item.dark {
+            border-bottom-color: #334155;
+        }
+
+        .faq-question {
+            font-weight: 600;
+            margin-bottom: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .faq-question:hover {
+            color: var(--primary-color);
+        }
+
+        .faq-answer {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .faq-answer.dark {
+            color: #94a3b8;
+        }
+
+        /* Chat History */
+        .history-item {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background-color: #f1f5f9;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .history-item:hover {
+            background-color: #e2e8f0;
+        }
+
+        .history-item.dark {
+            background-color: #334155;
+            color: var(--dark-text);
+        }
+
+        .history-item.dark:hover {
+            background-color: #475569;
+        }
+
+        .history-date {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 5px;
+        }
+
+        .history-date.dark {
+            color: #94a3b8;
+        }
+
+        .history-preview {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Home Content */
+        .home-content {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .home-content img {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+        }
+
+        .home-content h4 {
+            margin-bottom: 10px;
+            color: var(--primary-color);
+        }
+
+        .home-content p {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .home-content p.dark {
+            color: #94a3b8;
+        }
+
+        /* Theme Switch */
+        .theme-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-left: 10px;
+        }
+
+        .theme-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--primary-color);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(26px);
+        }
+
+        .slider i {
+            position: absolute;
+            font-size: 12px;
+            top: 6px;
+        }
+
+        .slider .fa-sun {
+            left: 6px;
+            color: white;
+        }
+
+        .slider .fa-moon {
+            right: 6px;
+            color: #1e293b;
+        }
+
+        input:checked + .slider .fa-sun {
+            color: #f8fafc;
+        }
+
+        input:checked + .slider .fa-moon {
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-widget-container">
+        <button class="chat-button" id="chatToggle">
+            <i class="fas fa-comment"></i>
+        </button>
+
+        <div class="chat-widget" id="chatWidget">
+            <div class="widget-header">
+                <h5>How can we help?</h5>
+                <div class="header-actions">
+                    <label class="theme-switch">
+                        <input type="checkbox" id="themeToggle">
+                        <span class="slider">
+                            <i class="fas fa-sun"></i>
+                            <i class="fas fa-moon"></i>
+                        </span>
+                    </label>
+                    <button id="expandWidget">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button id="closeWidget">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="widget-content active" id="homeContent">
+                <div class="home-content">
+                    <img src="https://via.placeholder.com/100" alt="Support">
+                    <h4>Welcome to our Support</h4>
+                    <p class="content-text">We're here to help you with any questions or issues you might have. Start a chat with us or browse our FAQs.</p>
+                </div>
+            </div>
+
+            <div class="widget-content" id="chatContent">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message bot">
+                        <div class="message-text">Hello! How can I help you today?</div>
+                        <div class="message-time">10:30 AM</div>
+                    </div>
+                </div>
+
+                <div class="chat-input-container" id="chatInputContainer">
+                    <div class="chat-input-row">
+                        <input type="text" class="chat-input" id="chatInput" placeholder="Type your message...">
+                        <button class="send-button" id="sendButton">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="chat-actions">
+                        <div class="action-buttons">
+                            <button class="action-button" id="voiceButton">
+                                <i class="fas fa-microphone"></i>
+                            </button>
+                            <button class="action-button" id="emojiButton">
+                                <i class="far fa-smile"></i>
+                            </button>
+                            <button class="action-button" id="attachButton">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                        </div>
+                        <button class="expand-button" id="expandChatButton">
+                            <i class="fas fa-arrows-alt-h"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="widget-content" id="historyContent">
+                <h6>Recent Conversations</h6>
+                <div class="history-list" id="historyList">
+                    <div class="history-item">
+                        <div class="history-date">Today, 10:30 AM</div>
+                        <div class="history-preview">Hello! How can I help you today?</div>
+                    </div>
+                    <div class="history-item">
+                        <div class="history-date">Yesterday, 2:45 PM</div>
+                        <div class="history-preview">Thanks for your question about our pricing plans...</div>
+                    </div>
+                    <div class="history-item">
+                        <div class="history-date">Monday, 9:15 AM</div>
+                        <div class="history-preview">Your account has been successfully upgraded...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="widget-content" id="faqContent">
+                <h6>Frequently Asked Questions</h6>
+                <div class="faq-list" id="faqList">
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>How do I reset my password?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer" style="display: none;">
+                            You can reset your password by clicking on the "Forgot Password" link on the login page. We'll send you an email with instructions to reset it.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>What payment methods do you accept?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer" style="display: none;">
+                            We accept all major credit cards including Visa, MasterCard, and American Express. We also support PayPal for certain regions.
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <div class="faq-question">
+                            <span>How can I cancel my subscription?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="faq-answer" style="display: none;">
+                            You can cancel your subscription at any time from the Billing section in your account settings. Your subscription will remain active until the end of the current billing period.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="widget-tabs">
+                <div class="widget-tab active" data-tab="home">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </div>
+                <div class="widget-tab" data-tab="chat">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>Chat</span>
+                </div>
+                <div class="widget-tab" data-tab="history">
+                    <i class="fas fa-history"></i>
+                    <span>History</span>
+                </div>
+                <div class="widget-tab" data-tab="faq">
+                    <i class="fas fa-question-circle"></i>
+                    <span>FAQ</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Toggle chat widget
+            $('#chatToggle').click(function() {
+                $('#chatWidget').toggleClass('show');
+                $(this).html('<i class="fas fa-times"></i>');
+                $(this).toggleClass('open');
+                
+                if (!$(this).hasClass('open')) {
+                    $(this).html('<i class="fas fa-comment"></i>');
+                }
+            });
+
+            // Close widget
+            $('#closeWidget').click(function() {
+                $('#chatWidget').removeClass('show');
+                $('#chatToggle').html('<i class="fas fa-comment"></i>');
+                $('#chatToggle').removeClass('open');
+            });
+
+            // Tab switching
+            $('.widget-tab').click(function() {
+                const tab = $(this).data('tab');
+                
+                // Update active tab
+                $('.widget-tab').removeClass('active');
+                $(this).addClass('active');
+                
+                // Show corresponding content
+                $('.widget-content').removeClass('active');
+                $(`#${tab}Content`).addClass('active');
+            });
+
+            // Theme toggle
+            $('#themeToggle').change(function() {
+                if ($(this).is(':checked')) {
+                    $('#chatWidget').addClass('dark');
+                    $('.message.bot').addClass('dark');
+                    $('.chat-input-container').addClass('dark');
+                    $('.action-button').addClass('dark');
+                    $('.expand-button').addClass('dark');
+                    $('.history-item').addClass('dark');
+                    $('.faq-item').addClass('dark');
+                    $('.faq-answer').addClass('dark');
+                    $('.home-content p').addClass('dark');
+                    $('.history-date').addClass('dark');
+                } else {
+                    $('#chatWidget').removeClass('dark');
+                    $('.message.bot').removeClass('dark');
+                    $('.chat-input-container').removeClass('dark');
+                    $('.action-button').removeClass('dark');
+                    $('.expand-button').removeClass('dark');
+                    $('.history-item').removeClass('dark');
+                    $('.faq-item').removeClass('dark');
+                    $('.faq-answer').removeClass('dark');
+                    $('.home-content p').removeClass('dark');
+                    $('.history-date').removeClass('dark');
+                }
+            });
+
+            // Expand widget
+            $('#expandWidget, #expandChatButton').click(function() {
+                $('#chatWidget').toggleClass('expanded');
+                
+                if ($('#chatWidget').hasClass('expanded')) {
+                    $(this).html('<i class="fas fa-compress"></i>');
+                } else {
+                    $(this).html('<i class="fas fa-expand"></i>');
+                }
+            });
+
+            // Send message
+            $('#sendButton').click(sendMessage);
+            $('#chatInput').keypress(function(e) {
+                if (e.which === 13) {
+                    sendMessage();
+                }
+            });
+
+            function sendMessage() {
+                const messageText = $('#chatInput').val().trim();
+                if (messageText) {
+                    // Add user message
+                    $('#chatMessages').append(`
+                        <div class="message user">
+                            <div class="message-text">${messageText}</div>
+                            <div class="message-time">${getCurrentTime()}</div>
+                        </div>
+                    `);
+                    
+                    // Clear input
+                    $('#chatInput').val('');
+                    
+                    // Simulate bot response after a delay
+                    setTimeout(() => {
+                        $('#chatMessages').append(`
+                            <div class="message bot ${$('#themeToggle').is(':checked') ? 'dark' : ''}">
+                                <div class="message-text">Thanks for your message! Our team will get back to you soon.</div>
+                                <div class="message-time">${getCurrentTime()}</div>
+                            </div>
+                        `);
+                        
+                        // Scroll to bottom
+                        $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+                    }, 1000);
+                    
+                    // Scroll to bottom
+                    $('#chatMessages').scrollTop($('#chatMessages')[0].scrollHeight);
+                }
+            }
+
+            // FAQ accordion
+            $('.faq-question').click(function() {
+                $(this).next('.faq-answer').slideToggle();
+                $(this).find('i').toggleClass('fa-chevron-down fa-chevron-up');
+            });
+
+            // Voice note button
+            $('#voiceButton').click(function() {
+                alert('Voice note recording would start here in a real implementation');
+            });
+
+            // Emoji button
+            $('#emojiButton').click(function() {
+                alert('Emoji picker would open here in a real implementation');
+            });
+
+            // Attachment button
+            $('#attachButton').click(function() {
+                alert('File attachment dialog would open here in a real implementation');
+            });
+
+            // Helper function to get current time
+            function getCurrentTime() {
+                const now = new Date();
+                let hours = now.getHours();
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12;
+                hours = hours ? hours : 12; // the hour '0' should be '12'
+                return `${hours}:${minutes} ${ampm}`;
+            }
+        });
+    </script>
+</body>
+</html>

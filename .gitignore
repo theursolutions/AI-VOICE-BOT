@@ -1,0 +1,80 @@
+# ─── Secrets ─────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.key
+!storage/oauth-*.key
+
+# ─── OS / IDE ────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+!.vscode/extensions.json
+*.code-workspace
+
+# ─── admin (Laravel) ─────────────────────────────────────────────────
+admin/vendor/
+admin/node_modules/
+admin/public/storage
+admin/public/hot
+admin/public/build/
+admin/public/mix-manifest.json
+admin/storage/app/*
+!admin/storage/app/.gitkeep
+admin/storage/framework/cache/data/*
+admin/storage/framework/sessions/*
+admin/storage/framework/testing/*
+admin/storage/framework/views/*
+admin/storage/logs/*
+!admin/storage/**/.gitkeep
+admin/.phpunit.result.cache
+admin/.phpunit.cache/
+admin/Homestead.json
+admin/Homestead.yaml
+admin/auth.json
+admin/npm-debug.log
+admin/yarn-error.log
+
+# ─── voice-engine (Python) ───────────────────────────────────────────
+voice-engine/__pycache__/
+voice-engine/**/__pycache__/
+voice-engine/*.py[cod]
+voice-engine/*$py.class
+voice-engine/.venv/
+voice-engine/venv/
+voice-engine/env/
+voice-engine/.pytest_cache/
+voice-engine/.mypy_cache/
+voice-engine/.ruff_cache/
+voice-engine/dist/
+voice-engine/build/
+voice-engine/*.egg-info/
+
+# Audio / model artefacts (heavy, machine-generated)
+voice-engine/uploads/
+voice-engine/voice_outputs/
+voice-engine/models/
+voice-engine/checkpoints/
+voice-engine/*.wav
+voice-engine/*.mp3
+voice-engine/*.m4a
+voice-engine/*.ogg
+voice-engine/*.flac
+voice-engine/*.pth
+voice-engine/*.bin
+voice-engine/*.safetensors
+
+# ─── widget ──────────────────────────────────────────────────────────
+widget/vendor/
+widget/node_modules/
+widget/uploads/
+
+# ─── misc generated ──────────────────────────────────────────────────
+*.log
+coverage/
+.cache/

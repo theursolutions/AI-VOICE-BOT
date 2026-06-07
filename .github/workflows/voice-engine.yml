@@ -1,0 +1,37 @@
+name: voice-engine (Python)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'voice-engine/**'
+      - '.github/workflows/voice-engine.yml'
+  pull_request:
+    paths:
+      - 'voice-engine/**'
+      - '.github/workflows/voice-engine.yml'
+
+defaults:
+  run:
+    working-directory: voice-engine
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: voice-engine/requirements.txt
+
+      - name: Install minimal deps for import-check
+        run: |
+          pip install fastapi uvicorn pydantic pydantic-settings pyjwt httpx
+
+      - name: Python syntax check
+        run: python -m compileall app -q
+
+      # TODO: pytest once tests exist (heavy ML deps make full install slow)

@@ -1,0 +1,552 @@
+"""``/ws/turn`` — full-duplex audio + text WebSocket.
+
+Frame protocol is defined in ``docs/API_CONTRACT.md`` and mirrored as
+Pydantic models in :mod:`app.domain.schemas`.
+
+Pipeline per turn:
+
+1. Client opens WS with ``?token=<JWT>``. We verify and pull
+   ``session_id``, ``project_id``, ``voice_id`` from the claims.
+2. Client emits one of: ``text`` (skip STT), or
+   ``audio.start`` → N ``audio.chunk`` → ``audio.end``.
+3. We run STT (chunked via VAD) and emit ``stt.partial``/``stt.final``
+   frames.
+4. We stream Gemini and forward ``llm.delta`` frames; buffered text is
+   flushed to TTS sentence-by-sentence.
+5. TTS yields PCM16 chunks which we base64-encode and emit as
+   ``audio.chunk`` frames, terminated by ``audio.end``.
+6. We emit ``turn.end`` and fire-and-forget the
+   ``/api/internal/turn-completed`` webhook.
+
+This file intentionally keeps the per-turn state inside a small
+:class:`TurnState` dataclass so future bargein logic / cancellation
+hooks have one place to land.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import base64
+import logging
+import os
+import re
+import time
+import wave
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+from fastapi.websockets import WebSocketState
+
+from app.domain.auth import AuthError, SessionClaims, decode_token
+from app.services.intent import is_chitchat
+from app.domain.schemas import (
+    ChatMessage,
+    TurnCompletedPayload,
+)
+
+logger = logging.getLogger(__name__)
+router = APIRouter()
+
+
+# Soft sentence boundary: punctuation followed by whitespace or end.
+_SENTENCE_BOUNDARY = re.compile(r"([\.!\?。！？]+)(\s|$)")
+
+
+@dataclass
+class TurnState:
+    claims: SessionClaims
+    audio_buffer: bytearray = field(default_factory=bytearray)
+    sample_rate: int = 16000
+    text_input: Optional[str] = None
+    started_at: float = field(default_factory=time.monotonic)
+    cancelled: bool = False
+
+
+def _split_sentences(buffer: str) -> tuple[List[str], str]:
+    """Greedy sentence splitter.
+
+    Returns ``(complete_sentences, remainder)``. Used to decide when
+    to flush text into TTS without waiting for the entire LLM response.
+    """
+
+    sentences: List[str] = []
+    last = 0
+    for match in _SENTENCE_BOUNDARY.finditer(buffer):
+        end = match.end()
+        sentence = buffer[last:end].strip()
+        if sentence:
+            sentences.append(sentence)
+        last = end
+    return sentences, buffer[last:]
+
+
+@router.websocket("/ws/turn")
+async def ws_turn(websocket: WebSocket, token: str = Query(default="")) -> None:
+    # ----- auth --------------------------------------------------------
+    # WebSockets aren't subject to the standard CORS middleware. We
+    # accept any origin (the JWT in `token` is the real auth boundary),
+    # but log the Origin so cross-origin issues are debuggable when a
+    # widget is embedded on a customer site.
+    origin = websocket.headers.get("origin")
+    logger.info("ws/turn handshake from origin=%s", origin or "(none)")
+
+    try:
+        claims = decode_token(token)
+    except AuthError as exc:
+        await websocket.close(code=4401, reason=str(exc))
+        return
+
+    await websocket.accept()
+    app = websocket.app
+    stt_service = app.state.stt_service
+    llm_service = app.state.llm_service
+    tts_service = app.state.tts_service
+    laravel_client = app.state.laravel_client
+    settings = app.state.settings
+
+    state = TurnState(claims=claims)
+    logger.info(
+        "ws/turn opened: session=%s project=%s voice=%s",
+        claims.session_id,
+        claims.project_id,
+        claims.voice_id,
+    )
+
+    try:
+        while True:
+            if websocket.client_state != WebSocketState.CONNECTED:
+                break
+
+            try:
+                msg = await websocket.receive_json()
+            except WebSocketDisconnect:
+                break
+            except Exception as exc:  # noqa: BLE001
+                await _send_error(websocket, "bad_frame", str(exc))
+                continue
+
+            ftype = msg.get("type")
+
+            if ftype == "audio.start":
+                state.audio_buffer.clear()
+                state.text_input = None
+                state.sample_rate = int(msg.get("sample_rate", 16000))
+                state.started_at = time.monotonic()
+                logger.info("ws/turn audio.start sr=%d", state.sample_rate)
+                continue
+
+            if ftype == "audio.chunk":
+                data_b64 = msg.get("data") or ""
+                if data_b64:
+                    try:
+                        decoded = base64.b64decode(data_b64)
+                        state.audio_buffer.extend(decoded)
+                    except Exception:  # noqa: BLE001
+                        await _send_error(websocket, "bad_chunk", "invalid base64 audio")
+                continue
+
+            if ftype == "audio.end":
+                logger.info(
+                    "ws/turn audio.end buffered=%d bytes (~%.1fs @ %dHz pcm16)",
+                    len(state.audio_buffer),
+                    len(state.audio_buffer) / 2 / max(state.sample_rate, 1),
+                    state.sample_rate,
+                )
+                # Debug: dump the incoming buffer to a WAV so we can listen
+                # back. Lets us tell the difference between "mic returned
+                # silence" and "we corrupted the bytes in transit".
+                try:
+                    import wave
+                    import os
+                    os.makedirs("voice_outputs", exist_ok=True)
+                    out_path = "voice_outputs/last_mic_input.wav"
+                    with wave.open(out_path, "wb") as wf:
+                        wf.setnchannels(1)
+                        wf.setsampwidth(2)
+                        wf.setframerate(state.sample_rate)
+                        wf.writeframes(bytes(state.audio_buffer))
+                    logger.info("ws/turn DEBUG: dumped raw mic audio to %s", out_path)
+                except Exception as _exc:  # noqa: BLE001
+                    logger.warning("ws/turn debug-dump failed: %s", _exc)
+                await _run_turn(
+                    websocket,
+                    state,
+                    stt_service=stt_service,
+                    llm_service=llm_service,
+                    tts_service=tts_service,
+                    laravel_client=laravel_client,
+                    speaker_wav=claims.speaker_wav or settings.default_speaker_wav,
+                    language=claims.language,
+                    voice_output_dir=settings.voice_output_dir,
+                    voice_output_url_prefix=settings.voice_output_url_prefix,
+                    audio_sample_rate=settings.audio_sample_rate,
+                )
+                # Reset for the next turn but keep the WS open.
+                state = TurnState(claims=claims)
+                continue
+
+            if ftype == "text":
+                state.text_input = (msg.get("text") or "").strip()
+                state.started_at = time.monotonic()
+                await _run_turn(
+                    websocket,
+                    state,
+                    stt_service=stt_service,
+                    llm_service=llm_service,
+                    tts_service=tts_service,
+                    laravel_client=laravel_client,
+                    speaker_wav=claims.speaker_wav or settings.default_speaker_wav,
+                    language=claims.language,
+                    voice_output_dir=settings.voice_output_dir,
+                    voice_output_url_prefix=settings.voice_output_url_prefix,
+                    audio_sample_rate=settings.audio_sample_rate,
+                )
+                state = TurnState(claims=claims)
+                continue
+
+            if ftype == "barge_in":
+                state.cancelled = True
+                # TODO: wire cancellation into in-flight LLM/TTS tasks.
+                continue
+
+            await _send_error(websocket, "unknown_frame", f"unknown type: {ftype}")
+    except WebSocketDisconnect:
+        logger.info("ws/turn disconnected: session=%s", claims.session_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("ws/turn fatal")
+        await _send_error(websocket, "fatal", str(exc))
+    finally:
+        if websocket.client_state == WebSocketState.CONNECTED:
+            await websocket.close()
+
+
+# ---------------------------------------------------------------------------
+# Per-turn pipeline
+# ---------------------------------------------------------------------------
+
+
+async def _run_turn(
+    websocket: WebSocket,
+    state: TurnState,
+    *,
+    stt_service,
+    llm_service,
+    tts_service,
+    laravel_client,
+    speaker_wav: str,
+    language: str,
+    voice_output_dir: str,
+    voice_output_url_prefix: str,
+    audio_sample_rate: int,
+) -> None:
+    user_text = state.text_input or ""
+
+    # 1) STT (skip if the client sent text directly) ---------------------
+    if not user_text and state.audio_buffer:
+        try:
+            tx = await asyncio.to_thread(
+                stt_service.transcribe_pcm16,
+                bytes(state.audio_buffer),
+                state.sample_rate,
+                language if language and language != "auto" else None,
+                False,  # vad_filter — disabled; the default Silero VAD
+                        # is too aggressive on mic input that's been
+                        # downsampled + AGC'd and ate full recordings.
+                        # Whisper handles silence padding fine without it.
+            )
+            user_text = tx.text
+            logger.info("ws/turn STT: text=%r duration_ms=%d", user_text[:120], tx.duration_ms)
+            await websocket.send_json({"type": "stt.final", "text": user_text})
+        except Exception as exc:  # noqa: BLE001
+            await _send_error(websocket, "stt_failed", str(exc))
+            return
+
+    if not user_text:
+        await _send_error(websocket, "empty_input", "no transcribable audio or text")
+        return
+
+    # 2) Pull per-project context from Laravel (RAG passages, webhook
+    #    tool results, live-SQL rows). Skip the roundtrip for plain
+    #    chitchat — "hi", "thanks", "bye" don't need DB lookups and
+    #    the LLM answers them in ~1s from base knowledge.
+    context_block = ""
+    if not is_chitchat(user_text):
+        try:
+            context_block = await laravel_client.resolve_context(
+                project_id=state.claims.project_id,
+                session_id=state.claims.session_id,
+                user_text=user_text,
+            )
+            if context_block:
+                logger.info(
+                    "ws/turn fetched context block: %d chars",
+                    len(context_block),
+                )
+        except Exception as exc:  # noqa: BLE001
+            # Never break the turn on a context-fetch failure — fall back
+            # to the LLM's base knowledge.
+            logger.warning("ws/turn resolve_context failed: %s", exc)
+    else:
+        logger.info("ws/turn classified as chitchat — skipping resolve_context")
+
+    # 3) LLM (streaming) -------------------------------------------------
+    messages = []
+    if context_block:
+        messages.append(ChatMessage(role="system", content=context_block))
+    messages.append(ChatMessage(role="user", content=user_text))
+    aggregated = ""
+    tokens_in = 0
+    tokens_out = 0
+    model_used = llm_service.model
+
+    # Buffered TTS pipeline: flush sentence-by-sentence
+    pending = ""
+    audio_seq = 0
+
+    # Per-turn WAV file. We write each TTS chunk to disk AS it is sent
+    # over the WS, so:
+    #   - the file exists incrementally during streaming (could be served
+    #     with HTTP Range for late joiners)
+    #   - by turn.end the file is complete and we store its URL in
+    #     messages.audio_url for replay on session reload.
+    turn_ts = int(time.time() * 1000)
+    sid_dir = os.path.join(voice_output_dir, "sessions", str(state.claims.session_id))
+    os.makedirs(sid_dir, exist_ok=True)
+    audio_filename = f"{turn_ts}.wav"
+    audio_disk_path = os.path.join(sid_dir, audio_filename)
+    audio_rel_url = f"/sessions/{state.claims.session_id}/{audio_filename}"
+    audio_full_url = voice_output_url_prefix.rstrip("/") + audio_rel_url
+    wav_writer: Optional[wave.Wave_write] = None
+    try:
+        wav_writer = wave.open(audio_disk_path, "wb")
+        wav_writer.setnchannels(1)
+        wav_writer.setsampwidth(2)
+        wav_writer.setframerate(audio_sample_rate)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ws/turn could not open turn audio file: %s", exc)
+        wav_writer = None
+
+    try:
+        async for evt in llm_service.stream_chat(messages):
+            if state.cancelled:
+                break
+            if evt["type"] == "delta":
+                delta = evt["text"]
+                aggregated += delta
+                pending += delta
+                await websocket.send_json({"type": "llm.delta", "text": delta})
+
+                sentences, remainder = _split_sentences(pending)
+                pending = remainder
+                for sentence in sentences:
+                    if state.cancelled:
+                        break
+                    audio_seq = await _stream_tts_sentence(
+                        websocket,
+                        tts_service,
+                        sentence,
+                        speaker_wav,
+                        audio_seq,
+                        is_cancelled=lambda: state.cancelled,
+                        wav_writer=wav_writer,
+                        language=language,
+                    )
+            elif evt["type"] == "final":
+                tokens_in = int(evt.get("tokens_in", 0))
+                tokens_out = int(evt.get("tokens_out", 0))
+                model_used = evt.get("model", model_used)
+    except Exception as exc:  # noqa: BLE001
+        await _send_error(websocket, "llm_failed", str(exc))
+        return
+
+    # Flush any trailing text that didn't end on punctuation. Skip if the
+    # turn was cancelled — we don't want to keep speaking after Stop.
+    if pending.strip() and not state.cancelled:
+        audio_seq = await _stream_tts_sentence(
+            websocket, tts_service, pending.strip(), speaker_wav, audio_seq,
+            is_cancelled=lambda: state.cancelled,
+            wav_writer=wav_writer,
+            language=language,
+        )
+
+    # Finalise the on-disk WAV. If no chunks were written (TTS failed or
+    # turn was cancelled before any audio), unlink the empty file so we
+    # don't leave a broken URL behind.
+    bytes_written = 0
+    if wav_writer is not None:
+        try:
+            # wave.getnframes() reflects what writeframes() actually pushed.
+            bytes_written = wav_writer.getnframes() * wav_writer.getsampwidth()
+            wav_writer.close()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("ws/turn closing wav writer failed: %s", exc)
+        wav_writer = None
+    final_audio_url: Optional[str] = audio_full_url if bytes_written > 0 else None
+    if bytes_written == 0:
+        try:
+            os.unlink(audio_disk_path)
+        except OSError:
+            pass
+
+    await websocket.send_json(
+        {
+            "type": "llm.final",
+            "text": aggregated,
+            "tokens_in": tokens_in,
+            "tokens_out": tokens_out,
+        }
+    )
+    await websocket.send_json({"type": "audio.end"})
+
+    latency_ms = int((time.monotonic() - state.started_at) * 1000)
+    await websocket.send_json(
+        {
+            "type": "turn.end",
+            "latency_ms": latency_ms,
+            "audio_url": final_audio_url,
+        }
+    )
+
+    # 3) Fire-and-forget persistence webhook -----------------------------
+    payload = TurnCompletedPayload(
+        project_id=state.claims.project_id,
+        session_id=state.claims.session_id,
+        role="assistant",
+        content=aggregated,
+        audio_url=final_audio_url,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        latency_ms=latency_ms,
+        model_used=model_used,
+        metadata={
+            "voice_id": state.claims.voice_id,
+            "channel":  state.claims.channel or "web",
+            "language": language,
+        },
+        user_content=user_text,
+        cancelled=state.cancelled,
+    )
+    asyncio.create_task(laravel_client.post_turn_completed(payload))
+
+
+async def _stream_tts_sentence(
+    websocket: WebSocket,
+    tts_service,
+    sentence: str,
+    speaker_wav: str,
+    seq_start: int,
+    is_cancelled=None,
+    wav_writer: Optional[wave.Wave_write] = None,
+    language: str = "en",
+) -> int:
+    """Stream a single sentence to the client, forwarding each PCM16 chunk
+    the moment the model produces it. Returns the next seq number.
+
+    ``tts_service.stream`` is a *blocking* generator (it runs torch), so we
+    drain it on a worker thread and hand chunks to the event loop through a
+    queue. This keeps latency low — the client starts playing the first
+    chunk while the rest of the sentence is still synthesising — instead of
+    buffering the entire sentence before sending anything.
+    """
+
+    if not sentence.strip():
+        return seq_start
+
+    seq = seq_start
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    _DONE = object()
+
+    def _produce() -> None:
+        # Runs on a worker thread; push each chunk back onto the loop.
+        try:
+            for chunk in tts_service.stream(sentence, speaker_wav, language=language):
+                if chunk:
+                    loop.call_soon_threadsafe(queue.put_nowait, chunk)
+        except Exception as exc:  # noqa: BLE001 — forwarded to the async side
+            loop.call_soon_threadsafe(queue.put_nowait, exc)
+        finally:
+            loop.call_soon_threadsafe(queue.put_nowait, _DONE)
+
+    producer = asyncio.create_task(asyncio.to_thread(_produce))
+    try:
+        while True:
+            # User pressed Stop / barge_in. Stop sending chunks for this
+            # sentence and drain the producer so the worker thread exits.
+            if is_cancelled and is_cancelled():
+                logger.info("ws/turn TTS cancelled mid-sentence")
+                break
+
+            item = await queue.get()
+            if item is _DONE:
+                break
+            if isinstance(item, Exception):
+                await _send_error(websocket, "tts_failed", str(item))
+                break
+            if is_cancelled and is_cancelled():
+                # Cancellation arrived while we were waiting on queue.get()
+                logger.info("ws/turn TTS cancelled (post-dequeue)")
+                break
+            # Persist to disk BEFORE sending. If the WS write fails the
+            # bytes are still on disk and the file URL is still valid for
+            # replay. Cancellation also writes the partial output so the
+            # user can replay what was generated before they hit Stop.
+            if wav_writer is not None:
+                try:
+                    wav_writer.writeframes(item)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("ws/turn wav write failed: %s", exc)
+            await websocket.send_json(
+                {
+                    "type": "audio.chunk",
+                    "seq": seq,
+                    "data": base64.b64encode(item).decode("ascii"),
+                    "format": "pcm16",
+                }
+            )
+            seq += 1
+    finally:
+        # Drain to let the worker thread finish naturally — Coqui's
+        # inference_stream doesn't expose interrupt, so we have to let
+        # it run to completion. The chunks just go nowhere.
+        try:
+            while True:
+                drained = await asyncio.wait_for(queue.get(), timeout=0.01)
+                if drained is _DONE:
+                    break
+        except asyncio.TimeoutError:
+            pass
+        try:
+            await producer
+        except Exception:  # noqa: BLE001
+            pass
+
+    return seq
+
+
+async def _send_error(websocket: WebSocket, code: str, message: str) -> None:
+    """Emit an ``error`` frame AND close the turn.
+
+    Every early-return path in ``_run_turn`` goes through here. Without
+    a follow-up ``turn.end`` the client's bubble + send-button state
+    stay stuck waiting for a completion that never arrives — the user
+    would have to wait for the 12 s client-side watchdog to recover.
+
+    Sending ``turn.end`` here is safe even for the success path because
+    the success path doesn't call ``_send_error`` (so there's no double
+    emission). The client manager is idempotent regardless.
+    """
+    if websocket.client_state != WebSocketState.CONNECTED:
+        return
+    try:
+        await websocket.send_json(
+            {"type": "error", "code": code, "message": message}
+        )
+        # Pair the error with a turn-end so the client can release UI
+        # state immediately instead of waiting on the watchdog.
+        await websocket.send_json(
+            {"type": "turn.end", "latency_ms": 0, "audio_url": None, "error": code}
+        )
+    except Exception:  # noqa: BLE001
+        pass

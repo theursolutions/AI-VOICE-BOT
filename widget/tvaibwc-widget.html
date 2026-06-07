@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intercom-like Chat Widget</title>
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --tvaibwc-primary-color: #1a365d;
+            --tvaibwc-dark-bg: #0f1a2e;
+            --tvaibwc-dark-text: #f8fafc;
+            --tvaibwc-light-bg: #ffffff;
+            --tvaibwc-light-text: #1e293b;
+            --tvaibwc-border-radius: 12px;
+            --tvaibwc-box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 200vh;
+            padding: 20px;
+            background-color: #2c2a2a;
+        }
+
+        /* Chat Widget Container */
+        .tvaibwc-chat-widget-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        /* Chat Button */
+        .tvaibwc-chat-button {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: var(--tvaibwc-primary-color);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: var(--tvaibwc-box-shadow);
+            transition: all 0.3s ease;
+            border: none;
+            position: relative;
+            z-index: 2;
+        }
+
+        .tvaibwc-chat-button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        .tvaibwc-chat-button i {
+            font-size: 24px;
+        }
+
+        /* Chat Widget */
+        .tvaibwc-chat-widget {
+            width: 360px;
+            height: 550px;
+            background-color: var(--tvaibwc-primary-color);
+            border-radius: var(--tvaibwc-border-radius);
+            box-shadow: var(--tvaibwc-box-shadow);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transform-origin: bottom right;
+            transition: all 0.3s ease;
+            border: 2px solid rgba(234, 231, 231, 0.905);
+            position: absolute;
+            bottom: 70px;
+            right: 0;
+            display: none;
+        }
+
+        .tvaibwc-chat-widget.show {
+            display: flex;
+        }
+
+        .tvaibwc-chat-widget.expanded {
+            width: 720px;
+        }
+
+        .tvaibwc-chat-widget.dark {
+            background-color: var(--tvaibwc-dark-bg);
+            color: var(--tvaibwc-dark-text);
+        }
+
+        /* Widget Header */
+        .tvaibwc-widget-header {
+            background-color: var(--tvaibwc-primary-color);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: relative;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tvaibwc-widget-header h5 {
+            margin: 0;
+            font-weight: 600;
+        }
+
+        .tvaibwc-header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .tvaibwc-header-actions button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+        }
+
+        .tvaibwc-header-actions button:hover {
+            opacity: 1;
+        }
+
+        /* Widget Content */
+        .tvaibwc-widget-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+            padding-right: 4px;
+            padding-left: 10px;
+            display: none;
+            background-color: var(--tvaibwc-light-bg);
+        }
+
+        .tvaibwc-widget-content.active {
+            display: block;
+        }
+
+        .tvaibwc-widget-content.dark {
+            background-color: var(--tvaibwc-dark-bg);
+            color: var(--tvaibwc-dark-text);
+        }
+
+        /* Chat Messages */
+        .tvaibwc-chat-messages {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 110px;
+            height: calc(100% - 100px);
+            overflow-y: auto;
+        }
+
+        .tvaibwc-message {
+            max-width: 80%;
+            padding: 8px 10px;
+            border-radius: 18px;
+            margin-right: 15px;
+            position: relative;
+            animation: tvaibwc-fadeIn 0.3s ease;
+        }
+
+        @keyframes tvaibwc-fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .tvaibwc-message.tvaibwc-user {
+            align-self: flex-end;
+            background-color: var(--tvaibwc-primary-color);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .tvaibwc-message.tvaibwc-bot {
+            align-self: flex-start;
+            background-color: #e2e8f0;
+            color: var(--tvaibwc-light-text);
+            border-bottom-left-radius: 4px;
+        }
+
+        .tvaibwc-message.tvaibwc-bot.dark {
+            background-color: #334155;
+            color: var(--tvaibwc-dark-text);
+        }
+
+        .tvaibwc-message-time {
+            font-size: 11px;
+            opacity: 0.7;
+            margin-top: 4px;
+            text-align: right;
+        }
+
+        /* Chat Input Container */
+        .tvaibwc-chat-input-container {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            right: 0;
+            padding: 0px;
+            padding-bottom: 4px;
+            background-color: var(--tvaibwc-primary-color);
+            transition: all 0.3s ease;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+            border: 2px solid white;
+            border-radius: 8px 8px 0 0;
+            margin: 0 3px;
+            padding-bottom: 3px;
+        }
+
+        .tvaibwc-chat-input-container.active {
+            display: block;
+        }
+
+        .tvaibwc-chat-input-container.dark {
+            background-color: var(--tvaibwc-primary-color);
+        }
+
+        .tvaibwc-chat-input-row {
+            display: flex;
+            align-items: center;
+        }
+
+        .tvaibwc-chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: white;
+            padding: 8px 12px;
+            outline: none;
+            font-size: 14px;
+        }
+
+        .tvaibwc-chat-input::placeholder {
+            color: rgba(255, 255, 255, 0.5);
+        }
+
+        .tvaibwc-chat-input.dark {
+            color: var(--tvaibwc-dark-text);
+        }
+
+        .tvaibwc-send-button {
+            background: transparent;
+            border: none;
+            color: white;
+            cursor: pointer;
+            padding: 0 10px;
+            opacity: 0.7;
+            transition: opacity 0.2s;
+        }
+
+        .tvaibwc-send-button:hover {
+            opacity: 1;
+        }
+
+        .tvaibwc-chat-actions {
+            display: flex;
+            padding: 0 5px;
+        }
+
+        .tvaibwc-action-button {
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            padding: 5px 10px;
+            transition: all 0.2s;
+        }
+
+        .tvaibwc-action-button:hover {
+            color: white;
+        }
+
+        .tvaibwc-action-button.dark {
+            color: #94a3b8;
+        }
+
+        /* Start Chat Button */
+        .tvaibwc-start-chat-button {
+            position: absolute;
+            bottom: 65px;
+            border-radius: 25px;
+            left: 30%;
+            width: 40%;
+            align-items: center;
+            justify-content: center;
+            right: 0;
+            padding: 7px;
+            background-color: #eeeeee;
+            color: #0f1a2e;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .tvaibwc-start-chat-button:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        /* Back to Tabs Button */
+        .tvaibwc-back-to-tabs {
+            position: absolute;
+            bottom: 0px;
+            left: 0;
+            right: 0;
+            padding: 5px;
+            background-color: var(--tvaibwc-primary-color);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 12px;
+            text-align: center;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            display: none;
+        }
+
+        .tvaibwc-back-to-tabs:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Widget Tabs */
+        .tvaibwc-widget-tabs {
+            display: flex;
+            background-color: var(--tvaibwc-primary-color);
+            height: 60px;
+        }
+
+        .tvaibwc-widget-tab {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tvaibwc-widget-tab:hover {
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .tvaibwc-widget-tab.active {
+            color: white;
+            opacity: 1;
+        }
+
+        .tvaibwc-widget-tab i {
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+
+        .tvaibwc-widget-tab span {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        /* FAQ Section */
+        .tvaibwc-faq-item {
+            margin-bottom: 15px;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 15px;
+            animation: tvaibwc-fadeIn 0.3s ease;
+        }
+
+        .tvaibwc-faq-item.dark {
+            border-bottom-color: #334155;
+        }
+
+        .tvaibwc-faq-question {
+            font-weight: 600;
+            margin-bottom: 8px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tvaibwc-faq-question:hover {
+            color: var(--tvaibwc-primary-color);
+        }
+
+        .tvaibwc-faq-question.dark:hover {
+            color: #93c5fd;
+        }
+
+        .tvaibwc-faq-answer {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .tvaibwc-faq-answer.dark {
+            color: #94a3b8;
+        }
+
+        /* Chat History */
+        .tvaibwc-history-item {
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            background-color: #f1f5f9;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tvaibwc-history-item:hover {
+            background-color: #e2e8f0;
+        }
+
+        .tvaibwc-history-item.dark {
+            background-color: #334155;
+            color: var(--tvaibwc-dark-text);
+        }
+
+        .tvaibwc-history-item.dark:hover {
+            background-color: #475569;
+        }
+
+        .tvaibwc-history-date {
+            font-size: 12px;
+            color: #64748b;
+            margin-bottom: 5px;
+        }
+
+        .tvaibwc-history-date.dark {
+            color: #94a3b8;
+        }
+
+        .tvaibwc-history-preview {
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Home Content */
+        .tvaibwc-home-content {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .tvaibwc-home-content img {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            border-radius: 50%;
+            object-fit: cover;
+        }
+
+        .tvaibwc-home-content h4 {
+            margin-bottom: 10px;
+            color: var(--tvaibwc-primary-color);
+        }
+
+        .tvaibwc-home-content p {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .tvaibwc-home-content p.dark {
+            color: #94a3b8;
+        }
+
+        /* Theme Switch */
+        .tvaibwc-theme-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+            margin-left: 10px;
+        }
+
+        .tvaibwc-theme-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .tvaibwc-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .tvaibwc-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .tvaibwc-slider {
+            background-color: var(--tvaibwc-primary-color);
+        }
+
+        input:checked + .tvaibwc-slider:before {
+            transform: translateX(26px);
+        }
+
+        .tvaibwc-slider i {
+            position: absolute;
+            font-size: 12px;
+            top: 6px;
+        }
+
+        .tvaibwc-slider .fa-sun {
+            left: 6px;
+            color: white;
+        }
+
+        .tvaibwc-slider .fa-moon {
+            right: 6px;
+            color: #1e293b;
+        }
+
+        input:checked + .tvaibwc-slider .fa-sun {
+            color: #f8fafc;
+        }
+
+        input:checked + .tvaibwc-slider .fa-moon {
+            color: white;
+        }
+
+        /* Scrollbars */
+        .tvaibwc-chat-messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .tvaibwc-chat-messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .tvaibwc-chat-messages::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .tvaibwc-chat-messages.light::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.2);
+        }
+
+        .tvaibwc-widget-content::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .tvaibwc-widget-content::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .tvaibwc-widget-content::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+        }
+
+        .tvaibwc-widget-content.dark::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="tvaibwc-chat-widget-container">
+        <button class="tvaibwc-chat-button" id="tvaibwc-chatToggle">
+            <i class="fas fa-comment"></i>
+        </button>
+
+        <div class="tvaibwc-chat-widget" id="tvaibwc-chatWidget">
+            <div class="tvaibwc-widget-header">
+                <h5>How can we help?</h5>
+                <div class="tvaibwc-header-actions">
+                    <label class="tvaibwc-theme-switch">
+                        <input type="checkbox" id="tvaibwc-themeToggle">
+                        <span class="tvaibwc-slider">
+                            <i class="fas fa-sun"></i>
+                            <i class="fas fa-moon"></i>
+                        </span>
+                    </label>
+                    <button id="tvaibwc-expandWidget">
+                        <i class="fas fa-expand"></i>
+                    </button>
+                    <button id="tvaibwc-closeWidget">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div class="tvaibwc-widget-content active" id="tvaibwc-homeContent">
+                <div class="tvaibwc-home-content">
+                    <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRvmrKj2AXOMdbTm9BzXFM2SwThiI4GIvcxZA&s" alt="Support">
+                    <h4>Welcome to our Support</h4>
+                    <p class="tvaibwc-content-text">We're here to help you with any questions or issues you might have. Start a chat with us or browse our FAQs.</p>
+                </div>
+            </div>
+
+            <div class="tvaibwc-widget-content" id="tvaibwc-chatContent">
+                <div class="tvaibwc-chat-messages" id="tvaibwc-chatMessages">
+                    <div class="tvaibwc-message tvaibwc-bot">
+                        <div class="tvaibwc-message-text">Hello! Click the "Start Chat" button below to begin a conversation with our team.</div>
+                        <div class="tvaibwc-message-time">10:30 AM</div>
+                    </div>
+                </div>
+
+                <button class="tvaibwc-start-chat-button" id="tvaibwc-startChatButton">
+                    Start Chat
+                </button>
+
+                <div class="tvaibwc-chat-input-container" id="tvaibwc-chatInputContainer">
+                    <div class="tvaibwc-chat-input-row">
+                        <input type="text" class="tvaibwc-chat-input" id="tvaibwc-chatInput" placeholder="Type your message...">
+                        <button class="tvaibwc-send-button" id="tvaibwc-sendButton">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    <div class="tvaibwc-chat-actions">
+                        <button class="tvaibwc-action-button" id="tvaibwc-voiceButton">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                        <button class="tvaibwc-action-button" id="tvaibwc-emojiButton">
+                            <i class="far fa-smile"></i>
+                        </button>
+                        <button class="tvaibwc-action-button" id="tvaibwc-attachButton">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <button class="tvaibwc-back-to-tabs" id="tvaibwc-backToTabs">
+                    <i class="fas fa-chevron-down"></i> Back to Menu
+                </button>
+            </div>
+
+            <div class="tvaibwc-widget-content" id="tvaibwc-historyContent">
+                <h6>Recent Conversations</h6>
+                <div class="tvaibwc-history-list" id="tvaibwc-historyList">
+                    <div class="tvaibwc-history-item">
+                        <div class="tvaibwc-history-date">Today, 10:30 AM</div>
+                        <div class="tvaibwc-history-preview">Hello! How can I help you today?</div>
+                    </div>
+                    <div class="tvaibwc-history-item">
+                        <div class="tvaibwc-history-date">Yesterday, 2:45 PM</div>
+                        <div class="tvaibwc-history-preview">Thanks for your question about our pricing plans...</div>
+                    </div>
+                    <div class="tvaibwc-history-item">
+                        <div class="tvaibwc-history-date">Monday, 9:15 AM</div>
+                        <div class="tvaibwc-history-preview">Your account has been successfully upgraded...</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tvaibwc-widget-content" id="tvaibwc-faqContent">
+                <h6>Frequently Asked Questions</h6>
+                <div class="tvaibwc-faq-list" id="tvaibwc-faqList">
+                    <div class="tvaibwc-faq-item">
+                        <div class="tvaibwc-faq-question">
+                            <span>How do I reset my password?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="tvaibwc-faq-answer" style="display: none;">
+                            You can reset your password by clicking on the "Forgot Password" link on the login page. We'll send you an email with instructions to reset it.
+                        </div>
+                    </div>
+                    <div class="tvaibwc-faq-item">
+                        <div class="tvaibwc-faq-question">
+                            <span>What payment methods do you accept?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="tvaibwc-faq-answer" style="display: none;">
+                            We accept all major credit cards including Visa, MasterCard, and American Express. We also support PayPal for certain regions.
+                        </div>
+                    </div>
+                    <div class="tvaibwc-faq-item">
+                        <div class="tvaibwc-faq-question">
+                            <span>How can I cancel my subscription?</span>
+                            <i class="fas fa-chevron-down"></i>
+                        </div>
+                        <div class="tvaibwc-faq-answer" style="display: none;">
+                            You can cancel your subscription at any time from the Billing section in your account settings. Your subscription will remain active until the end of the current billing period.
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="tvaibwc-widget-tabs" id="tvaibwc-widgetTabs">
+                <div class="tvaibwc-widget-tab active" data-tab="tvaibwc-home">
+                    <i class="fas fa-home"></i>
+                    <span>Home</span>
+                </div>
+                <div class="tvaibwc-widget-tab" data-tab="tvaibwc-chat">
+                    <i class="fas fa-comment-dots"></i>
+                    <span>Chat</span>
+                </div>
+                <div class="tvaibwc-widget-tab" data-tab="tvaibwc-history">
+                    <i class="fas fa-history"></i>
+                    <span>History</span>
+                </div>
+                <div class="tvaibwc-widget-tab" data-tab="tvaibwc-faq">
+                    <i class="fas fa-question-circle"></i>
+                    <span>FAQ</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="assets/js/jquery-3.6.0.min.js"></script>
+    <script src="assets/js/bootstrap.bundle.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            // Initialize with dark theme
+            $('#tvaibwc-chatWidget').addClass('dark');
+            $('.tvaibwc-widget-content').addClass('dark');
+            $('.tvaibwc-message.tvaibwc-bot').addClass('dark');
+            $('.tvaibwc-action-button').addClass('dark');
+            $('.tvaibwc-history-item').addClass('dark');
+            $('.tvaibwc-faq-item').addClass('dark');
+            $('.tvaibwc-faq-answer').addClass('dark');
+            $('.tvaibwc-home-content p').addClass('dark');
+            $('.tvaibwc-history-date').addClass('dark');
+            $('#tvaibwc-chatMessages').addClass('dark');
+            
+            // Toggle chat widget
+            $('#tvaibwc-chatToggle').click(function() {
+                $('#tvaibwc-chatWidget').toggleClass('show');
+                $(this).toggleClass('open');
+                
+                if ($(this).hasClass('open')) {
+                    $(this).html('<i class="fas fa-chevron-down"></i>');
+                } else {
+                    $(this).html('<i class="fas fa-comment"></i>');
+                }
+            });
+
+            // Close widget from top button
+            $('#tvaibwc-closeWidget').click(function() {
+                $('#tvaibwc-chatWidget').removeClass('show');
+                $('#tvaibwc-chatToggle').html('<i class="fas fa-comment"></i>');
+                $('#tvaibwc-chatToggle').removeClass('open');
+            });
+
+            // Tab switching
+            $('.tvaibwc-widget-tab').click(function() {
+                const tab = $(this).data('tab');
+                
+                // Update active tab
+                $('.tvaibwc-widget-tab').removeClass('active');
+                $(this).addClass('active');
+                
+                // Show corresponding content
+                $('.tvaibwc-widget-content').removeClass('active');
+                $(`#${tab}Content`).addClass('active');
+                
+                // Scroll to bottom if chat tab
+                if (tab === 'tvaibwc-chat') {
+                    tvaibwc_scrollToBottom();
+                }
+            });
+
+            // Start chat button
+            $('#tvaibwc-startChatButton').click(function() {
+                $(this).hide();
+                $('#tvaibwc-chatInputContainer').addClass('active');
+                $('#tvaibwc-widgetTabs').hide();
+                $('#tvaibwc-backToTabs').show();
+                $('#tvaibwc-chatInput').focus();
+            });
+
+            // Back to tabs button
+            $('#tvaibwc-backToTabs').click(function() {
+                $('#tvaibwc-chatInputContainer').removeClass('active');
+                $('#tvaibwc-widgetTabs').show();
+                $('#tvaibwc-startChatButton').show();
+                $(this).hide();
+            });
+
+            // Theme toggle
+            $('#tvaibwc-themeToggle').change(function() {
+                if ($(this).is(':checked')) {
+                    // Dark theme
+                    $('#tvaibwc-chatWidget').addClass('dark');
+                    $('.tvaibwc-widget-content').addClass('dark');
+                    $('.tvaibwc-message.tvaibwc-bot').addClass('dark');
+                    $('.tvaibwc-action-button').addClass('dark');
+                    $('.tvaibwc-history-item').addClass('dark');
+                    $('.tvaibwc-faq-item').addClass('dark');
+                    $('.tvaibwc-faq-answer').addClass('dark');
+                    $('.tvaibwc-home-content p').addClass('dark');
+                    $('.tvaibwc-history-date').addClass('dark');
+                    $('#tvaibwc-chatMessages').removeClass('light').addClass('dark');
+                } else {
+                    // Light theme
+                    $('#tvaibwc-chatWidget').removeClass('dark');
+                    $('.tvaibwc-widget-content').removeClass('dark');
+                    $('.tvaibwc-message.tvaibwc-bot').removeClass('dark');
+                    $('.tvaibwc-action-button').removeClass('dark');
+                    $('.tvaibwc-history-item').removeClass('dark');
+                    $('.tvaibwc-faq-item').removeClass('dark');
+                    $('.tvaibwc-faq-answer').removeClass('dark');
+                    $('.tvaibwc-home-content p').removeClass('dark');
+                    $('.tvaibwc-history-date').removeClass('dark');
+                    $('#tvaibwc-chatMessages').removeClass('dark').addClass('light');
+                }
+            });
+
+            // Expand widget
+            $('#tvaibwc-expandWidget').click(function() {
+                $('#tvaibwc-chatWidget').toggleClass('expanded');
+                
+                if ($('#tvaibwc-chatWidget').hasClass('expanded')) {
+                    $(this).html('<i class="fas fa-compress"></i>');
+                } else {
+                    $(this).html('<i class="fas fa-expand"></i>');
+                }
+            });
+
+            // Send message
+            $('#tvaibwc-sendButton').click(tvaibwc_sendMessage);
+            $('#tvaibwc-chatInput').keypress(function(e) {
+                if (e.which === 13) {
+                    tvaibwc_sendMessage();
+                }
+            });
+
+            function tvaibwc_sendMessage() {
+                const messageText = $('#tvaibwc-chatInput').val().trim();
+                if (messageText) {
+                    // Add user message
+                    $('#tvaibwc-chatMessages').append(`
+                        <div class="tvaibwc-message tvaibwc-user">
+                            <div class="tvaibwc-message-text">${messageText}</div>
+                            <div class="tvaibwc-message-time">${tvaibwc_getCurrentTime()}</div>
+                        </div>
+                    `);
+                    
+                    // Clear input and maintain focus
+                    $('#tvaibwc-chatInput').val('').focus();
+                    
+                    // Simulate bot response after a delay
+                    setTimeout(() => {
+                        $('#tvaibwc-chatMessages').append(`
+                            <div class="tvaibwc-message tvaibwc-bot ${$('#tvaibwc-themeToggle').is(':checked') ? 'dark' : ''}">
+                                <div class="tvaibwc-message-text">Thanks for your message! Our team will get back to you soon.</div>
+                                <div class="tvaibwc-message-time">${tvaibwc_getCurrentTime()}</div>
+                            </div>
+                        `);
+                        
+                        // Scroll to bottom
+                        tvaibwc_scrollToBottom();
+                    }, 800);
+                    
+                    // Scroll to bottom
+                    tvaibwc_scrollToBottom();
+                }
+            }
+
+            // Auto-scroll to bottom
+            function tvaibwc_scrollToBottom() {
+                const messages = $('#tvaibwc-chatMessages');
+                messages.scrollTop(messages[0].scrollHeight);
+            }
+
+            // FAQ accordion
+            $('.tvaibwc-faq-question').click(function() {
+                $(this).next('.tvaibwc-faq-answer').slideToggle();
+                $(this).find('i').toggleClass('fa-chevron-down fa-chevron-up');
+            });
+
+            // Voice note button
+            $('#tvaibwc-voiceButton').click(function() {
+                alert('Voice note recording would start here in a real implementation');
+            });
+
+            // Emoji button
+            $('#tvaibwc-emojiButton').click(function() {
+                alert('Emoji picker would open here in a real implementation');
+            });
+
+            // Attachment button
+            $('#tvaibwc-attachButton').click(function() {
+                alert('File attachment dialog would open here in a real implementation');
+            });
+
+            // Helper function to get current time
+            function tvaibwc_getCurrentTime() {
+                const now = new Date();
+                let hours = now.getHours();
+                const minutes = now.getMinutes().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12;
+                hours = hours ? hours : 12; // the hour '0' should be '12'
+                return `${hours}:${minutes} ${ampm}`;
+            }
+        });
+    </script>
+</body>
+</html>
