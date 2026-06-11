@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Route;
 
 // ── Public / pre-workspace ───────────────────────────────────────────────
 Route::get('/', fn () => view('welcome'))->name('home');
+Route::get('/v2', fn () => view('welcome-v2'))->name('home.v2');
 Route::get('/voice-bot', fn () => view('voice-chat'));
 Route::post('/send-voice', [ConfigureAgentVoicesController::class, 'process'])->name('voice.send');
 

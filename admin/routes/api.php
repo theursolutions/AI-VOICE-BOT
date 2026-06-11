@@ -81,4 +81,5 @@ Route::get ('telephony/twilio/diagnose',   [\App\Http\Controllers\Api\TelephonyC
 Route::middleware('internal.webhook')->prefix('internal')->group(function () {
     Route::post('turn-completed',   [InternalTurnController::class, 'turnCompleted']);
     Route::post('resolve-context',  [InternalTurnController::class, 'resolveContext']);
+    Route::post('session-ended',    [InternalTurnController::class, 'sessionEnded']);
 });

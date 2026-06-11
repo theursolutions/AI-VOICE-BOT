@@ -33,7 +33,7 @@ import re
 import time
 import wave
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from fastapi.websockets import WebSocketState
@@ -113,6 +113,35 @@ async def ws_turn(websocket: WebSocket, token: str = Query(default="")) -> None:
         claims.voice_id,
     )
 
+    # Track the in-flight turn so we can cancel it when the call ends,
+    # the user starts a new turn (barge-in), or the WS dies. Without
+    # this the LLM + TTS keep running long after the caller hangs up
+    # — burning Groq tokens and CPU.
+    current_turn: Optional[asyncio.Task] = None
+
+    def _spawn_turn() -> None:
+        nonlocal current_turn, state
+        # Cancel any previous turn still draining the LLM / TTS.
+        if current_turn and not current_turn.done():
+            current_turn.cancel()
+        local_state = state
+        current_turn = asyncio.create_task(_run_turn(
+            websocket,
+            local_state,
+            stt_service=stt_service,
+            llm_service=llm_service,
+            tts_service=tts_service,
+            laravel_client=laravel_client,
+            speaker_wav=claims.speaker_wav or settings.default_speaker_wav,
+            language=claims.language,
+            voice_output_dir=settings.voice_output_dir,
+            voice_output_url_prefix=settings.voice_output_url_prefix,
+            audio_sample_rate=settings.audio_sample_rate,
+        ))
+        # Reset state for the next user input. The task already captured
+        # the previous state object so this doesn't affect it.
+        state = TurnState(claims=claims)
+
     try:
         while True:
             if websocket.client_state != WebSocketState.CONNECTED:
@@ -169,39 +198,13 @@ async def ws_turn(websocket: WebSocket, token: str = Query(default="")) -> None:
                     logger.info("ws/turn DEBUG: dumped raw mic audio to %s", out_path)
                 except Exception as _exc:  # noqa: BLE001
                     logger.warning("ws/turn debug-dump failed: %s", _exc)
-                await _run_turn(
-                    websocket,
-                    state,
-                    stt_service=stt_service,
-                    llm_service=llm_service,
-                    tts_service=tts_service,
-                    laravel_client=laravel_client,
-                    speaker_wav=claims.speaker_wav or settings.default_speaker_wav,
-                    language=claims.language,
-                    voice_output_dir=settings.voice_output_dir,
-                    voice_output_url_prefix=settings.voice_output_url_prefix,
-                    audio_sample_rate=settings.audio_sample_rate,
-                )
-                # Reset for the next turn but keep the WS open.
-                state = TurnState(claims=claims)
+                _spawn_turn()
                 continue
 
             if ftype == "text":
                 state.text_input = (msg.get("text") or "").strip()
                 state.started_at = time.monotonic()
-                await _run_turn(
-                    websocket,
-                    state,
-                    stt_service=stt_service,
-                    llm_service=llm_service,
-                    tts_service=tts_service,
-                    laravel_client=laravel_client,
-                    speaker_wav=claims.speaker_wav or settings.default_speaker_wav,
-                    language=claims.language,
-                    voice_output_dir=settings.voice_output_dir,
-                    voice_output_url_prefix=settings.voice_output_url_prefix,
-                    audio_sample_rate=settings.audio_sample_rate,
-                )
+                _spawn_turn()
                 state = TurnState(claims=claims)
                 continue
 
@@ -217,6 +220,27 @@ async def ws_turn(websocket: WebSocket, token: str = Query(default="")) -> None:
         logger.exception("ws/turn fatal")
         await _send_error(websocket, "fatal", str(exc))
     finally:
+        # Cancel any in-flight turn (LLM stream + TTS) so the call's
+        # hang-up actually stops billing the LLM provider. Give the
+        # task a moment to handle CancelledError + flush persistence
+        # before the WS closes.
+        state.cancelled = True
+        if current_turn and not current_turn.done():
+            current_turn.cancel()
+            try:
+                await asyncio.wait_for(current_turn, timeout=2.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError, Exception):  # noqa: BLE001
+                pass
+        # Tell Laravel the session is over so dashboards stop showing
+        # it as "active". Belt-and-braces — Twilio's status callback
+        # usually fires too, but if it's delayed or fails this
+        # guarantees the session ends.
+        try:
+            await laravel_client.post_session_ended(
+                claims.project_id, claims.session_id
+            )
+        except Exception:  # noqa: BLE001
+            pass
         if websocket.client_state == WebSocketState.CONNECTED:
             await websocket.close()
 
@@ -242,6 +266,45 @@ async def _run_turn(
 ) -> None:
     user_text = state.text_input or ""
 
+    # Hoisted outputs that `_persist_turn` reads when firing the
+    # persistence webhook. Lifted from later in the function so error
+    # paths can persist what they have (e.g. user_text from STT) even
+    # when the LLM bails on Groq 429 etc. Without this the session
+    # shows up in the dashboard with zero messages even though the
+    # caller clearly spoke.
+    aggregated: str = ""
+    tokens_in: int = 0
+    tokens_out: int = 0
+    model_used: str = llm_service.model
+    final_audio_url: Optional[str] = None
+    latency_ms: int = 0
+
+    def _persist_turn(error: Optional[Dict[str, str]] = None) -> None:
+        """Fire the persistence webhook with whatever state we have.
+        Idempotent on the Laravel side via the user_content dedup."""
+        meta: Dict[str, Any] = {
+            "voice_id": state.claims.voice_id,
+            "channel":  state.claims.channel or "web",
+            "language": language,
+        }
+        if error:
+            meta["error"] = error
+        payload = TurnCompletedPayload(
+            project_id=state.claims.project_id,
+            session_id=state.claims.session_id,
+            role="assistant",
+            content=aggregated or None,
+            audio_url=final_audio_url,
+            tokens_in=tokens_in,
+            tokens_out=tokens_out,
+            latency_ms=latency_ms,
+            model_used=model_used,
+            metadata=meta,
+            user_content=user_text or None,
+            cancelled=state.cancelled,
+        )
+        asyncio.create_task(laravel_client.post_turn_completed(payload))
+
     # 1) STT (skip if the client sent text directly) ---------------------
     if not user_text and state.audio_buffer:
         try:
@@ -260,10 +323,12 @@ async def _run_turn(
             await websocket.send_json({"type": "stt.final", "text": user_text})
         except Exception as exc:  # noqa: BLE001
             await _send_error(websocket, "stt_failed", str(exc))
+            _persist_turn({"code": "stt_failed", "message": str(exc)})
             return
 
     if not user_text:
         await _send_error(websocket, "empty_input", "no transcribable audio or text")
+        _persist_turn({"code": "empty_input", "message": "no audio or text"})
         return
 
     # 2) Pull per-project context from Laravel (RAG passages, webhook
@@ -295,10 +360,9 @@ async def _run_turn(
     if context_block:
         messages.append(ChatMessage(role="system", content=context_block))
     messages.append(ChatMessage(role="user", content=user_text))
-    aggregated = ""
-    tokens_in = 0
-    tokens_out = 0
-    model_used = llm_service.model
+    # aggregated / tokens_in / tokens_out / model_used hoisted to the
+    # top of the function so error paths can still persist what's
+    # available. Don't re-init here.
 
     # Buffered TTS pipeline: flush sentence-by-sentence
     pending = ""
@@ -358,6 +422,10 @@ async def _run_turn(
                 model_used = evt.get("model", model_used)
     except Exception as exc:  # noqa: BLE001
         await _send_error(websocket, "llm_failed", str(exc))
+        # Persist the user's STT'd input + the partial bot reply (if any)
+        # so the dashboard can show "User said X — bot errored". Without
+        # this, every Groq 429 produces a ghost session with no messages.
+        _persist_turn({"code": "llm_failed", "message": str(exc)})
         return
 
     # Flush any trailing text that didn't end on punctuation. Skip if the
@@ -382,7 +450,7 @@ async def _run_turn(
         except Exception as exc:  # noqa: BLE001
             logger.warning("ws/turn closing wav writer failed: %s", exc)
         wav_writer = None
-    final_audio_url: Optional[str] = audio_full_url if bytes_written > 0 else None
+    final_audio_url = audio_full_url if bytes_written > 0 else None
     if bytes_written == 0:
         try:
             os.unlink(audio_disk_path)
@@ -408,26 +476,9 @@ async def _run_turn(
         }
     )
 
-    # 3) Fire-and-forget persistence webhook -----------------------------
-    payload = TurnCompletedPayload(
-        project_id=state.claims.project_id,
-        session_id=state.claims.session_id,
-        role="assistant",
-        content=aggregated,
-        audio_url=final_audio_url,
-        tokens_in=tokens_in,
-        tokens_out=tokens_out,
-        latency_ms=latency_ms,
-        model_used=model_used,
-        metadata={
-            "voice_id": state.claims.voice_id,
-            "channel":  state.claims.channel or "web",
-            "language": language,
-        },
-        user_content=user_text,
-        cancelled=state.cancelled,
-    )
-    asyncio.create_task(laravel_client.post_turn_completed(payload))
+    # 3) Persist via the shared helper (used by both success + error
+    #    paths — see _persist_turn at the top of this function).
+    _persist_turn()
 
 
 async def _stream_tts_sentence(

@@ -59,6 +59,23 @@ class LaravelClient:
             logger.warning("turn-completed webhook failed: %s", exc)
             return None
 
+    async def post_session_ended(self, project_id: int, session_id: int) -> None:
+        """Tell Laravel the session is over so it flips status='ended'.
+
+        Fires from ws_turn's `finally` block on disconnect. Fire-and-
+        forget — if Laravel is unreachable, the per-call status webhook
+        from Twilio still eventually marks the session ended, so this
+        is belt-and-braces.
+        """
+        url = f"{self.base_url}/api/internal/session-ended"
+        headers = {"X-Internal-Secret": self.internal_secret}
+        body = {"project_id": project_id, "session_id": session_id}
+        try:
+            resp = await self.client.post(url, json=body, headers=headers, timeout=5.0)
+            resp.raise_for_status()
+        except httpx.HTTPError as exc:
+            logger.warning("session-ended webhook failed: %s", exc)
+
     async def resolve_context(
         self, project_id: int, session_id: int, user_text: str
     ) -> str:

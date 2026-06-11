@@ -116,6 +116,37 @@ class InternalTurnController extends Controller
         return count($lines) > 1 ? implode("\n", $lines) : '';
     }
 
+    /**
+     * POST /api/internal/session-ended
+     *
+     * Called by Python ws/turn when the WebSocket disconnects (caller
+     * hung up, network dropped, etc). Flips the session to status=
+     * 'ended' so the dashboard doesn't show it as still-active forever.
+     * Idempotent — safe to call multiple times.
+     */
+    public function sessionEnded(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'session_id' => 'required|integer',
+        ]);
+
+        $this->tenants->useForProjectId($data['project_id']);
+        $session = Session::find($data['session_id']);
+        if (!$session) {
+            return response()->json(['ok' => false, 'reason' => 'not_found'], 404);
+        }
+
+        if ($session->status === 'active') {
+            $session->status   = 'ended';
+            $session->ended_at = time();
+            $session->update_at = time();
+            $session->save();
+        }
+
+        return response()->json(['ok' => true, 'session_id' => $session->id, 'status' => $session->status]);
+    }
+
     public function turnCompleted(Request $request): JsonResponse
     {
         $data = $request->validate([
