@@ -174,9 +174,41 @@ function tvaibwcEnsureSession(profile) {
             s.ws_url     = data.ws_url     || null;
             s.expires_in = data.expires_in || 0;
 
-            // Open the streaming socket up-front. Falls back silently to HTTP
-            // if it can't connect — see tvaibwcCurrentBubble.send().
-            tvaibwcConnectWs();
+            // Once a session is live, the visitor's UI should be in
+            // "actively chatting" mode regardless of which entry path
+            // started the session: hide the Start-chat CTA, reveal
+            // the input row. This used to only happen on the
+            // start_chat_session form submit path, which left the
+            // auto-bootstrap path (flows opening on first chat-toggle
+            // click) stuck with no input and an overlaying Start-chat.
+            $('#tvaibwc-startChatButton').hide().removeClass('is-visible');
+            $('#tvaibwc-chatInputContainer').addClass('active').removeClass('is-ended');
+            $('.tvaibwc-customer-form').hide();
+            $('#tvaibwc-widgetTabs').hide();
+            // Mirror tab visibility on the widget so CSS can re-position
+            // bottom-anchored controls (Start Chat) without overlapping
+            // the absent tab bar.
+            $('#tvaibwc-chatWidget').addClass('no-tabs');
+            $('#tvaibwc-backToTabs').show();
+
+            // Phase 2 — webchat flows. If the widget is bound to a default
+            // flow, the session-start response includes a `flow` block with
+            // the first batch of messages already walked. Render them and
+            // flip the session into flow_active mode so chat-submit routes
+            // user input through /flow/step instead of /turn.
+            if (data.flow && window.TvaibwcFlow) {
+                try { window.TvaibwcFlow.apply(data.flow); }
+                catch (e) { console.warn('[tvaibwc] flow render failed', e); }
+            }
+
+            // Open the streaming socket up-front (unless flow has not yet
+            // handed off — flows defer WS open to the transfer_ai node so
+            // we don't burn idle WS connections during deterministic IVR
+            // steps). The WS opens lazily inside TvaibwcFlow.apply when
+            // it sees a handoff block.
+            if (!s.flow_active) {
+                tvaibwcConnectWs();
+            }
 
             return s;
         })
@@ -650,6 +682,23 @@ $(document).on('submit', '#create_chat_response', function (e) {
     // Capture a reference to the just-added user bubble so STT can replace it.
     window.tvaibwcLastUserBubble = $('#tvaibwc-chatMessages .tvaibwc-message.tvaibwc-user').last();
 
+    // Phase 2 — webchat flow runtime. If the session is in flow mode
+    // (a Flow is bound + we're still in the deterministic graph, not yet
+    // handed off to free-form AI), route free-text through /flow/step
+    // instead of the AI WS/HTTP path. This is what makes a capture_speech
+    // node work; for menu_choice the user usually clicks a button (which
+    // calls submitChoice directly), but they may also type — that text
+    // routes to the "match" branch.
+    if (window.tvaibwcSession && window.tvaibwcSession.flow_active && window.TvaibwcFlow) {
+        var rawTextFlow = $('#tvaibwc-chatInput').val().trim();
+        $('#tvaibwc-chatInput').val('').focus();
+        if (rawTextFlow) {
+            window.tvaibwcSendBtn.markTurnStart();
+            window.TvaibwcFlow.submitFreeText(rawTextFlow);
+        }
+        return;
+    }
+
     var voiceReply = $('#tvaibwc-replyToggle').is(':checked');
     var messageType = $('#message_type').val();
     var rawText = $('#tvaibwc-chatInput').val().trim();
@@ -737,12 +786,16 @@ $(document).on('submit', '#create_chat_response', function (e) {
             return window.TvaibwcApi.sendTurn(sess.session_id, turnPayload)
                 .then(function (envelope) {
                     if (!envelope || !envelope.success || envelope.status_code !== 200) {
-                        var msg = (envelope && envelope.message) || 'Failed to get a reply';
+                        // Friendly fallback — never expose raw upstream
+                        // error strings to the visitor. `envelope.message`
+                        // is already sanitised on the PHP side.
+                        var msg = (envelope && envelope.message)
+                            || 'Sorry, I had trouble responding just now. Please try again.';
+                        var dark = $('#tvaibwc-themeToggle').is(':checked') ? 'dark' : '';
                         bubble.remove();
                         $('#tvaibwc-chatMessages').append(
-                            '<div class="tvaibwc-message tvaibwc-bot ' +
-                                ($('#tvaibwc-themeToggle').is(':checked') ? 'dark' : '') + '">' +
-                                '<div class="tvaibwc-message-text text-danger">' + msg + '</div>' +
+                            '<div class="tvaibwc-message tvaibwc-bot tvaibwc-flow-retry ' + dark + '">' +
+                                '<div class="tvaibwc-message-text">' + $('<div>').text(msg).html() + '</div>' +
                                 '<div class="tvaibwc-message-time">' + tvaibwc_getCurrentTime() + '</div>' +
                             '</div>'
                         );

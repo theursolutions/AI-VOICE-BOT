@@ -65,7 +65,7 @@
     <title>CVAIBWC Chat Widget</title>
     <link href="assets/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link href="assets/css/tvaibwc-style.css" rel="stylesheet">
+    <link href="assets/css/tvaibwc-style.css?v=<?php echo time(); ?>" rel="stylesheet">
     <style>
         /* Per-project brand colors. We deliberately do NOT override
            --tvaibwc-primary-color globally — that variable feeds the
@@ -148,7 +148,7 @@
                 <h6><?= htmlspecialchars($tvaConfig['bot_name']) ?></h6>
                 <div class="tvaibwc-header-actions">
                     <?php if (!empty($tvaConfig['show_theme_toggle'])): ?>
-                    <label class="tvaibwc-theme-switch">
+                    <label class="tvaibwc-theme-switch" title="Toggle light / dark mode">
                         <input type="checkbox" checked id="tvaibwc-themeToggle">
                         <span class="tvaibwc-slider">
                             <i class="fas fa-sun"></i>
@@ -157,7 +157,7 @@
                     </label>
                     <?php endif; ?>
                     <?php if (!empty($tvaConfig['show_reply_toggle'])): ?>
-                    <label class="tvaibwc-reply-switch">
+                    <label class="tvaibwc-reply-switch" title="Voice replies on / off">
                         <input type="checkbox" id="tvaibwc-replyToggle">
                         <span class="tvaibwc-slider">
                             <i class="fas fa-comment"></i>
@@ -166,11 +166,11 @@
                     </label>
                     <?php endif; ?>
                     <?php if (!empty($tvaConfig['show_expand_button'])): ?>
-                    <button id="tvaibwc-expandWidget">
+                    <button id="tvaibwc-expandWidget" title="Expand / maximise">
                         <i class="fas fa-expand"></i>
                     </button>
                     <?php endif; ?>
-                    <button id="tvaibwc-closeWidget">
+                    <button id="tvaibwc-closeWidget" title="Close">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -231,8 +231,16 @@
                     </div>
                 </div>
 
+                <?php // Flow actions bar — sits between messages and the
+                      // start-chat / input area. Hosts the "Back to menu"
+                      // pill so it's ALWAYS visible at the end of the
+                      // message timeline regardless of how many messages
+                      // came in after a handoff. ?>
+                <div class="tvaibwc-flow-actions-bar" id="tvaibwc-flowActionsBar"></div>
+
                 <button class="tvaibwc-start-chat-button" id="tvaibwc-startChatButton">
-                    Start Chat
+                    <i class="fas fa-comments"></i>
+                    <span>Start chat</span>
                 </button>
 
                 <div class="tvaibwc-chat-input-container" id="tvaibwc-chatInputContainer">
@@ -263,6 +271,13 @@
                                 <i class="fas fa-paperclip"></i>
                             </button>
                             <?php endif; ?>
+
+                            <?php // End conversation — saves transcript + marks session ended.
+                                  // Different from the X-close in the header which just hides
+                                  // the widget (visitor can resume). ?>
+                            <button type="button" class="tvaibwc-end-session-btn" id="tvaibwc-endSessionBtn" title="End this conversation">
+                                <i class="fas fa-circle-stop"></i> End chat
+                            </button>
                         </div>
                     </form>
                 </div>
@@ -455,6 +470,7 @@
     <script src="<?php echo BASE_URL;?>/assets/js/transport/ws-client.js?v=<?php echo $v;?>"></script>
     <script src="<?php echo BASE_URL;?>/assets/js/transport/audio-playback.js?v=<?php echo $v;?>"></script>
     <script src="<?php echo BASE_URL;?>/assets/js/transport/mic-recorder.js?v=<?php echo $v;?>"></script>
+    <script src="<?php echo BASE_URL;?>/assets/js/flow-runtime.js?v=<?php echo $v;?>"></script>
     <script src="<?php echo BASE_URL;?>/assets/js/request-handler.js?v=<?php echo $v;?>"></script>
 </body>
 </html>

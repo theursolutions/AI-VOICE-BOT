@@ -19,7 +19,11 @@
         "vite": "^5.0.0"
     },
     "dependencies": {
+        "@vitejs/plugin-react": "^4.7.0",
+        "@xyflow/react": "^12.11.0",
         "lucide": "^1.17.0",
-        "motion": "^12.40.0"
+        "motion": "^12.40.0",
+        "react": "^19.2.7",
+        "react-dom": "^19.2.7"
     }
 }

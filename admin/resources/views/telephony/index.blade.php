@@ -175,6 +175,7 @@
             $numbers = (array) data_get($project->json_data, 'telephony.numbers', []);
             $agents = $perProject[$project->id]['agents'] ?? collect();
             $skills = $perProject[$project->id]['skills'] ?? collect();
+            $flows  = $perProject[$project->id]['flows']  ?? collect();
         @endphp
         <div class="tva-tel-card">
             <div class="tva-tel-card__head">
@@ -201,7 +202,10 @@
                         <div class="tva-num-tile__phone">{{ $n['phone_number'] ?? '' }}</div>
                         <div class="tva-num-tile__meta">
                             <span class="tva-num-tile__chip {{ $isOn ? 'is-ok' : 'is-off' }}">{{ $isOn ? 'Active' : 'Disabled' }}</span>
-                            @if ($rtype === 'skill')
+                            @if ($rtype === 'flow')
+                                @php $flow = $flows->firstWhere('id', (int) ($n['flow_id'] ?? 0)); @endphp
+                                <span class="tva-num-tile__chip is-flow" style="background:#ecfeff; color:#0e7490;">FLOW · {{ $flow->name ?? 'unset' }}</span>
+                            @elseif ($rtype === 'skill')
                                 @php $skill = $skills->firstWhere('id', (int) ($n['skill_id'] ?? 0)); @endphp
                                 <span class="tva-num-tile__chip is-skill">SKILL · {{ $skill->name ?? 'unset' }}</span>
                             @else
@@ -240,6 +244,7 @@
                     'number'      => $n,
                     'agents'      => $agents,
                     'skills'      => $skills,
+                    'flows'       => $flows,
                 ])
             @empty
                 <div class="text-center py-6 text-slate-400">
@@ -256,6 +261,7 @@
                 'number'      => null,
                 'agents'      => $agents,
                 'skills'      => $skills,
+                'flows'       => $flows,
             ])
         </div>
     @empty

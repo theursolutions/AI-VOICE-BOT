@@ -83,41 +83,118 @@
         color: var(--tvaibwc-dark-text);
     }
 
-    /* Widget Header */
+    /* Widget Header — Phase 2 refresh: cleaner padding, online dot beside
+       the bot name, icon-button styled controls instead of iOS toggles. */
     .tvaibwc-widget-header {
         background-color: var(--tvaibwc-primary-color);
         color: white;
-        padding: 15px;
+        padding: 12px 14px 12px 16px;
         display: flex;
         justify-content: space-between;
         align-items: center;
         position: relative;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
     }
 
-    .tvaibwc-widget-header h5 {
+    .tvaibwc-widget-header h5,
+    .tvaibwc-widget-header h6 {
         margin: 0;
         font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -.005em;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        line-height: 1.2;
+    }
+    /* Online dot — small pulsing green dot signalling the bot is live.
+       Pure CSS; pulses slowly so it doesn't distract. */
+    .tvaibwc-widget-header h5::before,
+    .tvaibwc-widget-header h6::before {
+        content: '';
+        width: 8px; height: 8px;
+        background: #22c55e;
+        border-radius: 50%;
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, .35);
+        animation: tvaibwc-pulse 2.4s ease-in-out infinite;
+        flex-shrink: 0;
+    }
+    @keyframes tvaibwc-pulse {
+        0%, 100% { box-shadow: 0 0 0 2px rgba(34, 197, 94, .35); }
+        50%      { box-shadow: 0 0 0 5px rgba(34, 197, 94, .08); }
     }
 
     .tvaibwc-header-actions {
         display: flex;
-        gap: 10px;
+        gap: 4px;
         align-items: center;
     }
 
-    .tvaibwc-header-actions button {
-        background: none;
-        border: none;
+    /* All header controls share one icon-button look. 32x32 rounded
+       squares with a subtle "glass tile" finish — visible at rest on
+       any header colour (light or dark), brightens on hover. Same
+       shape whether they're checkbox-styled toggles (theme/reply) or
+       real buttons (expand/close). Keeps the row visually consistent. */
+    .tvaibwc-header-actions button,
+    .tvaibwc-header-actions .tvaibwc-theme-switch,
+    .tvaibwc-header-actions .tvaibwc-reply-switch {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.10);
+        border: 1px solid rgba(255, 255, 255, 0.16);
         color: white;
         cursor: pointer;
-        font-size: 16px;
-        opacity: 0.8;
-        transition: opacity 0.2s;
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        opacity: 1;
+        margin: 0 !important;     /* override old switch margin-left:10px */
+        padding: 0;
+        position: relative;
+        backdrop-filter: blur(4px);   /* subtle glass on coloured headers */
+        -webkit-backdrop-filter: blur(4px);
+        transition: background .15s ease, border-color .15s ease,
+                    transform .1s ease, color .15s ease,
+                    box-shadow .15s ease;
+        font-size: 13px;
+    }
+    .tvaibwc-header-actions button:hover,
+    .tvaibwc-header-actions .tvaibwc-theme-switch:hover,
+    .tvaibwc-header-actions .tvaibwc-reply-switch:hover {
+        background: rgba(255, 255, 255, 0.22);
+        border-color: rgba(255, 255, 255, 0.32);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, .15);
+    }
+    .tvaibwc-header-actions button:active,
+    .tvaibwc-header-actions .tvaibwc-theme-switch:active,
+    .tvaibwc-header-actions .tvaibwc-reply-switch:active {
+        transform: scale(.92);
     }
 
-    .tvaibwc-header-actions button:hover {
-        opacity: 1;
+    /* Subtle vertical divider before the window-control group (expand
+       + close) so the eye groups them apart from the mode toggles. */
+    #tvaibwc-expandWidget,
+    #tvaibwc-closeWidget {
+        position: relative;
+    }
+    #tvaibwc-expandWidget {
+        margin-left: 6px !important;
+    }
+    #tvaibwc-expandWidget::after {
+        content: '';
+        position: absolute;
+        left: -6px;
+        top: 7px;
+        bottom: 7px;
+        width: 1px;
+        background: rgba(255, 255, 255, .18);
+    }
+    /* Close button — hover hint is subtle red so visitor instinctively
+       reads it as a destructive action without it screaming red. */
+    #tvaibwc-closeWidget:hover {
+        background: rgba(239, 68, 68, 0.30) !important;
     }
 
     /* Widget Content */
@@ -304,31 +381,62 @@
         color: #94a3b8;
     }
 
-    /* Start Chat Button */
+    /* Start Chat Button — sits ABOVE the bottom tab bar so it doesn't
+       overlap the Home/Chat/History/FAQ icons. Tab bar height = 60px
+       (.tvaibwc-widget-tabs), powered-by footer + spacing = ~30px,
+       so we sit at bottom: 96px. When the session is active and the
+       JS hides the tab bar, this button is also hidden, so the input
+       row (at bottom:30px) doesn't leave dead space. */
     .tvaibwc-start-chat-button {
         position: absolute;
-        bottom: 65px;
-        border-radius: 25px;
-        left: 30%;
-        width: 40%;
+        left: 16px;
+        right: 16px;
+        bottom: 96px;
+        padding: 11px 18px;
+        background-color: var(--tvaibwc-primary-color);
+        color: #ffffff;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 13.5px;
+        font-family: inherit;
+        text-align: center;
+        display: flex;
         align-items: center;
         justify-content: center;
-        right: 0;
-        padding: 7px;
-        background-color: #eeeeee;
-        color: #0f1a2e;
-        border: none;
-        cursor: pointer;
-        font-weight: 500;
-        text-align: center;
-        transition: all 0.3s;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        gap: 8px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, .18);
+        transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+        z-index: 2;
+    }
+    .tvaibwc-start-chat-button i { font-size: 13px; }
+    .tvaibwc-start-chat-button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px rgba(0, 0, 0, .22);
+        filter: brightness(1.06);
+    }
+    .tvaibwc-start-chat-button:active { transform: translateY(0); }
+    .tvaibwc-start-chat-button:disabled { opacity: .6; cursor: progress; transform: none; }
+
+    /* When the chat panel has no tab bar visible (active chat mode or
+       post-end-chat), JS adds .no-tabs to the widget so Start Chat
+       can drop down into the input row's slot without leaving an
+       awkward gap above the empty bottom area. */
+    .tvaibwc-chat-widget.no-tabs .tvaibwc-start-chat-button {
+        bottom: 36px;
     }
 
-    .tvaibwc-start-chat-button:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-        color: white;
+    /* Flow actions bar — sits BELOW #tvaibwc-chatMessages but ABOVE
+       the input/start-chat slot. Hosts the "Back to main menu" pill
+       so it's always anchored at the end of the message list, even
+       when AI streams more bubbles after a handoff. */
+    .tvaibwc-flow-actions-bar {
+        flex-shrink: 0;
+        padding: 4px 12px 0;
+        background: transparent;
     }
+    .tvaibwc-flow-actions-bar:empty { padding: 0; }
 
     /* Back to Tabs Button */
     .tvaibwc-back-to-tabs {
@@ -498,107 +606,66 @@
         color: #94a3b8;
     }
 
-    /* Theme Switch */
-    .tvaibwc-theme-switch {
-        position: relative;
-        display: inline-block;
-        width: 50px;
-        height: 24px;
-        margin-left: 10px;
-    }
-
-    .tvaibwc-theme-switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
-
-    .tvaibwc-reply-switch {
-        position: relative;
-        display: inline-block;
-        width: 50px;
-        height: 24px;
-        margin-left: 10px;
-    }
-
+    /* Theme + Reply toggles — icon-button visual; keep the hidden
+       checkbox so existing JS that reads `:checked` still works.
+       Only ONE icon shows at a time, matching the current state.
+       Sizing/hover styles come from the .tvaibwc-header-actions block
+       above, which now treats both .tvaibwc-theme-switch and
+       .tvaibwc-reply-switch the same as <button>s. */
+    .tvaibwc-theme-switch input,
     .tvaibwc-reply-switch input {
         opacity: 0;
+        position: absolute;
         width: 0;
         height: 0;
+        pointer-events: none;
     }
-
+    /* The .tvaibwc-slider span used to be a rounded pill — we now
+       collapse it to just an icon holder. */
     .tvaibwc-slider {
-        position: absolute;
+        position: static !important;
+        background: transparent !important;
+        border-radius: 0 !important;
+        width: auto !important;
+        height: auto !important;
         cursor: pointer;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background-color: #ccc;
-        transition: .4s;
-        border-radius: 24px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: none;
     }
-
-    .tvaibwc-slider:before {
-        position: absolute;
-        content: "";
-        height: 16px;
-        width: 16px;
-        left: 4px;
-        bottom: 4px;
-        background-color: white;
-        transition: .4s;
-        border-radius: 50%;
+    .tvaibwc-slider::before {
+        display: none !important;  /* kill the old round-knob pseudo */
     }
-
-    input:checked + .tvaibwc-slider {
-        background-color: #0f1a2e;
-    }
-
-    input:checked + .tvaibwc-slider:before {
-        transform: translateX(26px);
-    }
-
     .tvaibwc-slider i {
-        position: absolute;
-        font-size: 12px;
-        top: 6px;
+        position: static !important;
+        font-size: 14px !important;
+        color: white !important;
+        left: auto !important;
+        right: auto !important;
+        top: auto !important;
+        transition: opacity .15s ease, transform .15s ease;
     }
 
-    .tvaibwc-slider .fa-sun {
-        left: 6px;
-        color: white;
+    /* Visibility logic — show only the icon that matches state.
+       Theme:  unchecked = light → show sun;  checked = dark → show moon
+       Reply:  unchecked = text → show comment; checked = voice → show speaker */
+    .tvaibwc-theme-switch input:not(:checked) ~ .tvaibwc-slider .fa-moon,
+    .tvaibwc-theme-switch input:checked ~ .tvaibwc-slider .fa-sun,
+    .tvaibwc-reply-switch input:not(:checked) ~ .tvaibwc-slider .fa-volume-high,
+    .tvaibwc-reply-switch input:checked ~ .tvaibwc-slider .fa-comment {
+        display: none;
     }
 
-    .tvaibwc-slider .fa-moon {
-        right: 6px;
-        color: #1e293b;
+    /* Voice-mode is a "currently on" state worth signalling — stronger
+       fill + accent border + tinted icon so it reads as "active". */
+    .tvaibwc-reply-switch:has(input:checked) {
+        background: rgba(255, 255, 255, 0.28) !important;
+        border-color: rgba(255, 255, 255, 0.55) !important;
+        box-shadow: 0 0 0 2px rgba(255, 255, 255, .10);
     }
-
-    input:checked + .tvaibwc-slider .fa-sun {
-        color: #f8fafc;
-    }
-
-    input:checked + .tvaibwc-slider .fa-moon {
-        color: white;
-    }
-
-    .tvaibwc-slider .fa-comment {
-        left: 6px;
-        color: white;
-    }
-
-    .tvaibwc-slider .fa-volume-high {
-        right: 6px;
-        color: #1e293b;
-    }
-
-    input:checked + .tvaibwc-slider .fa-volume-high {
-        color: #f8fafc;
-    }
-
-    input:checked + .tvaibwc-slider .fa-comment {
-        color: white;
+    .tvaibwc-reply-switch:has(input:checked) .fa-volume-high {
+        color: #ffffff !important;
     }
 
     /* Scrollbars */
@@ -1686,6 +1753,267 @@ emoji-picker {
   background: #0d6efd;
   border-radius: 2px;
   animation: voicePulse 1s infinite ease-in-out;
+}
+
+/* ─── End-conversation soft button ───────────────────────────────
+   Discreet text-link tucked at the right of the chat-actions row so
+   it doesn't compete with mic/emoji/attach. Click prompts confirm,
+   ends the session, locks the input. */
+.tvaibwc-end-session-btn {
+    margin-left: auto;       /* push to the far right of the actions row */
+    background: transparent;
+    color: #94a3b8;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    font-weight: 500;
+    font-family: inherit;
+    line-height: 1.2;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.tvaibwc-end-session-btn i { font-size: 11px; }
+.tvaibwc-end-session-btn:hover {
+    background: rgba(239, 68, 68, .08);
+    color: #ef4444;
+    border-color: rgba(239, 68, 68, .25);
+}
+.tvaibwc-end-session-btn:disabled {
+    opacity: .4;
+    cursor: default;
+}
+.tvaibwc-end-session-btn:disabled:hover {
+    background: transparent;
+    color: #94a3b8;
+    border-color: transparent;
+}
+
+/* When session is ended we add this class to the chat panel — input
+   gets locked + footer shows a "Conversation ended" cap. */
+.tvaibwc-chat-input-container.is-ended .tvaibwc-chat-input,
+.tvaibwc-chat-input-container.is-ended .tvaibwc-send-button,
+.tvaibwc-chat-input-container.is-ended .tvaibwc-action-button,
+.tvaibwc-chat-input-container.is-ended .tvaibwc-end-session-btn {
+    pointer-events: none;
+    opacity: .45;
+}
+
+/* ─── Back-to-menu pill (Phase 2) ────────────────────────────────
+   Subtle centered pill that appears after a flow handoff or end,
+   letting the visitor re-enter the flow from its Start node. Lives
+   in the timeline itself, not the input row, so the chat history
+   tells the visitor "you can always come back to the menu". */
+.tvaibwc-flow-back-row {
+    display: flex;
+    justify-content: center;
+    margin: 6px 0 4px;
+    width: 100%;
+}
+.tvaibwc-flow-back-btn {
+    background: transparent;
+    color: #3b82f6;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    padding: 6px 14px 6px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background .15s ease, border-color .15s ease,
+                color .15s ease, transform .08s ease;
+}
+.tvaibwc-flow-back-btn:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #2563eb;
+}
+.tvaibwc-flow-back-btn:active { transform: translateY(1px); }
+.tvaibwc-flow-back-btn:disabled {
+    cursor: progress;
+    opacity: .55;
+    transform: none;
+}
+.tvaibwc-flow-back-arrow {
+    font-size: 16px;
+    line-height: 1;
+    transform: translateY(-1px);
+}
+
+.tvaibwc-flow-back-row.dark .tvaibwc-flow-back-btn {
+    color: #93c5fd;
+    border-color: #475569;
+}
+.tvaibwc-flow-back-row.dark .tvaibwc-flow-back-btn:hover {
+    background: rgba(59, 130, 246, .12);
+    border-color: #60a5fa;
+    color: #bfdbfe;
+}
+
+/* ─── Flow retry / soft-error bubble ─────────────────────────────
+   Calm amber rather than crash-red. Visible enough to notice but
+   doesn't read as "system failure" to a visitor. */
+.tvaibwc-message.tvaibwc-flow-retry .tvaibwc-message-text {
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #9a3412;
+    border-radius: 10px;
+    padding: 9px 13px;
+    font-size: 13.5px;
+    line-height: 1.4;
+}
+.tvaibwc-message.tvaibwc-flow-retry.dark .tvaibwc-message-text {
+    background: rgba(251, 146, 60, .12);
+    border: 1px solid rgba(251, 146, 60, .35);
+    color: #fdba74;
+}
+
+/* ─── Flow menu (Phase 2) ──────────────────────────────────────────
+   Card-stack quick-reply menu — vertical list of full-width cards,
+   each with a left accent rail, label on the left, chevron on the
+   right. Hover lifts the card; selected state turns into a gradient
+   primary card with a check. Tracks Intercom/Drift/Crisp pattern. */
+
+.tvaibwc-message.tvaibwc-bot.tvaibwc-flow-menu {
+    /* Give the menu bubble breathing room — narrower bubble crowds
+       long labels like "Talk to an agent". */
+    max-width: 92% !important;
+    width: 360px;
+    padding-bottom: 4px;
+}
+
+.tvaibwc-flow-options {
+    /* Two-per-row when labels are short enough; auto-fit means a wide
+       label (or a narrow bubble) collapses gracefully to one column.
+       Last odd-positioned option spans the full row so the grid doesn't
+       leave an awkward half-width tail. */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 8px;
+    margin-top: 12px;
+    width: 100%;
+}
+.tvaibwc-flow-options > .tvaibwc-flow-option-btn:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+}
+
+.tvaibwc-flow-option-btn {
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #3b82f6;
+    border-radius: 8px;
+    padding: 7px 10px 7px 12px;
+    font-size: 12.5px;
+    font-weight: 500;
+    font-family: inherit;
+    line-height: 1.3;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+    transition: transform .15s ease,
+                box-shadow .15s ease,
+                border-color .15s ease,
+                background .15s ease,
+                color .15s ease;
+    width: 100%;
+}
+
+/* Trailing chevron — slides on hover, becomes a check when selected. */
+.tvaibwc-flow-option-btn::after {
+    content: '';
+    width: 12px; height: 12px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%233b82f6' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='9 18 15 12 9 6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    flex-shrink: 0;
+    transition: transform .15s ease, background-image .15s ease;
+}
+
+.tvaibwc-flow-option-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    border-left-color: #2563eb;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(15, 23, 42, .08);
+}
+.tvaibwc-flow-option-btn:hover::after {
+    transform: translateX(3px);
+}
+
+.tvaibwc-flow-option-btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, .04);
+}
+
+.tvaibwc-flow-option-btn:disabled {
+    cursor: default;
+    opacity: .5;
+    transform: none;
+    box-shadow: none;
+}
+.tvaibwc-flow-option-btn:disabled:hover {
+    background: #ffffff;
+    border-color: #e2e8f0;
+    border-left-color: #3b82f6;
+    transform: none;
+    box-shadow: none;
+}
+.tvaibwc-flow-option-btn:disabled::after {
+    transform: none;
+}
+
+.tvaibwc-flow-option-btn.is-selected {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-color: #2563eb;
+    border-left-color: #1e3a8a;
+    color: #ffffff;
+    opacity: 1;
+    box-shadow: 0 4px 14px rgba(59, 130, 246, .35);
+    transform: none;
+}
+.tvaibwc-flow-option-btn.is-selected::after {
+    /* Check mark in white */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
+    transform: none;
+}
+
+/* Dark theme — Slate palette to match the rest of the dark widget. */
+.tvaibwc-message.tvaibwc-bot.dark .tvaibwc-flow-option-btn {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #334155;
+    border-left-color: #3b82f6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+}
+.tvaibwc-message.tvaibwc-bot.dark .tvaibwc-flow-option-btn:hover {
+    background: #283449;
+    border-color: #475569;
+    border-left-color: #60a5fa;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, .35);
+}
+.tvaibwc-message.tvaibwc-bot.dark .tvaibwc-flow-option-btn:disabled:hover {
+    background: #1e293b;
+    border-color: #334155;
+    border-left-color: #3b82f6;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+}
+.tvaibwc-message.tvaibwc-bot.dark .tvaibwc-flow-option-btn.is-selected {
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    border-color: #1d4ed8;
+    border-left-color: #1e3a8a;
+    color: #ffffff;
 }
 
 @keyframes voicePulse {

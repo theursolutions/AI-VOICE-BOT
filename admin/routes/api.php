@@ -38,6 +38,14 @@ Route::middleware('project.apikey')->prefix('v1')->group(function () {
     Route::post('sessions/{id}/end',        [SessionController::class, 'end']);
     Route::post('sessions/{id}/turn',       [TurnController::class,    'send']);
 
+    // Webchat Flow runtime — Phase 2.
+    // /flow/start is reserved for re-bootstrapping a flow mid-session
+    // (rarely needed; SessionController::start already kicks off the
+    // first run). /flow/step is the main event: widget POSTs a menu
+    // choice or free-text reply, runner advances + returns next batch.
+    Route::post('sessions/{id}/flow/step',  [\App\Http\Controllers\Api\WidgetFlowController::class, 'step']);
+    Route::post('sessions/{id}/flow/restart', [\App\Http\Controllers\Api\WidgetFlowController::class, 'restart']);
+
     Route::get   ('data-sources',                       [DataSourceController::class, 'index']);
     Route::post  ('data-sources',                       [DataSourceController::class, 'store']);
     Route::post  ('data-sources/upload-documents',      [DataSourceController::class, 'uploadDocuments']);
@@ -73,8 +81,13 @@ Route::prefix('v1/agent')->group(function () {
 // verify the signature in TelephonyController itself rather than via
 // middleware so failures still return TwiML the caller can hear.
 Route::middleware('twilio.signature')->group(function () {
-    Route::post('telephony/twilio/voice',  [\App\Http\Controllers\Api\TelephonyController::class, 'voiceWebhook']);
-    Route::post('telephony/twilio/status', [\App\Http\Controllers\Api\TelephonyController::class, 'statusWebhook']);
+    Route::post('telephony/twilio/voice',        [\App\Http\Controllers\Api\TelephonyController::class, 'voiceWebhook']);
+    Route::post('telephony/twilio/status',       [\App\Http\Controllers\Api\TelephonyController::class, 'statusWebhook']);
+    // Flow Builder runtime callbacks. flow-step is the Gather/redirect
+    // callback walking through IVR nodes; flow-handoff is hit when the
+    // flow reaches a transfer_ai node and we need to open the WS stream.
+    Route::post('telephony/twilio/flow-step',    [\App\Http\Controllers\Api\TelephonyController::class, 'flowStep']);
+    Route::post('telephony/twilio/flow-handoff', [\App\Http\Controllers\Api\TelephonyController::class, 'flowHandoff']);
 });
 Route::get ('telephony/twilio/diagnose',   [\App\Http\Controllers\Api\TelephonyController::class, 'diagnose'])->name('telephony.diagnose');
 

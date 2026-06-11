@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\Flow;
 use App\Models\Project;
+use App\Services\Tenant\TenantManager;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
@@ -51,6 +53,12 @@ class WidgetSettingsController extends Controller
         // tighten before prod). One origin per entry, scheme + host,
         // no path: "https://acme.com", "https://www.acme.com".
         'allowed_origins' => [],
+
+        // Phase 2 — Conversation Flow that runs at the start of every
+        // chat session. Same flow_id the customer bound to a phone
+        // number works here. Null = no flow, free-form AI from message
+        // one (original behaviour).
+        'default_flow_id' => null,
     ];
 
     public function index(Request $request, Client $client): View
@@ -63,11 +71,20 @@ class WidgetSettingsController extends Controller
         $project = $projects->firstWhere('id', $projectId);
 
         $config = self::DEFAULTS;
+        $flows = collect();
         if ($project) {
             $stored = data_get($project->json_data, 'widget', []);
             if (is_array($stored)) {
                 $config = array_merge($config, $stored);
             }
+            // Active flows for the default_flow_id dropdown. Drafts and
+            // archived flows can't run live, so they're not bindable.
+            app(TenantManager::class)->useFor($project);
+            $flows = Flow::where('project_id', $project->id)
+                ->where('status', Flow::STATUS_ACTIVE)
+                ->whereNull('deleted_at')
+                ->orderBy('name')
+                ->get(['id', 'name', 'language']);
         }
 
         $embedSnippet = $project
@@ -75,7 +92,7 @@ class WidgetSettingsController extends Controller
             : null;
 
         return view('widget-settings.index', compact(
-            'client', 'projects', 'project', 'projectId', 'config', 'embedSnippet'
+            'client', 'projects', 'project', 'projectId', 'config', 'embedSnippet', 'flows'
         ));
     }
 
@@ -104,6 +121,7 @@ class WidgetSettingsController extends Controller
             'logo'               => 'nullable|file|mimetypes:image/png,image/jpeg,image/gif,image/webp,image/svg+xml|max:2048',
             'remove_logo'        => 'nullable|boolean',
             'allowed_origins'    => 'nullable|string|max:2000',
+            'default_flow_id'    => 'nullable|integer',
         ]);
 
         // Normalise the textarea into an array of trimmed origins,
@@ -157,6 +175,7 @@ class WidgetSettingsController extends Controller
             'placeholder'        => $data['placeholder']    ?? self::DEFAULTS['placeholder'],
             'logo_url'           => $logoUrl,
             'allowed_origins'    => $origins,
+            'default_flow_id'    => !empty($data['default_flow_id']) ? (int) $data['default_flow_id'] : null,
         ]);
 
         $project->json_data = $json;

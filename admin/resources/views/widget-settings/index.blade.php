@@ -359,6 +359,30 @@
                         <input type="text" name="opening_hours" id="ws_hours" value="{{ $config['opening_hours'] }}" class="form-control" maxlength="80" placeholder="e.g. Mon–Fri 9am–6pm">
                         <div class="tva-form-help">Shown in the header next to bot name</div>
                     </div>
+
+                    <div class="tva-form-group">
+                        <label class="tva-form-label">
+                            <i data-lucide="git-branch" class="w-3 h-3 inline -mt-0.5"></i>
+                            Conversation flow (optional)
+                        </label>
+                        @if (($flows ?? collect())->isEmpty())
+                            <div class="tva-form-help" style="background: #fef3c7; border: 1px solid #fde68a; padding: 9px 12px; border-radius: 6px; color: #92400e;">
+                                No active flows yet. <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ $project->id }}" style="color: #b45309; font-weight: 600;">Build one in the Flow Builder</a> and set its status to <b>active</b> to make it bindable. Until then, every chat starts in free-form AI mode.
+                            </div>
+                        @else
+                            <select name="default_flow_id" id="ws_default_flow_id" class="form-control">
+                                <option value="">— No flow (free-form AI from message one) —</option>
+                                @foreach ($flows as $f)
+                                    <option value="{{ $f->id }}" @selected((int) ($config['default_flow_id'] ?? 0) === $f->id)>
+                                        {{ $f->name }} @if($f->language) · {{ strtoupper($f->language) }} @endif
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="tva-form-help">
+                                Picked flow runs at the start of every chat session. Each preset node (Say, Capture DTMF, End) is <b>zero LLM cost</b> — the AI brain only kicks in when a Transfer-to-AI node is reached.
+                            </div>
+                        @endif
+                    </div>
                 </div>
 
                 <div class="tva-ws-card mb-5">

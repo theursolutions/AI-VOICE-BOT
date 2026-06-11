@@ -48,19 +48,39 @@
         }
     });
 
-    // Start chat button
+    // Start chat button — two purposes:
+    //   (a) Initial chat-tab entry: just reveal the input.
+    //   (b) After an "End chat" the session was cleared (session_id =
+    //       null) — clicking this needs to mint a brand-new session
+    //       so flow re-bootstrap fires on the server. tvaibwcEnsureSession
+    //       handles both cases idempotently: returns the existing one
+    //       if still live, creates one otherwise.
     $('#tvaibwc-startChatButton').click(function() {
-        $(this).hide();
-        $('#tvaibwc-chatInputContainer').addClass('active');
+        var $btn = $(this);
+        $btn.prop('disabled', true);
+        $btn.hide().removeClass('is-visible');
+        $('#tvaibwc-chatInputContainer').addClass('active').removeClass('is-ended');
         $('#tvaibwc-widgetTabs').hide();
         $('#tvaibwc-backToTabs').show();
         $('#tvaibwc-chatInput').focus();
+
+        // Fire ensureSession so the flow (if bound) restarts cleanly.
+        // The empty profile is fine — first chat had whatever was
+        // typed, the restart can adopt the same defaults.
+        if (typeof window.tvaibwcEnsureSession === 'function') {
+            window.tvaibwcEnsureSession()
+                .catch(function (e) { console.warn('[tvaibwc] restart session failed', e); })
+                .then(function () { $btn.prop('disabled', false); });
+        } else {
+            $btn.prop('disabled', false);
+        }
     });
 
-    // Back to tabs button
+    // Back to tabs button — restores the navigation tabs.
     $('#tvaibwc-backToTabs').click(function() {
         $('#tvaibwc-chatInputContainer').removeClass('active');
         $('#tvaibwc-widgetTabs').show();
+        $('#tvaibwc-chatWidget').removeClass('no-tabs');  // mirror tab state
         $('#tvaibwc-startChatButton').show();
         $(this).hide();
     });
@@ -709,17 +729,27 @@
     // Store original home content
     const originalHomeContent = $('.tvaibwc-home-content').html();
     
-    // Handle visitor button click
+    // Handle visitor button click — quick path: jump into chat with
+    // an anonymous profile. Eagerly mint a session so the flow (if
+    // bound) auto-bootstraps and the visitor sees the menu immediately.
     $('.tvaibwc-visitor-btn').click(function() {
         // Switch to chat tab
         $('.tvaibwc-widget-tab[data-tab="tvaibwc-chat"]').click();
-        
-        // Simulate start chat button click
-        $('#tvaibwc-startChatButton').hide();
-        $('#tvaibwc-chatInputContainer').addClass('active');
+
+        // UI: hide Start Chat + tabs, reveal input, keep state in sync
+        $('#tvaibwc-startChatButton').hide().removeClass('is-visible');
+        $('#tvaibwc-chatInputContainer').addClass('active').removeClass('is-ended');
         $('#tvaibwc-widgetTabs').hide();
+        $('#tvaibwc-chatWidget').addClass('no-tabs');
         $('#tvaibwc-backToTabs').show();
         $('#tvaibwc-chatInput').focus();
+
+        // Eagerly mint a session so flow auto-bootstrap fires (visitor
+        // sees the menu without having to type first). Idempotent.
+        if (typeof window.tvaibwcEnsureSession === 'function') {
+            window.tvaibwcEnsureSession()
+                .catch(function (e) { console.warn('[tvaibwc] visitor-mode session start failed', e); });
+        }
     });
     
     // Handle customer button click

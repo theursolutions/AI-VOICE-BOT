@@ -140,6 +140,9 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/data-sources/{id}/test-webhook',   [DataSourceWebController::class, 'testWebhook'])->whereNumber('id')->name('data-sources.test-webhook');
         Route::post  ('/data-sources/{id}/test-query',     [DataSourceWebController::class, 'testQuery'])->whereNumber('id')->name('data-sources.test-query');
         Route::post  ('/data-sources/{id}/disable',        [DataSourceWebController::class, 'destroy'])->whereNumber('id')->name('data-sources.destroy');
+        // Per-table + per-column AI access control (privacy gate)
+        Route::get   ('/data-sources/{id}/access',         [DataSourceWebController::class, 'access'])->whereNumber('id')->name('data-sources.access');
+        Route::post  ('/data-sources/{id}/access',         [DataSourceWebController::class, 'updateAccess'])->whereNumber('id')->name('data-sources.update-access');
 
         // Widget customization (colors, greeting, position, embed snippet)
         Route::get   ('/widget-settings',                  [App\Http\Controllers\Admin\WidgetSettingsController::class, 'index'])->name('widget-settings.index');
@@ -166,6 +169,18 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/skills',                           [App\Http\Controllers\Admin\SkillWebController::class, 'store'])->name('skills.store');
         Route::patch ('/skills/{id}',                      [App\Http\Controllers\Admin\SkillWebController::class, 'update'])->whereNumber('id')->name('skills.update');
         Route::delete('/skills/{id}',                      [App\Http\Controllers\Admin\SkillWebController::class, 'destroy'])->whereNumber('id')->name('skills.destroy');
+
+        // Conversation Flow builder (per-project)
+        Route::get   ('/flows',                            [App\Http\Controllers\Admin\FlowWebController::class, 'index'])->name('flows.index');
+        Route::post  ('/flows',                            [App\Http\Controllers\Admin\FlowWebController::class, 'store'])->name('flows.store');
+        Route::get   ('/flows/{id}/editor',                [App\Http\Controllers\Admin\FlowWebController::class, 'editor'])->whereNumber('id')->name('flows.editor');
+        Route::get   ('/flows/{id}/definition',            [App\Http\Controllers\Admin\FlowWebController::class, 'definition'])->whereNumber('id')->name('flows.definition');
+        Route::put   ('/flows/{id}/definition',            [App\Http\Controllers\Admin\FlowWebController::class, 'saveDefinition'])->whereNumber('id')->name('flows.save-definition');
+        Route::patch ('/flows/{id}',                       [App\Http\Controllers\Admin\FlowWebController::class, 'update'])->whereNumber('id')->name('flows.update');
+        Route::delete('/flows/{id}',                       [App\Http\Controllers\Admin\FlowWebController::class, 'destroy'])->whereNumber('id')->name('flows.destroy');
+        // Editor live-test runner — sandboxed sessions tagged channel='test'
+        Route::post  ('/flows/{id}/test/start',            [App\Http\Controllers\Admin\FlowWebController::class, 'testStart'])->whereNumber('id')->name('flows.test-start');
+        Route::post  ('/flows/{id}/test/step',             [App\Http\Controllers\Admin\FlowWebController::class, 'testStep'])->whereNumber('id')->name('flows.test-step');
 
         // Project profile (business identity — logo, name, website, etc.)
         Route::get   ('/project-profile',                  [App\Http\Controllers\Admin\ProjectProfileController::class, 'index'])->name('project-profile.index');

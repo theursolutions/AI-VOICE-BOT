@@ -160,6 +160,12 @@
             <span>{{ $source->name }}</span>
         </h2>
         @if ($source->status !== 'disabled')
+            @if (in_array($source->type, ['database', 'agent'], true))
+                <a href="{{ route('data-sources.access', ['id' => $source->id]) }}"
+                   class="btn btn-success">
+                    <i data-lucide="shield" class="w-4 h-4 mr-2"></i> AI access control
+                </a>
+            @endif
             <form method="POST" class="inline"
                   action="{{ route('data-sources.resync', ['id' => $source->id]) }}">
                 @csrf

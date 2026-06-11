@@ -7,7 +7,7 @@
     $sec = [
         'ai'       => $is('bot-strategy.*', 'brain-settings.*'),
         'data'     => $is('data-sources.*', 'voices.*', 'telephony.*'),
-        'project'  => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*'),
+        'project'  => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*', 'flows.*'),
         'crm'      => $is('sessions.*', 'leads.*'),
         'members'  => $is('invitations.*'),
     ];
@@ -130,6 +130,13 @@
                        class="side-menu {{ $is('skills.*') ? 'side-menu--active' : '' }}">
                         <div class="side-menu__icon"><i data-lucide="tag"></i></div>
                         <div class="side-menu__title">Skills</div>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ $clientSlug ? route('flows.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('flows.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="git-branch"></i></div>
+                        <div class="side-menu__title">Flow builder</div>
                     </a>
                 </li>
                 <li>

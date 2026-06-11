@@ -49,6 +49,16 @@ class DatabaseResolver implements ResolverInterface
                 'No schema captured — re-save the data source to introspect.');
         }
 
+        // Apply admin-defined table/column ACL BEFORE the LLM sees the
+        // schema. If the agent never sees a column it can't generate
+        // SQL referencing it — privacy enforcement is deterministic,
+        // not "trust the LLM to respect a rule in the prompt".
+        $schema = app(\App\Services\DataSource\SchemaAclFilter::class)->filter($schema, $cfg);
+        if (empty($schema)) {
+            return ResolverResult::error($source->id, $source->type,
+                'No tables are allow-listed for AI access on this data source.');
+        }
+
         $maxRows = (int) ($cfg['max_rows']    ?? 100);
         $timeout = (int) ($cfg['timeout_sec'] ?? 8);
 

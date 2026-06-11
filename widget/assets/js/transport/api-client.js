@@ -90,6 +90,39 @@
         respond_with: p.respond_with || 'text',
         stream:       p.stream ? 1 : 0
       });
+    },
+
+    /**
+     * POST /api/v1/sessions/{id}/flow/step (via PHP).
+     * payload: { choice_id?: "1" } OR { text: "free-form" }
+     * Resolves with envelope.response = WebFlowRunner result.
+     */
+    flowStep: function (sessionId, payload) {
+      var p = payload || {};
+      return postForm('flowStep', {
+        session_id: sessionId,
+        choice_id:  p.choice_id || '',
+        text:       p.text || ''
+      });
+    },
+
+    /**
+     * POST /api/v1/sessions/{id}/flow/restart (via PHP).
+     * Walks the bound flow from its Start node again. Used by the
+     * "Back to menu" pill so visitors can re-enter the flow after a
+     * handoff or end.
+     */
+    flowRestart: function (sessionId) {
+      return postForm('flowRestart', { session_id: sessionId });
+    },
+
+    /**
+     * POST /api/v1/sessions/{id}/end (via PHP).
+     * Marks the session ended in the DB. Idempotent — calling on an
+     * already-ended session is a no-op.
+     */
+    endSession: function (sessionId) {
+      return postForm('endSession', { session_id: sessionId });
     }
   };
 

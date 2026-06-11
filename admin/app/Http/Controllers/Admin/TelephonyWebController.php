@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\BotAgent;
 use App\Models\Client;
+use App\Models\Flow;
 use App\Models\Project;
 use App\Models\Skill;
 use App\Services\Telephony\WelcomeAudioService;
@@ -57,6 +58,13 @@ class TelephonyWebController extends Controller
                     ->where('status', Skill::STATUS_ACTIVE)
                     ->orderBy('name')
                     ->get(['id', 'name']),
+                // Only active flows are bindable — drafts/archived ones
+                // can't answer real calls anyway, no point exposing them.
+                'flows'  => Flow::where('project_id', $p->id)
+                    ->where('status', Flow::STATUS_ACTIVE)
+                    ->whereNull('deleted_at')
+                    ->orderBy('name')
+                    ->get(['id', 'name', 'language']),
             ];
         }
 
@@ -88,10 +96,11 @@ class TelephonyWebController extends Controller
             'phone_number'  => 'required|string|max:32',
             'enabled'       => 'nullable|boolean',
             'welcome_voice' => 'nullable|string|max:60',
-            'routing_type'  => 'required|in:agents,skill',
+            'routing_type'  => 'required|in:agents,skill,flow',
             'agent_ids'     => 'nullable|array',
             'agent_ids.*'   => 'integer',
             'skill_id'      => 'nullable|integer',
+            'flow_id'       => 'nullable|integer',
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
@@ -127,6 +136,7 @@ class TelephonyWebController extends Controller
             'routing_type'  => $data['routing_type'],
             'agent_ids'     => array_values($data['agent_ids'] ?? []),
             'skill_id'      => $data['routing_type'] === 'skill' ? (int) ($data['skill_id'] ?? 0) ?: null : null,
+            'flow_id'       => $data['routing_type'] === 'flow'  ? (int) ($data['flow_id']  ?? 0) ?: null : null,
         ];
 
         if ($data['number_index'] === '__new__') {

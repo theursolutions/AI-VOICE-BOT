@@ -61,6 +61,17 @@ class AgentResolver implements ResolverInterface
             if (empty($schema)) {
                 return ResolverResult::error($source->id, $source->type, 'No schema configured for SQL generation');
             }
+
+            // Apply table/column ACL before the LLM sees the schema —
+            // same privacy guarantee as DatabaseResolver: the agent
+            // can't generate SQL for tables/columns the admin hid.
+            if (is_array($schema)) {
+                $schema = app(\App\Services\DataSource\SchemaAclFilter::class)->filter($schema, $cfg);
+                if (empty($schema)) {
+                    return ResolverResult::error($source->id, $source->type,
+                        'No tables are allow-listed for AI access on this data source.');
+                }
+            }
             $schemaText = is_string($schema) ? $schema : json_encode($schema);
 
             $rawSql = $this->ollama->generateSqlQuery($userQuery, $schemaText);

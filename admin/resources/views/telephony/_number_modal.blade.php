@@ -55,6 +55,9 @@
                 <div class="tva-routing-tab {{ $routingType === 'skill' ? 'is-selected' : '' }}" data-routing="skill">
                     <i data-lucide="tag" class="w-3 h-3 mr-1 inline"></i> Skill pool
                 </div>
+                <div class="tva-routing-tab {{ $routingType === 'flow' ? 'is-selected' : '' }}" data-routing="flow">
+                    <i data-lucide="git-branch" class="w-3 h-3 mr-1 inline"></i> Conversation flow
+                </div>
             </div>
 
             {{-- Agents block --}}
@@ -93,6 +96,26 @@
                         @endforeach
                     </select>
                     <small class="text-slate-500 text-xs">Any active agent in this skill can take the call.</small>
+                @endif
+            </div>
+
+            {{-- Flow block --}}
+            <div data-routing-block="flow" style="display: {{ $routingType === 'flow' ? '' : 'none' }};">
+                <label class="form-label">Answer calls with this conversation flow</label>
+                @if (($flows ?? collect())->isEmpty())
+                    <div class="text-sm text-slate-500 p-3 bg-slate-50 rounded border border-slate-200">
+                        No active flows yet. <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ $project->id }}" class="text-primary">Build one in the Flow Builder</a> (set status to <b>active</b> to make it bindable).
+                    </div>
+                @else
+                    <select name="flow_id" class="form-select">
+                        <option value="">— pick a flow —</option>
+                        @foreach ($flows as $f)
+                            <option value="{{ $f->id }}" @selected((int) ($number['flow_id'] ?? 0) === $f->id)>
+                                {{ $f->name }} @if($f->language) · {{ strtoupper($f->language) }} @endif
+                            </option>
+                        @endforeach
+                    </select>
+                    <small class="text-slate-500 text-xs">Flow runs first. AI takes over only when a <b>Transfer to AI</b> node is reached.</small>
                 @endif
             </div>
         </div>

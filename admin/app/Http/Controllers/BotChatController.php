@@ -3,7 +3,9 @@
 namespace App\Http\Controllers;
 use App\Services\OllamaService;
 use App\Models\Client;
+use App\Models\DataSource;
 use App\Models\Project;
+use App\Services\DataSource\SchemaAclFilter;
 use App\Services\IntentClassifierService;
 use DB;
 use Illuminate\Http\Request;
@@ -26,6 +28,27 @@ class BotChatController extends Controller
         if ($intent == 'data') {
             $schema = $this->getProjectSchema($project_id);
             if(!empty($schema)){
+                // Apply the per-project DataSource ACL (allowed_tables +
+                // allowed_columns) before the schema reaches the LLM —
+                // same privacy guarantee as DatabaseResolver/AgentResolver.
+                // Legacy controller still uses project.db_schema but we
+                // honour the access rules saved on the most recent
+                // matching DataSource so customer privacy isn't bypassed
+                // through this route.
+                $schemaArr = is_string($schema) ? json_decode($schema, true) : $schema;
+                if (is_array($schemaArr)) {
+                    $sourceCfg = $this->resolveAclConfig((int) $project_id);
+                    if ($sourceCfg !== null) {
+                        $schemaArr = app(SchemaAclFilter::class)->filter($schemaArr, $sourceCfg);
+                        if (empty($schemaArr)) {
+                            return response()->json([
+                                'code' => 403,
+                                'message' => 'No tables are allow-listed for AI access on this project.',
+                            ]);
+                        }
+                    }
+                    $schema = json_encode($schemaArr);
+                }
             // Generate the SQL
                 $sqlQuery = $ollama->generateSqlQuery($userQuery, $schema);
                 $cleanedQuery = $this->cleanQuery($sqlQuery);
@@ -47,6 +70,23 @@ class BotChatController extends Controller
         else{
             return response()->json(['code' => 200,'intent_type'=> 'other', 'data'=>'Could not understand. Please try again', 'message' => "Could not understand. Please try again."]);
         }
+    }
+
+    /**
+     * Locate the access-rules config for a project. Pulls from the
+     * most recent active database/agent-type DataSource. Returns
+     * null when no such source exists (legacy single-DB setups
+     * pre-dating the DataSource model) — the caller then falls back
+     * to passing through the full schema.
+     */
+    private function resolveAclConfig(int $projectId): ?array
+    {
+        $src = DataSource::where('project_id', $projectId)
+            ->whereIn('type', [DataSource::TYPE_DATABASE, DataSource::TYPE_AGENT])
+            ->where('is_active', 'Yes')
+            ->orderByDesc('id')
+            ->first();
+        return $src ? (array) $src->config : null;
     }
 
     protected function getProjectSchema($projectId , $purgeConnection = true): string

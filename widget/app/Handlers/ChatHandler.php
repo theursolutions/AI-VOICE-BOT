@@ -25,6 +25,24 @@ switch ($action) {
         echo $controller->sendTurn($sessionId, $_POST);
         exit;
 
+    case 'flowStep':
+    case 'flow-step':
+        $sessionId = $_POST['session_id'] ?? null;
+        echo $controller->flowStep($sessionId, $_POST);
+        exit;
+
+    case 'flowRestart':
+    case 'flow-restart':
+        $sessionId = $_POST['session_id'] ?? null;
+        echo $controller->flowRestart($sessionId, $_POST);
+        exit;
+
+    case 'endSession':
+    case 'end-session':
+        $sessionId = $_POST['session_id'] ?? null;
+        echo $controller->endSession($sessionId, $_POST);
+        exit;
+
     // Legacy alias — kept so older builds keep working through the cutover.
     case 'chatResponse':
         echo $controller->chatResponse($_POST);

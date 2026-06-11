@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Flow;
 use App\Models\Project;
 use App\Models\Session;
 use App\Services\Conversation\AgentRouter;
 use App\Services\Conversation\SessionTokenService;
+use App\Services\Flow\FlowRunner;
 use App\Services\Telephony\WelcomeAudioService;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Http\Request;
@@ -35,6 +37,7 @@ class TelephonyController extends Controller
         private TenantManager $tenants,
         private WelcomeAudioService $welcome,
         private AgentRouter $router,
+        private FlowRunner $flowRunner,
     ) {}
 
     /**
@@ -113,11 +116,40 @@ class TelephonyController extends Controller
                     'routing_type' => $numberConfig['routing_type'] ?? 'agents',
                     'agent_ids'    => (array) ($numberConfig['agent_ids'] ?? []),
                     'skill_id'     => $numberConfig['skill_id'] ?? null,
+                    'flow_id'      => $numberConfig['flow_id'] ?? null,
                 ] : null,
             ],
             'created_at'       => $now,
             'update_at'        => $now,
         ]);
+
+        // If this number is bound to a saved Flow, hand the call to the
+        // FlowRunner instead of opening a Media Stream right away. The
+        // flow walks the graph (IVR menus, Say nodes, etc.) and only
+        // opens the WS stream when it hits a transfer_ai node.
+        $flowId = (int) ($numberConfig['flow_id'] ?? 0);
+        if ($flowId > 0) {
+            $flow = Flow::where('id', $flowId)
+                ->where('project_id', $project->id)
+                ->where('status', Flow::STATUS_ACTIVE)
+                ->first();
+            if ($flow) {
+                $meta = (array) ($session->metadata ?? []);
+                $meta['flow'] = ['flow_id' => $flow->id, 'current_node_id' => null];
+                $session->metadata = $meta;
+                $session->save();
+
+                $base = rtrim((string) config('services.twilio.webhook_base', ''), '/');
+                $xml = $this->flowRunner->start($project, $session, $flow, $base);
+                return $this->twimlResponse($xml);
+            }
+            // flow_id pointed at something that isn't active — fall
+            // through to the legacy AI-stream path so the call still
+            // works. Worth logging though.
+            Log::warning('Telephony: flow_id set but flow not active', [
+                'flow_id' => $flowId, 'project_id' => $project->id,
+            ]);
+        }
 
         // Pick the BotAgent that should handle this call based on the
         // per-number routing config (or fall back to project default).
@@ -230,6 +262,106 @@ XML;
         }
 
         return response('', 204);
+    }
+
+    /**
+     * POST /api/telephony/twilio/flow-step
+     *
+     * Twilio Gather (and our Redirect after a Say) callback. We look up
+     * the in-flight session by CallSid, resume the flow at its last
+     * known node, pick the branch matching the user input, and emit
+     * TwiML for the next node.
+     */
+    public function flowStep(Request $request): Response
+    {
+        $callSid = $request->input('CallSid', '');
+        if ($callSid === '') {
+            return $this->twimlResponse('<Response><Hangup/></Response>');
+        }
+
+        // Find which project owns this in-flight call. Sessions are in
+        // tenant DBs so we have to iterate until we find a hit.
+        foreach (Project::all(['id', 'name', 'json_data']) as $p) {
+            $this->tenants->useFor($p);
+            $session = Session::where('external_id', $callSid)->first();
+            if (!$session) continue;
+
+            $flowId = (int) data_get($session->metadata, 'flow.flow_id', 0);
+            if ($flowId <= 0) {
+                Log::warning('flowStep: session has no flow bound', ['call_sid' => $callSid]);
+                return $this->twimlResponse('<Response><Hangup/></Response>');
+            }
+            $flow = Flow::find($flowId);
+            if (!$flow) {
+                return $this->twimlResponse('<Response><Hangup/></Response>');
+            }
+
+            $input = [
+                'Digits'       => (string) $request->input('Digits', ''),
+                'SpeechResult' => (string) $request->input('SpeechResult', ''),
+            ];
+
+            $base = rtrim((string) config('services.twilio.webhook_base', ''), '/');
+            $xml = $this->flowRunner->step($p, $session, $flow, $input, $base);
+            return $this->twimlResponse($xml);
+        }
+
+        Log::warning('flowStep: no session found for CallSid', ['call_sid' => $callSid]);
+        return $this->twimlResponse('<Response><Hangup/></Response>');
+    }
+
+    /**
+     * POST /api/telephony/twilio/flow-handoff
+     *
+     * Called when FlowRunner reaches a transfer_ai node. We mint the
+     * session JWT and return the <Connect><Stream> TwiML — same shape
+     * voiceWebhook emits for non-flow calls. From this point on the
+     * call is handled by the WebSocket AI pipeline.
+     */
+    public function flowHandoff(Request $request): Response
+    {
+        $sessionId = (int) $request->query('session_id', 0);
+        if ($sessionId <= 0) {
+            return $this->twimlResponse('<Response><Hangup/></Response>');
+        }
+
+        // Find the project that owns this session.
+        $session = null;
+        $project = null;
+        foreach (Project::all(['id', 'name', 'json_data']) as $p) {
+            $this->tenants->useFor($p);
+            $s = Session::find($sessionId);
+            if ($s) { $session = $s; $project = $p; break; }
+        }
+        if (!$session || !$project) {
+            return $this->twimlResponse('<Response><Hangup/></Response>');
+        }
+
+        // FlowRunner may have set agent_id on the session before
+        // redirecting here. If not, fall back to AgentRouter.
+        if (empty($session->agent_id)) {
+            $this->router->assignToSession($project, $session);
+            $session->refresh();
+        }
+
+        $token = $this->tokens->mint($session);
+
+        $wsBase = (string) config('services.python.ws_url');
+        $phoneWs = preg_replace('#/ws/turn$#', '/ws/phone', $wsBase);
+        $phoneWs = preg_replace('#^http(s?)://#', 'ws$1://', $phoneWs);
+
+        $tokenXml = htmlspecialchars($token, ENT_XML1);
+        $twiml = <<<XML
+<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Connect>
+        <Stream url="{$phoneWs}">
+            <Parameter name="token" value="{$tokenXml}"/>
+        </Stream>
+    </Connect>
+</Response>
+XML;
+        return $this->twimlResponse($twiml);
     }
 
     /**

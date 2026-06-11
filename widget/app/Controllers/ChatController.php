@@ -136,9 +136,87 @@ class ChatController
     }
 
     /**
+     * POST /api/v1/sessions/{id}/flow/step — advance the bound flow.
+     *
+     * Payload: { choice_id?: "1", text?: "free-form" }
+     * Returns the WebFlowRunner envelope:
+     *   { messages, expecting, current_node_id, handoff, ended, cost_avoided }
+     */
+    public function flowStep($sessionId, $payload)
+    {
+        $sessionId = (int) $sessionId;
+        if ($sessionId <= 0) {
+            header('Content-Type: application/json');
+            return json_encode([
+                'success'     => false,
+                'status_code' => 400,
+                'message'     => 'Missing or invalid session_id',
+                'response'    => null,
+            ]);
+        }
+
+        $url = $this->laravelBaseUrl() . "/api/v1/sessions/{$sessionId}/flow/step";
+        $body = [
+            'choice_id' => $payload['choice_id'] ?? null,
+            'text'      => $payload['text'] ?? null,
+        ];
+
+        $response = (object) callApi($url, 'POST', $this->authHeaders($payload), $body, 30, false);
+        return $this->envelope($response, 'Flow step processed');
+    }
+
+    /**
+     * POST /api/v1/sessions/{id}/flow/restart — re-enter the bound
+     * flow from its Start node. Powers the "Back to menu" pill.
+     */
+    public function flowRestart($sessionId, $payload)
+    {
+        $sessionId = (int) $sessionId;
+        if ($sessionId <= 0) {
+            header('Content-Type: application/json');
+            return json_encode([
+                'success'     => false,
+                'status_code' => 400,
+                'message'     => 'Missing or invalid session_id',
+                'response'    => null,
+            ]);
+        }
+
+        $url = $this->laravelBaseUrl() . "/api/v1/sessions/{$sessionId}/flow/restart";
+        $response = (object) callApi($url, 'POST', $this->authHeaders($payload), [], 30, false);
+        return $this->envelope($response, 'Flow restarted');
+    }
+
+    /**
+     * POST /api/v1/sessions/{id}/end — close the conversation.
+     * Marks session.status = 'ended' so the admin sees it as completed.
+     * Idempotent — safe to call on an already-ended session.
+     */
+    public function endSession($sessionId, $payload)
+    {
+        $sessionId = (int) $sessionId;
+        if ($sessionId <= 0) {
+            header('Content-Type: application/json');
+            return json_encode([
+                'success'     => false,
+                'status_code' => 400,
+                'message'     => 'Missing or invalid session_id',
+                'response'    => null,
+            ]);
+        }
+
+        $url = $this->laravelBaseUrl() . "/api/v1/sessions/{$sessionId}/end";
+        $response = (object) callApi($url, 'POST', $this->authHeaders($payload), [], 10, false);
+        return $this->envelope($response, 'Session ended');
+    }
+
+    /**
      * Action handler — the JS layer hits this via ChatHandler.php with
      *   action=startSession      → start a session
      *   action=sendTurn          → send a turn
+     *   action=flowStep          → advance bound flow with choice/text
+     *   action=flowRestart       → re-enter the bound flow from start
+     *   action=endSession        → mark session ended in DB
      *   action=chatResponse      → legacy alias, mapped to sendTurn for BC
      */
     public function chatResponse($payload)
@@ -179,11 +257,23 @@ class ChatController
             ]);
         }
 
+        // Sanitise — server/system error strings ("Upstream API error",
+        // "cURL error 28", "SQLSTATE...") must never reach the chat UI.
+        // Log the raw details for the developer, surface a calm,
+        // human-readable message for the visitor.
+        $rawDetail = is_string($response->error ?? null) ? $response->error : null;
+        if (function_exists('error_log') && ($rawDetail || $data)) {
+            error_log('[tvaibwc] upstream failure status=' . $status
+                . ' detail=' . ($rawDetail ?: json_encode($data)));
+        }
+
         return json_encode([
             'success'     => false,
             'status_code' => $status ?: 502,
-            'message'     => 'Upstream API error',
-            'response'    => $data ?? ($response->error ?? null),
+            'message'     => 'Sorry, I had trouble responding just now. Please try again in a moment.',
+            // Keep `response` null for the user-facing layer — raw Laravel
+            // / Guzzle exception text used to leak into the chat bubble.
+            'response'    => null,
         ]);
     }
 }

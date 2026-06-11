@@ -502,6 +502,90 @@ class DataSourceWebController extends Controller
             ->with('success', "Data source “{$source->name}” disabled.");
     }
 
+    /**
+     * GET /c/{slug}/data-sources/{id}/access
+     *
+     * Per-table + per-column access control for a `database` /
+     * `agent`-type data source. Renders the schema as a table list
+     * with checkboxes; clicking a table opens a side panel of its
+     * columns so the admin can hide sensitive ones (purchase_price,
+     * ssn, etc.) from the AI.
+     */
+    public function access(Request $request, Client $client, int $id): View
+    {
+        $source = $this->guardSource($id, $client);
+
+        if (!in_array($source->type, [DataSource::TYPE_DATABASE, DataSource::TYPE_AGENT], true)) {
+            abort(404, 'Access control is only available for database data sources.');
+        }
+
+        $schema = (array) ($source->config['schema'] ?? []);
+        $allowedTables  = $source->config['allowed_tables']  ?? null;     // null = all allowed
+        $allowedColumns = (array) ($source->config['allowed_columns'] ?? []);
+
+        return view('data-sources.access', compact(
+            'client', 'source', 'schema', 'allowedTables', 'allowedColumns'
+        ));
+    }
+
+    /**
+     * POST /c/{slug}/data-sources/{id}/access
+     *
+     * Persist the table allowlist + per-table column allowlist into
+     * data_sources.config. The next AI query will use them — the
+     * SchemaAclFilter runs before the schema reaches the LLM.
+     *
+     * Body shape:
+     *   allowed_tables[]            = ["orders", "customers"]
+     *   allowed_columns[orders][]   = ["id", "customer_id"]
+     *   allowed_columns[customers][]= ["id", "name", "email"]
+     */
+    public function updateAccess(Request $request, Client $client, int $id): RedirectResponse
+    {
+        $source = $this->guardSource($id, $client);
+
+        $data = $request->validate([
+            'allowed_tables'      => 'nullable|array',
+            'allowed_tables.*'    => 'string|max:128',
+            'allowed_columns'     => 'nullable|array',
+            'allowed_columns.*'   => 'array',
+            'allowed_columns.*.*' => 'string|max:128',
+        ]);
+
+        $schema = (array) ($source->config['schema'] ?? []);
+        $validTables = array_keys($schema);
+
+        // Defensive — only accept table names actually present in the
+        // cached schema. Stops a tampered form from "allow-listing" a
+        // table that doesn't exist (no harm, but keeps the rule tidy).
+        $allowedTables = array_values(array_intersect(
+            (array) ($data['allowed_tables'] ?? []),
+            $validTables
+        ));
+
+        $allowedColumns = [];
+        foreach (((array) ($data['allowed_columns'] ?? [])) as $table => $cols) {
+            if (!in_array($table, $allowedTables, true)) continue;   // skip cols for un-allowed tables
+            $tableSchema = (array) ($schema[$table] ?? []);
+            $validCols = \App\Services\DataSource\SchemaAclFilter::columnNames($tableSchema);
+            $clean = array_values(array_intersect((array) $cols, $validCols));
+            if (count($clean) > 0) {
+                $allowedColumns[$table] = $clean;
+            }
+        }
+
+        $config = (array) $source->config;
+        $config['allowed_tables']  = $allowedTables;
+        $config['allowed_columns'] = $allowedColumns;
+        $source->config = $config;
+        $source->save();
+
+        return redirect()
+            ->route('data-sources.access', ['id' => $source->id])
+            ->with('success', "Access rules saved · "
+                . count($allowedTables) . "/" . count($validTables) . " tables allowed.");
+    }
+
     // ── helpers ─────────────────────────────────────────────────────────
 
     private function guardProject(int $projectId, Client $client): Project
