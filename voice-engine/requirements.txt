@@ -33,6 +33,14 @@ webrtcvad>=2.0.10
 # with pandas>=2.0 below. coqui-tts allows pandas 2.x and Python 3.11/3.12, and
 # matches the version running in voice-engine/.venv (coqui-tts 0.27.5).
 coqui-tts>=0.27.5,<0.28
+# transformers MUST stay on the 4.x line. coqui-tts declares only
+# `transformers>=4.57` with no upper bound, so pip resolves to 5.x, which
+# removed `isin_mps_friendly` from transformers.pytorch_utils — imported by
+# TTS/tts/layers/tortoise/autoregressive.py:12. Without this cap, XTTS fails to
+# load at runtime ("Warm-up of 'tts_service' failed") and there is NO voice
+# output, while the container still reports healthy. Verified: 4.57.6 defines
+# the symbol and satisfies coqui-tts's floor.
+transformers>=4.57,<5
 torch>=2.1
 torchaudio>=2.1
 soundfile>=0.12
