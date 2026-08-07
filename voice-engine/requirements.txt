@@ -13,6 +13,16 @@ python-dotenv>=1.0
 httpx>=0.27
 pyjwt>=2.8
 
+# --- LLM provider SDKs ---
+# `openai` serves BOTH the Groq and Ollama backends: Groq is OpenAI-wire-
+# compatible, and _OllamaBackend subclasses _GroqBackend, only swapping in a
+# local base_url (llm_service.py:209 and :324). Without it the app crashes at
+# startup with ModuleNotFoundError for every provider except anthropic.
+openai>=1.30
+# Third provider (llm_service.py:105, :172). Cheap to install, and having it
+# present means LLM_PROVIDER=anthropic works without another image rebuild.
+anthropic>=0.34
+
 # --- STT (replaces openai whisper) ---
 faster-whisper>=1.0
 webrtcvad>=2.0.10
