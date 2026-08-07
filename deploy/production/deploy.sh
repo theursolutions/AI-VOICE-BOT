@@ -8,6 +8,7 @@
 #   ./deploy/production/deploy.sh scale app=4 queue=6
 #   ./deploy/production/deploy.sh validate     lint compose + haproxy config
 #   ./deploy/production/deploy.sh backup       dump MySQL + snapshot key volumes
+#   ./deploy/production/deploy.sh ollama-pull  download the local LLM weights
 #   ./deploy/production/deploy.sh exporter-user create the MySQL monitoring user
 #   ./deploy/production/deploy.sh prune        free disk now (voice WAVs, backups, images)
 #   ./deploy/production/deploy.sh cron         install the daily prune cron job
@@ -16,7 +17,27 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."   # repo root
 BASE=docker-compose.yml
 OVERLAY=deploy/production/docker-compose.prod.yml
-DC=(docker compose -f "$BASE" -f "$OVERLAY" --env-file .env)
+DC=(docker compose -f "$BASE" -f "$OVERLAY")
+
+# Optional local-LLM overlay. Set WITH_OLLAMA=1 in .env to run Ollama as part of
+# the stack — required if LLM_PROVIDER=ollama, since without this overlay there
+# is no ollama service to talk to and every generation fails with a connection
+# error. Also used for the Groq-primary + Ollama-fallback setup.
+if grep -qE '^WITH_OLLAMA=1[[:space:]]*$' .env 2>/dev/null; then
+  DC+=(-f deploy/production/ollama.override.yml)
+fi
+
+DC+=(--env-file .env)
+
+# Guard against the most common misconfiguration: a local-LLM provider selected
+# without the overlay that actually provides it.
+if grep -qE '^LLM_PROVIDER=ollama' .env 2>/dev/null \
+   && ! grep -qE '^WITH_OLLAMA=1[[:space:]]*$' .env 2>/dev/null; then
+  echo "FATAL: LLM_PROVIDER=ollama but WITH_OLLAMA=1 is not set in .env." >&2
+  echo "       The ollama service would not be deployed and every LLM call" >&2
+  echo "       would fail. Add 'WITH_OLLAMA=1' to .env and re-run." >&2
+  exit 1
+fi
 
 # Roll the app tier with NO downtime and WITHOUT a big memory spike:
 # start N new-image replicas next to the N old ones (app is ~400MB each, so the
@@ -126,6 +147,17 @@ case "$cmd" in
     echo "   take the backup while no ingest job is running."
     echo ">> COPY backups/ OFF THIS SERVER now (object storage). A backup that"
     echo "   only exists on the box it protects is not a backup."
+    ;;
+
+  ollama-pull)
+    # Downloads the local LLM weights into the ollama_models volume (one time).
+    # Kept out of the image so it survives rebuilds and isn't re-downloaded.
+    m=$(grep -E '^OLLAMA_MODEL=' .env | head -1 | cut -d= -f2-)
+    m=${m:-qwen2.5:7b}
+    echo ">> pulling '$m' (several GB — this takes a while)…"
+    "${DC[@]}" exec -T ollama ollama pull "$m"
+    echo ">> installed models:"
+    "${DC[@]}" exec -T ollama ollama list
     ;;
 
   exporter-user)
