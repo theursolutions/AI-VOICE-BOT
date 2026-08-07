@@ -172,6 +172,19 @@ services:
       # Unified data layer: one DuckDB file per project (snapshots = SQL,
       # KB/crawler = BM25 FTS). Replaced Qdrant + the embedding model entirely.
       DUCKDB_DIR: /app/duckdb_data
+      # XTTS is a voice-CLONING model — it cannot synthesise without a reference
+      # clip, and tts_service raises FileNotFoundError when the path is missing.
+      # This is the fallback used whenever an agent has no custom voice sample
+      # (ws.py, phone.py, whatsapp_call.py all default to it).
+      #
+      # It lives in the persistent voice_outputs volume — which is also the one
+      # path deploy/production/maintenance/prune.sh deliberately spares from the
+      # daily cleanup. The code default (/app/temp_speaker.wav) points at a file
+      # that is in .dockerignore and tracked nowhere, so it never exists.
+      #
+      # Install one before serving voice traffic:
+      #   ./deploy/production/deploy.sh seed-speaker /path/to/voice.wav
+      DEFAULT_SPEAKER_WAV: /app/voice_outputs/default_speaker.wav
       VOICE_OUTPUT_URL_PREFIX: https://${VOICE_DOMAIN}/voice
     security_opt: ["no-new-privileges:true"]
     volumes:

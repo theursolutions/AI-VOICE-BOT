@@ -8,6 +8,7 @@
 #   ./deploy/production/deploy.sh scale app=4 queue=6
 #   ./deploy/production/deploy.sh validate     lint compose + haproxy config
 #   ./deploy/production/deploy.sh backup       dump MySQL + snapshot key volumes
+#   ./deploy/production/deploy.sh seed-speaker FILE.wav  install the XTTS reference voice
 #   ./deploy/production/deploy.sh ollama-pull  download the local LLM weights
 #   ./deploy/production/deploy.sh exporter-user create the MySQL monitoring user
 #   ./deploy/production/deploy.sh prune        free disk now (voice WAVs, backups, images)
@@ -147,6 +148,39 @@ case "$cmd" in
     echo "   take the backup while no ingest job is running."
     echo ">> COPY backups/ OFF THIS SERVER now (object storage). A backup that"
     echo "   only exists on the box it protects is not a backup."
+    ;;
+
+  seed-speaker)
+    # Installs the reference voice clip XTTS clones from. Without it, every
+    # voice turn on an agent that has no custom sample dies with
+    # "FileNotFoundError: speaker_wav not found".
+    #
+    # Source it from a 10-30s recording of ONE speaker, no music or background
+    # noise. Any format ffmpeg reads is fine — it is normalised here.
+    src="${1:-}"
+    if [ -z "$src" ] || [ ! -f "$src" ]; then
+      echo "usage: $0 seed-speaker /path/to/voice.wav" >&2
+      echo "  10-30s of clean single-speaker audio. Longer is not better;" >&2
+      echo "  clean matters far more than long." >&2
+      exit 1
+    fi
+    cid=$("${DC[@]}" ps -q voice-engine | head -1)
+    [ -n "$cid" ] || { echo "!! voice-engine is not running" >&2; exit 1; }
+
+    echo ">> normalising '$src' to 24kHz mono s16…"
+    docker cp "$src" "$cid:/tmp/seed_in"
+    "${DC[@]}" exec -T voice-engine sh -c '
+      set -e
+      ffmpeg -y -i /tmp/seed_in -ac 1 -ar 24000 -sample_fmt s16 \
+             /app/voice_outputs/default_speaker.wav >/dev/null 2>&1
+      rm -f /tmp/seed_in
+      ls -lh /app/voice_outputs/default_speaker.wav'
+
+    # The XTTS conditioning latents are cached per speaker path, so an existing
+    # process would keep using the OLD clip. Restart to pick up the new one.
+    echo ">> restarting voice-engine to clear the conditioning cache…"
+    "${DC[@]}" up -d --no-deps --force-recreate voice-engine
+    echo ">> done."
     ;;
 
   ollama-pull)
