@@ -41,8 +41,13 @@ coqui-tts>=0.27.5,<0.28
 # output, while the container still reports healthy. Verified: 4.57.6 defines
 # the symbol and satisfies coqui-tts's floor.
 transformers>=4.57,<5
-torch>=2.1
-torchaudio>=2.1
+# Upper bound mirrors the pin in the Dockerfile (which installs these from the
+# CPU wheel index BEFORE this file is processed). torch >= 2.9 makes coqui-tts
+# demand the separate `torchcodec` package and XTTS fails to load without it.
+# Keeping the cap here means a plain `pip install -r requirements.txt` outside
+# Docker can't silently reintroduce the same breakage.
+torch>=2.2,<2.9
+torchaudio>=2.2,<2.9
 soundfile>=0.12
 librosa>=0.10
 numpy>=1.22

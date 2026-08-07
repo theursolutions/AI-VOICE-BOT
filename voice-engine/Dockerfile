@@ -23,7 +23,18 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --upgrade pip setuptools wheel
 
 # CPU-only torch/torchaudio first; the rest resolve against it.
-RUN pip install --index-url https://download.pytorch.org/whl/cpu torch torchaudio
+#
+# PINNED, and it must stay pinned. From torch 2.9 coqui-tts requires the extra
+# `torchcodec` package for audio I/O (torchaudio's own backends were removed),
+# so an unpinned install silently grabs the newest torch and XTTS then dies at
+# load time with:
+#   ImportError: From Pytorch 2.9, the torchcodec library is required
+# The container still reports healthy, so this surfaces only as "no voice".
+# coqui-tts 0.27.5 declares torch>=2.2 with no upper bound, so 2.8.0 is well
+# within its supported range. To move past 2.9 later, add torchcodec (matched to
+# the torch version) rather than just bumping this line.
+RUN pip install --index-url https://download.pytorch.org/whl/cpu \
+        "torch==2.8.0" "torchaudio==2.8.0"
 
 COPY requirements.txt .
 RUN pip install -r requirements.txt
