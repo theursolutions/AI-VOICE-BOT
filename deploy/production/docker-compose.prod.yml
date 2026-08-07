@@ -60,6 +60,16 @@ services:
     # port to localhost only (optional convenience for SSH-tunnel access).
     ports:
       - "127.0.0.1:8404:8404"
+    # HAProxy sizes its FD table from `maxconn` (60000 in haproxy.cfg) and needs
+    # roughly 2×maxconn + reserve ≈ 120k descriptors. The daemon-wide default in
+    # /etc/docker/daemon.json is 65535 — correct for every other service, but it
+    # makes HAProxy abort at startup with:
+    #   [ALERT] Cannot raise FD limit to 120068, limit is 65535
+    # so raise it for this container only.
+    ulimits:
+      nofile:
+        soft: 200000
+        hard: 200000
     healthcheck:
       # `haproxy -c` validates the running config is loadable.
       test: ["CMD", "sh", "-c", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg >/dev/null 2>&1 || exit 1"]
