@@ -3,6 +3,7 @@
 namespace App\Services\DataSource\Resolvers;
 
 use App\Models\DataSource;
+use App\Models\Skill;
 use App\Services\DataSource\ResolverInterface;
 use App\Services\DataSource\ResolverResult;
 use GuzzleHttp\Client as GuzzleClient;
@@ -43,6 +44,16 @@ class WebhookResolver implements ResolverInterface
         $url = $cfg['url'] ?? '';
         if (!$url) {
             return ResolverResult::error($source->id, $source->type, 'webhook: missing URL');
+        }
+
+        // Capability gate: this tool only fires if the session's agent is
+        // allowed to use it (via its assigned skills). Enforced here too —
+        // not just in ToolPicker — because the router fires every active
+        // webhook when no tool was explicitly picked. Unbound tools stay
+        // global; absent a gate, nothing is restricted.
+        $gate = $context['tool_gate'] ?? null;
+        if (is_array($gate) && !Skill::toolPermitted((int) $source->id, $gate)) {
+            return ResolverResult::empty($source->id, $source->type);
         }
 
         // Honor the ToolPicker's decision: if a webhook_decision is

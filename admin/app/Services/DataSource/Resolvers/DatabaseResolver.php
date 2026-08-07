@@ -187,6 +187,57 @@ class DatabaseResolver implements ResolverInterface
     public function sync(DataSource $source): void {}
 
     /**
+     * LLM options for control-plane (text-to-SQL) calls. Routes them to the
+     * configured reasoning provider (e.g. groq) when set, so SQL generation
+     * uses a capable model even when chat runs on a small local model.
+     */
+    public function llmOptions(): array
+    {
+        // temperature=0 → deterministic SQL (fewer wrong-column repairs, which
+        // each cost a whole extra round-trip). max_tokens bounded since even a
+        // complex multi-join SELECT is short — caps generation time.
+        $opts = ['respond_with' => 'text', 'temperature' => 0, 'max_tokens' => 700];
+        $provider = (string) config('services.python.reasoning_provider', '');
+        if ($provider !== '') {
+            $opts['provider'] = $provider;
+        }
+        $model = (string) config('services.python.reasoning_model', '');
+        if ($model !== '') {
+            $opts['model'] = $model;
+        }
+        return $opts;
+    }
+
+    /**
+     * Public text-to-SQL builder reused by resolvers that execute the query
+     * themselves (e.g. DataSnapshotResolver against DuckDB). Generates +
+     * validates + caps a single read-only SELECT. Throws on invalid output.
+     */
+    public function buildSql(string $userQuery, array $schema, int $maxRows = 100): string
+    {
+        $sql = $this->generateSql($userQuery, $schema);
+        $err = $this->validateSql($sql);
+        if ($err) {
+            throw new \RuntimeException($err);
+        }
+        return $this->ensureLimit($sql, $maxRows);
+    }
+
+    /**
+     * One-shot repair for a SELECT that failed at execution: hand the DB
+     * error back to the LLM, re-validate + cap. Throws if still unusable.
+     */
+    public function repairAndValidate(string $userQuery, array $schema, string $brokenSql, string $dbError, int $maxRows = 100): string
+    {
+        $fixed = $this->repairSql($userQuery, $schema, $brokenSql, $dbError);
+        $err = $this->validateSql($fixed);
+        if ($err) {
+            throw new \RuntimeException('Query failed: ' . $dbError);
+        }
+        return $this->ensureLimit($fixed, $maxRows);
+    }
+
+    /**
      * Two-step LLM pipeline:
      *
      *   Step 1: send all TABLE NAMES + the question to the LLM and ask
@@ -314,7 +365,7 @@ PROMPT;
         try {
             $resp = $this->python->llm(
                 [['role' => 'system', 'content' => $prompt]],
-                ['respond_with' => 'text']
+                $this->llmOptions()
             );
         } catch (Throwable $e) {
             Log::warning('DatabaseResolver: table-picker call failed', ['error' => $e->getMessage()]);
@@ -343,54 +394,62 @@ PROMPT;
             $schemaLines[] = "- {$table} ({$cols})";
         }
         $schemaText = implode("\n", $schemaLines);
-        if (strlen($schemaText) > 3500) {
-            $schemaText = substr($schemaText, 0, 3500) . "\n... (schema truncated)";
+        if (strlen($schemaText) > 6000) {
+            $schemaText = substr($schemaText, 0, 6000) . "\n... (schema truncated)";
         }
 
+        // Infer likely foreign-key links (orders.customer_id → customers.id)
+        // so the model writes correct JOINs for cross-table questions.
+        $relHints = $this->relationshipHints($schema);
+        $relBlock = $relHints !== '' ? "\n# Likely relationships (use for JOINs)\n{$relHints}\n" : '';
+
         $prompt = <<<PROMPT
-You translate a natural-language question into a SINGLE read-only SQL
-query against the schema below.
+You are an expert SQL analyst. Translate the question into ONE read-only
+SQL query against the schema below. The schema may contain MULTIPLE related
+tables — JOIN them whenever the answer needs data that spans tables.
 
 # Hard rules
-
 1. Output ONE SQL statement only — no commentary, no markdown fences.
-2. SELECT statements ONLY. Never INSERT, UPDATE, DELETE, DROP, ALTER,
-   GRANT, TRUNCATE, CREATE, REPLACE, RENAME, or CALL.
+2. Read-only ONLY: start with SELECT or WITH. Never INSERT, UPDATE, DELETE,
+   DROP, ALTER, GRANT, TRUNCATE, CREATE, REPLACE, RENAME, or CALL.
 3. No multiple statements (no semicolons mid-query).
-4. Use ONLY tables and columns that appear in the schema below. Do
-   NOT invent column names — if you're unsure a column exists, prefer
-   a column you DID see in the schema or use COUNT(*) / SELECT 1.
-5. If the question genuinely can't be answered with this schema,
-   output the literal text: NO_QUERY
-6. Prefer narrow SELECT lists over `SELECT *` so the response is small.
-7. Use the table names EXACTLY as they appear (preserve prefixes like
-   `crm_`, `tbl_`, `wp_`). Quote with backticks if the name needs it.
-8. For "how many X" use COUNT(*), not SELECT *.
-9. For "list / show me" use a reasonable SELECT of identifying columns
-   only — id + name + maybe one or two more.
+4. Use ONLY tables and columns that appear in the schema. Never invent names.
+5. If the question genuinely can't be answered with this schema, output the
+   literal text: NO_QUERY
+
+# Use the right tool for the question
+- JOIN (INNER / LEFT) across the tables above to combine related data.
+- Aggregates (COUNT, SUM, AVG, MIN, MAX) with GROUP BY / HAVING for totals,
+  averages, "per <thing>", "how many ... by ...".
+- Subqueries and CTEs (WITH ...) and window functions (ROW_NUMBER, RANK,
+  SUM() OVER ...) for "top N per group", ranking, running totals, "the most
+  recent X for each Y".
+- ORDER BY + LIMIT for "top / highest / most / latest N".
+- When joining, qualify columns with the table or an alias to avoid ambiguity.
+- Prefer narrow SELECT lists over SELECT *. Preserve exact table names
+  (including prefixes like crm_, tbl_, wp_); backtick-quote if needed.
 
 # Few-shot examples
-
 Q: how many leads do we have?
-Schema: crm_leads(id, name, email, status, created_at)
+Schema: crm_leads(id, name, status)
 SQL: SELECT COUNT(*) AS lead_count FROM crm_leads
 
-Q: list 5 most recent orders
-Schema: tbl_orders_v2(id, customer_id, total, created_at)
-SQL: SELECT id, customer_id, total, created_at FROM tbl_orders_v2 ORDER BY created_at DESC LIMIT 5
+Q: total revenue per customer, top 5
+Schema: customers(id, name); orders(id, customer_id, total)
+SQL: SELECT c.id, c.name, SUM(o.total) AS revenue FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY c.id, c.name ORDER BY revenue DESC LIMIT 5
 
-Q: top 3 products by price
-Schema: catalog_product(sku, name, price, stock)
-SQL: SELECT sku, name, price FROM catalog_product ORDER BY price DESC LIMIT 3
+Q: products never ordered
+Schema: products(id, name); order_items(id, product_id, qty)
+SQL: SELECT p.id, p.name FROM products p LEFT JOIN order_items oi ON oi.product_id = p.id WHERE oi.id IS NULL
 
-Q: customers in New York
-Schema: crm_contact(id, full_name, city, email)
-SQL: SELECT id, full_name, email FROM crm_contact WHERE city = 'New York'
+Q: most recent order for each customer
+Schema: customers(id, name); orders(id, customer_id, created_at, total)
+SQL: WITH ranked AS (SELECT o.*, ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at DESC) AS rn FROM orders o) SELECT c.name, r.id, r.total, r.created_at FROM ranked r JOIN customers c ON c.id = r.customer_id WHERE r.rn = 1
 
 Q: how many wibbles do we have?      (no matching table)
-Schema: crm_leads(...), tbl_orders(...)
+Schema: crm_leads(...), orders(...)
 SQL: NO_QUERY
-
+{$relBlock}
 # Schema (selected tables)
 {$schemaText}
 
@@ -402,11 +461,45 @@ PROMPT;
 
         $resp = $this->python->llm(
             [['role' => 'system', 'content' => $prompt]],
-            ['respond_with' => 'text']
+            $this->llmOptions()
         );
 
         $text = trim((string) ($resp['text'] ?? ''));
         return $this->stripFences($text);
+    }
+
+    /**
+     * Heuristic foreign-key detection: a column like `customer_id` whose
+     * stem ("customer") matches another table (customers / customer) is a
+     * likely join key. Gives the SQL model concrete relationships to JOIN
+     * on instead of guessing. Best-effort, capped.
+     */
+    private function relationshipHints(array $schema): string
+    {
+        // Map normalized base names → real table name (strip common prefixes,
+        // index both singular and plural).
+        $byKey = [];
+        foreach (array_keys($schema) as $t) {
+            $base = strtolower(preg_replace('/^(crm_|tbl_|wp_|app_|sales_|catalog_|tbl)/', '', (string) $t));
+            foreach ([$base, rtrim($base, 's'), $base . 's'] as $k) {
+                if ($k !== '' && !isset($byKey[$k])) $byKey[$k] = $t;
+            }
+        }
+
+        $hints = [];
+        foreach ($schema as $table => $columns) {
+            foreach ((is_array($columns) ? $columns : []) as $c) {
+                $col = strtolower(strtok((string) $c, ' '));   // drop type/keys
+                if (preg_match('/^(.+?)_id$/', $col, $m)) {
+                    $ref = $m[1];
+                    $target = $byKey[$ref] ?? $byKey[$ref . 's'] ?? $byKey[rtrim($ref, 's')] ?? null;
+                    if ($target && $target !== $table) {
+                        $hints[$table . '.' . $col] = "{$table}.{$col} -> {$target}.id";
+                    }
+                }
+            }
+        }
+        return implode("\n", array_slice(array_values($hints), 0, 25));
     }
 
     /**
@@ -456,7 +549,7 @@ PROMPT;
 
         $resp = $this->python->llm(
             [['role' => 'system', 'content' => $prompt]],
-            ['respond_with' => 'text']
+            $this->llmOptions()
         );
         return $this->stripFences(trim((string) ($resp['text'] ?? '')));
     }
@@ -542,7 +635,9 @@ PROMPT;
         if (substr_count($sql, ';') > 1 || (substr_count($sql, ';') === 1 && !str_ends_with(rtrim($sql), ';'))) {
             return 'Multiple SQL statements not allowed';
         }
-        if (!preg_match('/^\s*select\b/i', $trim)) {
+        // Allow read-only SELECT or a CTE (WITH ... SELECT) — needed for
+        // complex queries (ranking, "top N per group", running totals).
+        if (!preg_match('/^\s*(select|with)\b/i', $trim)) {
             return 'Generated SQL was not a SELECT';
         }
         // Forbidden keywords (case-insensitive word boundary).
@@ -567,7 +662,25 @@ PROMPT;
 
     private function stripFences(string $text): string
     {
-        return trim(preg_replace('/```sql|```/i', '', $text) ?? $text);
+        // 1) Drop markdown code fences.
+        $text = preg_replace('/```sql|```/i', '', $text) ?? $text;
+        // 2) Drop a leading chat-role token some small/local models echo
+        //    into the completion (e.g. "assistant\nSELECT ...").
+        $text = preg_replace('/^\s*(assistant|system|user)\s*[:\n]+/i', '', $text) ?? $text;
+        // 3) Trim stray wrapping backticks / whitespace.
+        $text = trim($text, " \t\r\n`");
+        // 4) Anchor to the first real SQL keyword — discards any leading
+        //    prose ("Here is the query:") or stray tokens before it.
+        if (preg_match('/\b(SELECT|WITH)\b/i', $text, $m, PREG_OFFSET_CAPTURE)) {
+            $text = substr($text, (int) $m[0][1]);
+        }
+        // 5) Cut trailing commentary after the first statement terminator
+        //    (small models love to append "- explanation:" after the ';').
+        $semi = strpos($text, ';');
+        if ($semi !== false) {
+            $text = substr($text, 0, $semi);
+        }
+        return trim($text);
     }
 
     /** Same fallback pattern as WebhookResolver: legacy plaintext rows still work. */

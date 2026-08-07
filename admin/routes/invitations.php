@@ -16,7 +16,7 @@ Route::middleware(['auth', 'active.client'])
         Route::get('/', [InvitationController::class, 'index'])->name('invitations.index');
         Route::post('/', [InvitationController::class, 'store'])->name('invitations.store');
         Route::post('/{id}/revoke', [InvitationController::class, 'destroy'])
-            ->whereNumber('id')->name('invitations.destroy');
+            ->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('invitations.destroy');
     });
 
 /*

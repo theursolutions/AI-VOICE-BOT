@@ -72,6 +72,12 @@
     .tva-channel-chip.is-voice { background:#fef3c7; color:#92400e; }
     .tva-channel-chip.is-phone { background:#dcfce7; color:#15803d; }
     .tva-channel-chip.is-sms   { background:#ede9fe; color:#7c3aed; }
+    .tva-channel-chip.is-internal { background:#1e293b; color:#a5b4fc; }
+    .tva-internal-tag {
+        display:inline-flex; align-items:center; gap:4px; margin-left:6px;
+        padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700;
+        text-transform:uppercase; letter-spacing:.04em; background:#eef2ff; color:#4338ca; border:1px solid #c7d2fe;
+    }
 
     .tva-status {
         display:inline-flex; align-items:center; gap:6px;
@@ -172,14 +178,14 @@
 
             <select name="project_id" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
 
             <select name="channel" onchange="this.form.submit()">
                 <option value="">All channels</option>
-                @foreach (['web','voice','phone','sms'] as $ch)
-                    <option value="{{ $ch }}" @selected($channel === $ch)>{{ ucfirst($ch) }}</option>
+                @foreach (['web','voice','phone','sms','whatsapp','instagram','facebook','internal'] as $ch)
+                    <option value="{{ $ch }}" @selected($channel === $ch)>{{ $ch === 'internal' ? 'Internal (Ask AI)' : ucfirst($ch) }}</option>
                 @endforeach
             </select>
 
@@ -235,8 +241,15 @@
                             <div class="flex items-center gap-3">
                                 <div style="width:32px; height:32px; border-radius:50%; background:var(--tva-gradient); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:11px; flex-shrink:0;">{{ $initials }}</div>
                                 <div>
-                                    <div style="font-weight:600;">{{ $name }}</div>
-                                    @if ($sess->customer_email)
+                                    <div style="font-weight:600;">
+                                        {{ $name }}
+                                        @if ($sess->channel === 'internal')
+                                            <span class="tva-internal-tag" title="Internal chat — a team member talking to the AI assistant"><i data-lucide="bot" style="width:11px;height:11px"></i> Ask AI</span>
+                                        @endif
+                                    </div>
+                                    @if ($sess->channel === 'internal')
+                                        <div style="font-size:11px; color:#94a3b8;">Internal user · {{ $sess->customer_email ?: 'staff' }}</div>
+                                    @elseif ($sess->customer_email)
                                         <div style="font-size:11px; color:#94a3b8;">{{ $sess->customer_email }}</div>
                                     @elseif ($sess->customer_phone)
                                         <div style="font-size:11px; color:#94a3b8;">{{ $sess->customer_phone }}</div>
@@ -244,7 +257,7 @@
                                 </div>
                             </div>
                         </td>
-                        <td data-label="Channel"><span class="tva-channel-chip is-{{ $sess->channel }}">{{ $sess->channel }}</span></td>
+                        <td data-label="Channel"><span class="tva-channel-chip is-{{ $sess->channel }}">{{ $sess->channel === 'internal' ? 'Ask AI' : $sess->channel }}</span></td>
                         <td data-label="Status"><span class="tva-status is-{{ $sess->status }}">{{ $sess->status }}</span></td>
                         <td data-label="Started" style="font-size:12px; color:#475569;">{{ $started }}</td>
                         <td data-label="Last activity" style="font-size:12px; color:#475569;">
@@ -252,7 +265,7 @@
                             @if ($rel) <div style="font-size:10px; color:#94a3b8;">{{ $rel }}</div> @endif
                         </td>
                         <td data-label="Open" style="text-align:right;">
-                            <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $sess->id]) }}?project_id={{ $projectId }}"
+                            <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $sess->id]) }}?project_id={{ hashid($projectId) }}"
                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg" style="color:#6366f1; background:#eef2ff;"
                                title="View transcript">
                                 <i data-lucide="arrow-right" class="w-4 h-4"></i>

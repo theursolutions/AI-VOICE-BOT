@@ -159,6 +159,7 @@ return [
         /*
          * Package Service Providers...
          */
+        Msd\MetaChannels\MetaChannelsServiceProvider::class,
 
         /*
          * Application Service Providers...

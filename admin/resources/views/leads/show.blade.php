@@ -221,7 +221,7 @@
     {{-- ── Breadcrumb ───────────────────────────────────────────────── --}}
     <div class="intro-y flex items-center mt-6 mb-4">
         <h2 class="text-lg font-medium mr-auto">
-            <a href="{{ route('leads.index', ['client' => $client->slug]) }}?project_id={{ $projectId }}"
+            <a href="{{ route('leads.index', ['client' => $client->slug]) }}?project_id={{ hashid($projectId) }}"
                class="text-slate-400 hover:text-primary">
                 <i data-lucide="chevron-left" class="w-4 h-4 inline -mt-1"></i> Leads
             </a>
@@ -412,7 +412,7 @@
             @endif
 
             @if ($lead->session_id)
-                <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $lead->session_id]) }}?project_id={{ $projectId }}"
+                <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $lead->session_id]) }}?project_id={{ hashid($projectId) }}"
                    class="intro-y tva-source-banner">
                     <div class="tva-meta-icon" style="background:#dbeafe; color:#1d4ed8;">
                         <i data-lucide="message-circle" class="w-4 h-4"></i>

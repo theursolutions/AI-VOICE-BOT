@@ -37,7 +37,7 @@
 
 <div class="tva-flow-editor-wrap">
     <div class="tva-flow-editor-header">
-        <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ $flow->project_id }}"
+        <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ hashid($flow->project_id) }}"
            style="color:#94a3b8; text-decoration:none; font-size:13px;">
             <i data-lucide="arrow-left" class="w-4 h-4 inline -mt-0.5"></i> Back to flows
         </a>
@@ -55,7 +55,8 @@
          data-project-id="{{ $flow->project_id }}"
          data-client-slug="{{ $client->slug }}"
          data-csrf="{{ csrf_token() }}"
-         data-base-url="{{ rtrim(url('/'), '/') }}">
+         data-base-url="{{ rtrim(url('/'), '/') }}"
+         data-data-sources="{{ json_encode($dataSources ?? []) }}">
         <div class="editor-placeholder">
             <div style="text-align:center;">
                 <div style="width: 44px; height: 44px; border: 3px solid #1e293b; border-top-color: #3b82f6; border-radius: 50%; margin: 0 auto 12px; animation: spin 1s linear infinite;"></div>

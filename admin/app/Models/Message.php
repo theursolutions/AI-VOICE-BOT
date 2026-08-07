@@ -23,6 +23,7 @@ class Message extends Model
         'latency_ms',
         'model_used',
         'metadata',
+        'created_at',
     ];
 
     protected $casts = [

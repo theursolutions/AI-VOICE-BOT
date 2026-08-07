@@ -29,6 +29,7 @@
         'show_attach'        => true,
         'show_theme_toggle'  => true,
         'show_reply_toggle'  => true,
+        'show_language'      => true,
         'show_expand_button' => true,
         'show_visitor_modes' => true,
         'show_history_tab'   => true,
@@ -132,9 +133,23 @@
             color: #fff !important;
             border: none !important;
         }
-        /* Subtle brand accent on the active nav tab only. */
-        .tvaibwc-widget-tab.active { color: var(--tva-brand-primary) !important; }
-        .tvaibwc-widget-tab.active i { color: var(--tva-brand-primary) !important; }
+        /* Active nav tab. The label/icon stay WHITE for contrast on the
+           dark navy tab bar — colouring them with the brand primary made
+           the active tab (e.g. "Chat" after starting a chat) vanish when
+           the brand colour is itself dark/navy. The brand instead shows
+           as a bright accent bar under the active tab. */
+        .tvaibwc-widget-tab.active { color: #fff !important; }
+        .tvaibwc-widget-tab.active i { color: #fff !important; }
+        .tvaibwc-widget-tab.active::after {
+            content: '';
+            position: absolute;
+            left: 24%;
+            right: 24%;
+            bottom: 6px;
+            height: 3px;
+            border-radius: 3px;
+            background: var(--tva-brand-accent) !important;
+        }
     </style>
 </head>
 <body data-embed="<?= $tvaEmbed ? '1' : '0' ?>" data-project-key="<?= htmlspecialchars($tvaProjectKey) ?>">
@@ -147,6 +162,41 @@
             <div class="tvaibwc-widget-header">
                 <h6><?= htmlspecialchars($tvaConfig['bot_name']) ?></h6>
                 <div class="tvaibwc-header-actions">
+                    <?php if (!empty($tvaConfig['show_language'])): ?>
+                    <?php
+                        // Languages offered in the header picker. `code` is what
+                        // we send to the backend; `short` is the chip label.
+                        // The model still mirrors the user's actual language —
+                        // this just sets the fallback / default.
+                        $tvaLangs = [
+                            ['code' => 'en', 'short' => 'EN', 'label' => 'English'],
+                            ['code' => 'ar', 'short' => 'AR', 'label' => 'العربية'],
+                            ['code' => 'ur', 'short' => 'UR', 'label' => 'اردو'],
+                            ['code' => 'hi', 'short' => 'HI', 'label' => 'हिन्दी'],
+                            ['code' => 'es', 'short' => 'ES', 'label' => 'Español'],
+                            ['code' => 'fr', 'short' => 'FR', 'label' => 'Français'],
+                            ['code' => 'zh', 'short' => 'ZH', 'label' => '中文'],
+                        ];
+                    ?>
+                    <div class="tvaibwc-lang-select" id="tvaibwc-langSelect">
+                        <button type="button" class="tvaibwc-lang-toggle" id="tvaibwc-langToggle"
+                                title="Response language" aria-haspopup="true" aria-expanded="false">
+                            <i class="fas fa-globe"></i>
+                            <span class="tvaibwc-lang-code" id="tvaibwc-langCode">EN</span>
+                            <i class="fas fa-chevron-down tvaibwc-lang-caret"></i>
+                        </button>
+                        <div class="tvaibwc-lang-menu" id="tvaibwc-langMenu" role="menu">
+                            <?php foreach ($tvaLangs as $i => $l): ?>
+                            <button type="button" class="tvaibwc-lang-option<?= $i === 0 ? ' is-selected' : '' ?>"
+                                    data-lang="<?= htmlspecialchars($l['code']) ?>"
+                                    data-code="<?= htmlspecialchars($l['short']) ?>" role="menuitem">
+                                <span class="tvaibwc-lang-option-label"><?= htmlspecialchars($l['label']) ?></span>
+                                <span class="tvaibwc-lang-option-code"><?= htmlspecialchars($l['short']) ?></span>
+                            </button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                    <?php endif; ?>
                     <?php if (!empty($tvaConfig['show_theme_toggle'])): ?>
                     <label class="tvaibwc-theme-switch" title="Toggle light / dark mode">
                         <input type="checkbox" checked id="tvaibwc-themeToggle">

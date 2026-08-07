@@ -91,6 +91,9 @@ Route::middleware('twilio.signature')->group(function () {
 });
 Route::get ('telephony/twilio/diagnose',   [\App\Http\Controllers\Api\TelephonyController::class, 'diagnose'])->name('telephony.diagnose');
 
+// Meta WhatsApp webhooks (messages + calls) are registered by the
+// msd/meta-channels package (routes/api.php) → GET|POST /api/whatsapp/webhook.
+
 Route::middleware('internal.webhook')->prefix('internal')->group(function () {
     Route::post('turn-completed',   [InternalTurnController::class, 'turnCompleted']);
     Route::post('resolve-context',  [InternalTurnController::class, 'resolveContext']);

@@ -53,12 +53,89 @@ router = APIRouter()
 _SENTENCE_BOUNDARY = re.compile(r"([\.!\?。！？]+)(\s|$)")
 
 
+# Languages the XTTS-v2 multilingual model can actually speak. Anything
+# outside this set has no voice, so we fall back to English *audio* (the
+# reply TEXT may still be in the user's language — only the spoken audio
+# is English when the language is unsupported).
+XTTS_LANGS = frozenset({
+    "en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl",
+    "cs", "ar", "zh", "ja", "hu", "ko", "hi",
+})
+
+# Friendly names so the style prompt reads naturally ("reply in Arabic").
+LANG_NAMES = {
+    "en": "English", "ar": "Arabic", "ur": "Urdu", "hi": "Hindi",
+    "es": "Spanish", "fr": "French", "de": "German", "it": "Italian",
+    "pt": "Portuguese", "ru": "Russian", "zh": "Chinese", "ja": "Japanese",
+    "ko": "Korean", "tr": "Turkish", "nl": "Dutch", "pl": "Polish",
+    "cs": "Czech", "hu": "Hungarian",
+}
+
+
+def _norm_lang(lang: Optional[str]) -> str:
+    """Normalise a locale-ish code to our short form ('en-US' → 'en',
+    'zh-CN' → 'zh'). Returns '' for empty/auto."""
+    if not lang:
+        return ""
+    code = lang.strip().lower().replace("_", "-")
+    if code in ("auto", ""):
+        return ""
+    if code.startswith("zh"):
+        return "zh"
+    return code.split("-")[0]
+
+
+def _coerce_tts_lang(lang: Optional[str]) -> str:
+    """Pick a language XTTS can speak; fall back to English otherwise."""
+    code = _norm_lang(lang)
+    return code if code in XTTS_LANGS else "en"
+
+
+def _lang_name(lang: Optional[str]) -> str:
+    return LANG_NAMES.get(_norm_lang(lang), "English")
+
+
+def build_style_prompt(preferred: Optional[str]) -> str:
+    """Style + language contract, rebuilt per turn.
+
+    The WS path otherwise sends only the reference-data block + the
+    user's message, so without this the model rambles and sometimes
+    emits HTML (<br>) the widget renders literally. Short + plain-text
+    also keeps TTS latency/cost down (CPU XTTS runs ~1s per character).
+
+    Language rule: the model mirrors the user's actual language, so a
+    visitor who picked English but typed Urdu still gets an Urdu reply.
+    The picked language is only the fallback when the language is
+    unclear; English is the final fallback.
+    """
+    pref_name = _lang_name(preferred)
+    return (
+        "You are a helpful assistant. Reply in a short, precise and natural "
+        "way — usually 1-3 sentences and no more than ~60 words. Get straight "
+        "to the point; skip filler and pleasantries. "
+        "Always reply in the SAME language as the user's most recent message. "
+        f"If you cannot tell which language they used, reply in {pref_name}. "
+        "If you cannot write that language, use English. "
+        "GROUNDING RULES (follow exactly): when a 'Reference data' section is "
+        "provided, answer ONLY using the facts in it; copy numbers, names and "
+        "values from it EXACTLY — never round, estimate, or invent. If the "
+        "requested fact is not in the Reference data, say you don't have that "
+        "information — do NOT make up companies, numbers, products or details. "
+        "Use plain text only — no markdown, no HTML tags, and never write "
+        "'<br>'. When you need details from the user, ask for one thing at a time."
+    )
+
+
 @dataclass
 class TurnState:
     claims: SessionClaims
     audio_buffer: bytearray = field(default_factory=bytearray)
     sample_rate: int = 16000
     text_input: Optional[str] = None
+    # Per-turn language preference sent by the client (the widget's
+    # header picker). Used as the LLM fallback language + the TTS voice
+    # language. None → fall back to the session/claims language.
+    language: Optional[str] = None
     started_at: float = field(default_factory=time.monotonic)
     cancelled: bool = False
 
@@ -160,6 +237,7 @@ async def ws_turn(websocket: WebSocket, token: str = Query(default="")) -> None:
             if ftype == "audio.start":
                 state.audio_buffer.clear()
                 state.text_input = None
+                state.language = (msg.get("language") or "").strip() or None
                 state.sample_rate = int(msg.get("sample_rate", 16000))
                 state.started_at = time.monotonic()
                 logger.info("ws/turn audio.start sr=%d", state.sample_rate)
@@ -203,6 +281,7 @@ async def ws_turn(websocket: WebSocket, token: str = Query(default="")) -> None:
 
             if ftype == "text":
                 state.text_input = (msg.get("text") or "").strip()
+                state.language = (msg.get("language") or "").strip() or None
                 state.started_at = time.monotonic()
                 _spawn_turn()
                 state = TurnState(claims=claims)
@@ -278,6 +357,12 @@ async def _run_turn(
     model_used: str = llm_service.model
     final_audio_url: Optional[str] = None
     latency_ms: int = 0
+    # Language the caller actually spoke (filled in by STT auto-detect for
+    # voice turns). None for text turns — there we trust the LLM to mirror.
+    detected_lang: Optional[str] = None
+    # Fallback language for this turn: the client's per-turn pick, else the
+    # session/claims language, else English.
+    preferred_lang: str = state.language or language or "en"
 
     def _persist_turn(error: Optional[Dict[str, str]] = None) -> None:
         """Fire the persistence webhook with whatever state we have.
@@ -285,7 +370,9 @@ async def _run_turn(
         meta: Dict[str, Any] = {
             "voice_id": state.claims.voice_id,
             "channel":  state.claims.channel or "web",
-            "language": language,
+            # Effective language for this turn (detected speech wins, else
+            # the caller's pick / session default).
+            "language": detected_lang or preferred_lang,
         }
         if error:
             meta["error"] = error
@@ -312,14 +399,18 @@ async def _run_turn(
                 stt_service.transcribe_pcm16,
                 bytes(state.audio_buffer),
                 state.sample_rate,
-                language if language and language != "auto" else None,
+                None,   # auto-detect: a caller speaking a different
+                        # language than the UI picker still transcribes
+                        # correctly (e.g. picked English, spoke Arabic).
                 False,  # vad_filter — disabled; the default Silero VAD
                         # is too aggressive on mic input that's been
                         # downsampled + AGC'd and ate full recordings.
                         # Whisper handles silence padding fine without it.
             )
             user_text = tx.text
-            logger.info("ws/turn STT: text=%r duration_ms=%d", user_text[:120], tx.duration_ms)
+            detected_lang = tx.language  # e.g. 'ar', 'hi', 'en' or None
+            logger.info("ws/turn STT: text=%r lang=%s duration_ms=%d",
+                        user_text[:120], detected_lang, tx.duration_ms)
             await websocket.send_json({"type": "stt.final", "text": user_text})
         except Exception as exc:  # noqa: BLE001
             await _send_error(websocket, "stt_failed", str(exc))
@@ -356,10 +447,18 @@ async def _run_turn(
         logger.info("ws/turn classified as chitchat — skipping resolve_context")
 
     # 3) LLM (streaming) -------------------------------------------------
-    messages = []
+    # Lead with the style + language contract so replies stay short,
+    # plain-text and in the right language even with no reference block.
+    # Fallback language = what the caller spoke (voice) or picked (text).
+    messages = [ChatMessage(role="system",
+                            content=build_style_prompt(detected_lang or preferred_lang))]
     if context_block:
         messages.append(ChatMessage(role="system", content=context_block))
     messages.append(ChatMessage(role="user", content=user_text))
+
+    # Voice language: prefer what the caller actually spoke, else their
+    # pick; coerce to something XTTS can speak (else English audio).
+    tts_lang = _coerce_tts_lang(detected_lang or preferred_lang)
     # aggregated / tokens_in / tokens_out / model_used hoisted to the
     # top of the function so error paths can still persist what's
     # available. Don't re-init here.
@@ -414,7 +513,7 @@ async def _run_turn(
                         audio_seq,
                         is_cancelled=lambda: state.cancelled,
                         wav_writer=wav_writer,
-                        language=language,
+                        language=tts_lang,
                     )
             elif evt["type"] == "final":
                 tokens_in = int(evt.get("tokens_in", 0))
@@ -435,7 +534,7 @@ async def _run_turn(
             websocket, tts_service, pending.strip(), speaker_wav, audio_seq,
             is_cancelled=lambda: state.cancelled,
             wav_writer=wav_writer,
-            language=language,
+            language=tts_lang,
         )
 
     # Finalise the on-disk WAV. If no chunks were written (TTS failed or

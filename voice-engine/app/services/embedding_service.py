@@ -31,39 +31,58 @@ _BATCH_SLEEP_SECONDS = 0.2
 
 
 class EmbeddingService:
-    """Thin async wrapper over ``google.generativeai.embed_content``."""
+    """Embedding wrapper with pluggable backend.
+
+    * ``gemini`` — google.generativeai ``text-embedding-004`` (768-dim, needs key)
+    * ``ollama`` — local Ollama embeddings via the OpenAI-compatible
+      ``/v1/embeddings`` endpoint (no key, offline). Use a 768-dim model
+      such as ``nomic-embed-text`` so it matches the Qdrant collection.
+    """
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
+        provider: Optional[str] = None,
     ) -> None:
         settings = get_settings()
+        self.provider = (provider or settings.embedding_provider or "gemini").lower()
         self.api_key = api_key or settings.gemini_api_key
         self.model = model or settings.embedding_model
+        self._ollama_base = settings.ollama_base_url
         self._configured = False
+        self._client = None  # ollama OpenAI client
 
     # -- internal ----------------------------------------------------------
     def _ensure_configured(self) -> None:
         if self._configured:
             return
-        # Lazy import — keeps unit tests importable without the SDK.
-        import google.generativeai as genai  # type: ignore
-
-        if self.api_key:
-            genai.configure(api_key=self.api_key)
-        self._genai = genai
+        if self.provider == "ollama":
+            from openai import OpenAI  # type: ignore
+            self._client = OpenAI(api_key="ollama", base_url=self._ollama_base, timeout=60.0)
+        else:
+            import google.generativeai as genai  # type: ignore
+            if self.api_key:
+                genai.configure(api_key=self.api_key)
+            self._genai = genai
         self._configured = True
 
     def _embed_sync(self, text: str) -> List[float]:
         self._ensure_configured()
+
+        if self.provider == "ollama":
+            resp = self._client.embeddings.create(model=self.model, input=text)
+            emb = resp.data[0].embedding if resp.data else None
+            if not emb:
+                raise RuntimeError("ollama embeddings returned no vector")
+            return list(emb)
+
+        # Gemini
         result = self._genai.embed_content(
             model=self.model,
             content=text,
             task_type="retrieval_document",
         )
-        # google-generativeai returns ``{"embedding": [...]}`` for a single
-        # input. Defensive fall-back in case the SDK shape evolves.
         emb = result.get("embedding") if isinstance(result, dict) else None
         if emb is None and hasattr(result, "embedding"):
             emb = result.embedding  # type: ignore[attr-defined]

@@ -1,0 +1,138 @@
+<?php
+
+use App\Models\SiteSetting;
+use App\Support\Hashid;
+
+if (! function_exists('serveai_icon')) {
+    /**
+     * Resolve the brand ICON (the hexagon mark) URL. Prefers a real
+     * uploaded logo file, falling back to the built-in SVG so the site
+     * is always branded. Drop your transparent PNG at any of the
+     * `servai-icon.*` paths below and it is used everywhere automatically.
+     *
+     * A ?v=<mtime> query is appended so browsers refetch when you replace
+     * the file (no hard-refresh needed).
+     */
+    function serveai_icon(): string
+    {
+        $candidates = [
+            'assets/dist/images/servai-icon.png',
+            'assets/dist/images/servai-icon.svg',
+            'assets/dist/images/logo.svg',   // built-in SVG fallback
+        ];
+        foreach ($candidates as $rel) {
+            $abs = public_path($rel);
+            if (is_file($abs)) {
+                return asset($rel) . '?v=' . @filemtime($abs);
+            }
+        }
+        return asset('assets/dist/images/logo.svg');
+    }
+}
+
+if (! function_exists('serveai_logo')) {
+    /**
+     * Resolve the full brand LOGO (icon + "Servai" wordmark) URL, for
+     * places that want the lockup rather than the bare mark. Falls back
+     * to the icon when no wordmark file is present.
+     */
+    function serveai_logo(): string
+    {
+        $candidates = [
+            'assets/dist/images/servai-logo.png',
+            'assets/dist/images/servai-logo.svg',
+        ];
+        foreach ($candidates as $rel) {
+            $abs = public_path($rel);
+            if (is_file($abs)) {
+                return asset($rel) . '?v=' . @filemtime($abs);
+            }
+        }
+        return serveai_icon();
+    }
+}
+
+if (! function_exists('hashid')) {
+    /**
+     * Encode an integer id to its URL hash (e.g. for use in literal query
+     * strings / JS where the route() auto-encoder doesn't reach). Null/blank
+     * passes through untouched.
+     */
+    function hashid($id): string
+    {
+        if ($id === null || $id === '') {
+            return '';
+        }
+        return Hashid::encode((int) $id);
+    }
+}
+
+if (! function_exists('unhashid')) {
+    /** Decode a URL hash (or raw int string) back to an int, or null. */
+    function unhashid(?string $value): ?int
+    {
+        return $value === null ? null : Hashid::decode($value);
+    }
+}
+
+if (! function_exists('tva_setting')) {
+    /**
+     * Read a marketing-site setting (SEO or landing content).
+     *
+     * Resolution order:
+     *   1. the stored row in `site_settings` (super-admin override), if non-empty
+     *   2. the default in config/site.php
+     *   3. the explicit $default arg
+     *
+     * Keys are dotted, e.g. 'seo.meta_title' or 'content.hero_title'.
+     */
+    function tva_setting(string $key, $default = null)
+    {
+        $stored = SiteSetting::get($key, null);
+
+        // Treat null / '' as "not set" so we fall through to the config
+        // default — but keep `false`, `0`, and arrays (incl. empty) as real.
+        if ($stored !== null && $stored !== '') {
+            return $stored;
+        }
+
+        $cfg = config('site.' . $key, '__tva_missing__');
+        if ($cfg !== '__tva_missing__') {
+            return $cfg;
+        }
+
+        return $default;
+    }
+}
+
+if (! function_exists('tva_module_enabled')) {
+    /**
+     * Is an admin module switched ON platform-wide? Super-admins control
+     * this from the Ops Console (Modules page). Unknown keys default to on.
+     * See App\Support\Modules.
+     */
+    function tva_module_enabled(string $key): bool
+    {
+        return \App\Support\Modules::isEnabled($key);
+    }
+}
+
+if (! function_exists('tva_seo_all')) {
+    /**
+     * Full merged SEO map (config defaults overlaid with stored overrides).
+     * Used by the public <head> partial.
+     */
+    function tva_seo_all(): array
+    {
+        $defaults = (array) config('site.seo', []);
+        $stored   = SiteSetting::group('seo');
+
+        foreach ($stored as $k => $v) {
+            if ($v !== null && $v !== '') {
+                $defaults[$k] = $v;
+            }
+        }
+
+        return $defaults;
+    }
+}

@@ -13,6 +13,7 @@ class Invitation extends Model
         'client_id',
         'invited_by',
         'email',
+        'role_id',
         'token',
         'expires_at',
         'accepted_at',

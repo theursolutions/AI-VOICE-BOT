@@ -52,19 +52,32 @@ class TTSService:
         model_name: str = "tts_models/multilingual/multi-dataset/xtts_v2",
         gpu: bool = False,
         output_dir: str = "voice_outputs",
+        checkpoint_dir: str = "",
     ) -> None:
         self.model_name = model_name
         self.gpu = gpu
+        # When set, XTTS-v2 is loaded from local checkpoint files in this dir
+        # (model.pth + config.json + vocab.json) rather than the Coqui
+        # registry. This is how fine-tuned checkpoints — e.g. the Urdu
+        # XTTS-v2-Urdu-FT — are run. The streaming + cloning code below is
+        # identical; only the load path differs.
+        self.checkpoint_dir = checkpoint_dir or ""
         self.output_dir = os.path.abspath(output_dir)
         os.makedirs(self.output_dir, exist_ok=True)
-        self._tts = None  # high-level TTS API (used for file synth)
-        self._xtts = None  # low-level model for streaming
+        self._tts = None  # high-level TTS API (used for file synth, registry mode)
+        self._xtts = None  # low-level model for streaming (always set)
         self._gpt_cond_cache: dict = {}
 
     # -- model lifecycle ----------------------------------------------------
     def load(self) -> None:
-        if self._tts is not None:
+        if self._xtts is not None or self._tts is not None:
             return
+        if self.checkpoint_dir:
+            self._load_from_checkpoint()
+        else:
+            self._load_from_registry()
+
+    def _load_from_registry(self) -> None:
         from TTS.api import TTS  # local import; heavy
         from TTS.tts.configs.xtts_config import XttsConfig
 
@@ -76,6 +89,45 @@ class TTSService:
             self._xtts = self._tts.synthesizer.tts_model
         except AttributeError:  # pragma: no cover — defensive
             self._xtts = None
+
+    def _load_from_checkpoint(self) -> None:
+        """Load a fine-tuned XTTS-v2 checkpoint from a local directory.
+
+        Expects ``config.json``, ``model.pth`` and ``vocab.json`` in
+        ``self.checkpoint_dir`` (the standard XTTS fine-tune layout, e.g.
+        the Urdu fine-tune). Only the low-level model is created; the
+        high-level ``TTS`` helper isn't used in this mode, so
+        :meth:`synthesize_to_file` falls back to ``model.inference``.
+        """
+
+        from TTS.tts.configs.xtts_config import XttsConfig
+        from TTS.tts.models.xtts import Xtts
+
+        torch.serialization.add_safe_globals([XttsConfig])
+        config_path = os.path.join(self.checkpoint_dir, "config.json")
+        if not os.path.exists(config_path):
+            raise FileNotFoundError(
+                f"XTTS checkpoint config not found: {config_path} "
+                f"(expected config.json + model.pth + vocab.json in {self.checkpoint_dir})"
+            )
+        logger.info(
+            "Loading fine-tuned XTTS-v2 from checkpoint dir=%s (gpu=%s)",
+            self.checkpoint_dir,
+            self.gpu,
+        )
+        config = XttsConfig()
+        config.load_json(config_path)
+        model = Xtts.init_from_config(config)
+        model.load_checkpoint(
+            config,
+            checkpoint_dir=self.checkpoint_dir,
+            use_deepspeed=False,
+        )
+        if self.gpu:
+            model.cuda()
+        model.eval()
+        self._xtts = model
+        self._tts = None
 
     @property
     def sample_rate(self) -> int:
@@ -216,17 +268,39 @@ class TTSService:
                 self.output_dir, f"voice_{int(time.time() * 1000)}.wav"
             )
 
-        assert self._tts is not None
-        self._tts.tts_to_file(
-            text=text,
-            file_path=output_path,
-            speaker_wav=speaker_wav_path,
-            language=language,
-            temperature=0.75,
-            top_p=0.9,
-            top_k=50,
-            repetition_penalty=1.05,
-        )
+        if self._tts is not None:
+            # Registry mode — use the high-level helper.
+            self._tts.tts_to_file(
+                text=text,
+                file_path=output_path,
+                speaker_wav=speaker_wav_path,
+                language=language,
+                temperature=0.75,
+                top_p=0.9,
+                top_k=50,
+                repetition_penalty=1.05,
+            )
+        else:
+            # Checkpoint mode (e.g. Urdu fine-tune) — the high-level TTS
+            # helper isn't loaded, so synthesize via the low-level model and
+            # write the wav ourselves. Same conditioning/cloning path as
+            # stream().
+            assert self._xtts is not None
+            gpt_cond_latent, speaker_embedding = self._conditioning(speaker_wav_path)
+            out = self._xtts.inference(
+                text=text,
+                language=language,
+                gpt_cond_latent=gpt_cond_latent,
+                speaker_embedding=speaker_embedding,
+                temperature=0.75,
+                top_p=0.9,
+                top_k=50,
+                repetition_penalty=1.05,
+                enable_text_splitting=True,
+            )
+            wav = np.asarray(out["wav"], dtype=np.float32)
+            sf.write(output_path, wav, self.sample_rate)
+
         if not os.path.exists(output_path):
             raise RuntimeError(f"TTS file not generated: {output_path}")
         return output_path

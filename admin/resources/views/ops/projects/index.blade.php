@@ -83,7 +83,7 @@
                                     </a>
                                 @endif
                                 <form method="POST" action="{{ route('ops.projects.reprovision', ['id' => $p->id]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Re-run migrations for {{ $p->name }}? Idempotent.');">
+                                      data-confirm="Re-run migrations for {{ $p->name }}? Idempotent.">
                                     @csrf
                                     <button type="submit" class="btn btn-secondary btn-sm">Re-provision</button>
                                 </form>
@@ -94,13 +94,13 @@
                                     </form>
                                 @else
                                     <form method="POST" action="{{ route('ops.projects.disable', ['id' => $p->id]) }}" style="display:inline;"
-                                          onsubmit="return confirm('Disable {{ $p->name }}? Customer loses access + bot stops responding for this project.');">
+                                          data-confirm="Disable {{ $p->name }}? Customer loses access + bot stops responding for this project.">
                                         @csrf
                                         <button type="submit" class="btn btn-warning btn-sm">Disable</button>
                                     </form>
                                 @endif
                                 <form method="POST" action="{{ route('ops.projects.delete', ['id' => $p->id]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Soft-delete {{ $p->name }}? Disappears everywhere. Tenant DB preserved. Recoverable.');">
+                                      data-confirm="Soft-delete {{ $p->name }}? Disappears everywhere. Tenant DB preserved. Recoverable.">
                                     @csrf
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>

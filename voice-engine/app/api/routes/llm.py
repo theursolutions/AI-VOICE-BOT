@@ -30,7 +30,13 @@ async def llm_respond(req: LLMRequest, request: Request) -> LLMResponse:
     settings = get_settings()
 
     try:
-        result = await llm.chat(req.messages)
+        result = await llm.chat(
+            req.messages,
+            provider=req.provider,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens,
+            model=req.model,
+        )
     except Exception as exc:  # noqa: BLE001
         logger.exception("llm.chat failed")
         raise HTTPException(status_code=502, detail=f"llm failure: {exc}") from exc

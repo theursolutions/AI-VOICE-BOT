@@ -31,10 +31,19 @@ class SessionController extends Controller
             'customer_phone' => 'nullable|string|max:32',
             'customer_email' => 'nullable|email|max:255',
             'voice_id'       => 'nullable|integer',
+            'language'       => 'nullable|string|max:10',
             'metadata'       => 'nullable|array',
         ]);
 
         $now = time();
+
+        // Persist the visitor's language pick (widget header dropdown) onto
+        // the session metadata so SessionTokenService::mint() can bake it
+        // into the JWT claims and MemoryBuilder can use it as the fallback.
+        $metadata = $data['metadata'] ?? [];
+        if (!empty($data['language'])) {
+            $metadata['language'] = $data['language'];
+        }
 
         $session = Session::create([
             'project_id'       => $project->id,
@@ -47,7 +56,7 @@ class SessionController extends Controller
             'status'           => 'active',
             'started_at'       => $now,
             'last_activity_at' => $now,
-            'metadata'         => $data['metadata'] ?? null,
+            'metadata'         => $metadata ?: null,
             'created_at'       => $now,
             'update_at'        => $now,
         ]);

@@ -114,6 +114,58 @@
         }
     });
 
+    // ─── Language picker (header dropdown) ───────────────────────────
+    // Persisted in localStorage so a returning visitor keeps their pick.
+    // window.tvaibwcGetLang() is the single source of truth read by the
+    // session-start + per-turn senders. The pick is only the fallback /
+    // default language — the bot still mirrors the language the visitor
+    // actually writes (so "picked English, typed Urdu" → Urdu reply).
+    (function () {
+        var KEY = 'tvaibwc_lang';
+        var stored = null;
+        try { stored = localStorage.getItem(KEY); } catch (_) {}
+        window.tvaibwcSelectedLang = stored || 'en';
+
+        function applySelection(code) {
+            window.tvaibwcSelectedLang = code || 'en';
+            try { localStorage.setItem(KEY, window.tvaibwcSelectedLang); } catch (_) {}
+            var $opt = $('.tvaibwc-lang-option[data-lang="' + window.tvaibwcSelectedLang + '"]');
+            $('#tvaibwc-langCode').text(
+                ($opt.data('code') || window.tvaibwcSelectedLang).toString().toUpperCase()
+            );
+            $('.tvaibwc-lang-option').removeClass('is-selected');
+            $opt.addClass('is-selected');
+        }
+
+        // Reflect a persisted pick on load (HTML already marks EN by default).
+        if (stored) applySelection(stored);
+
+        $('#tvaibwc-langToggle').on('click', function (e) {
+            e.stopPropagation();
+            var open = $('#tvaibwc-langSelect').toggleClass('open').hasClass('open');
+            $(this).attr('aria-expanded', open ? 'true' : 'false');
+        });
+
+        $('.tvaibwc-lang-option').on('click', function (e) {
+            e.stopPropagation();
+            applySelection($(this).data('lang'));
+            $('#tvaibwc-langSelect').removeClass('open');
+            $('#tvaibwc-langToggle').attr('aria-expanded', 'false');
+        });
+
+        // Close the menu when clicking anywhere outside it.
+        $(document).on('click', function (e) {
+            if (!$(e.target).closest('#tvaibwc-langSelect').length) {
+                $('#tvaibwc-langSelect').removeClass('open');
+                $('#tvaibwc-langToggle').attr('aria-expanded', 'false');
+            }
+        });
+    })();
+
+    window.tvaibwcGetLang = function () {
+        return window.tvaibwcSelectedLang || 'en';
+    };
+
     //Toggle reply mode
     $('#tvaibwc-replyToggle').change(function() {
         if ($(this).is(':checked')) {
@@ -149,7 +201,7 @@
             // Add user message
             $('#tvaibwc-chatMessages').append(`
                 <div class="tvaibwc-message tvaibwc-user">
-                    <div class="tvaibwc-message-text">${messageText}</div>
+                    <div class="tvaibwc-message-text">${tvaibwc_escapeHtml(messageText)}</div>
                     <div class="tvaibwc-message-time">${tvaibwc_getCurrentTime()}</div>
                 </div>
             `);
@@ -403,6 +455,30 @@
             return "few secs";
         }
     }
+
+    // Escape HTML so arbitrary model/flow text can't inject markup.
+    function tvaibwc_escapeHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    // Turn plain bot/flow text into HTML-safe markup with real line
+    // breaks. The LLM (and some flow authors) emit literal "<br>" or
+    // blank lines to separate paragraphs; rendered with .text() those
+    // show up as the visible characters "<br>" instead of a break. So:
+    // normalise any literal <br> to a newline, escape everything, then
+    // convert newlines back into real <br> tags. Use with .html().
+    function tvaibwc_textToHtml(text) {
+        var s = String(text == null ? '' : text).replace(/<br\s*\/?>/gi, '\n');
+        s = tvaibwc_escapeHtml(s);
+        return s.replace(/\n{3,}/g, '\n\n').replace(/\n/g, '<br>');
+    }
+    window.tvaibwc_escapeHtml = tvaibwc_escapeHtml;
+    window.tvaibwc_textToHtml = tvaibwc_textToHtml;
 
     // Helper function to get current time
     function tvaibwc_getCurrentTime() {

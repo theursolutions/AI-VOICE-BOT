@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# Helper for the production HA stack. Run from anywhere in the repo.
+#
+#   ./deploy/production/deploy.sh up          build + (re)deploy with the overlay
+#   ./deploy/production/deploy.sh deploy       memory-safe ROLLING redeploy (app: zero-downtime)
+#   ./deploy/production/deploy.sh ps           status of all services
+#   ./deploy/production/deploy.sh logs [svc]   follow logs
+#   ./deploy/production/deploy.sh scale app=4 queue=6
+#   ./deploy/production/deploy.sh validate     lint compose + haproxy config
+#   ./deploy/production/deploy.sh backup       dump MySQL + snapshot key volumes
+#   ./deploy/production/deploy.sh exporter-user create the MySQL monitoring user
+#   ./deploy/production/deploy.sh prune        free disk now (voice WAVs, backups, images)
+#   ./deploy/production/deploy.sh cron         install the daily prune cron job
+set -euo pipefail
+
+cd "$(dirname "$0")/../.."   # repo root
+BASE=docker-compose.yml
+OVERLAY=deploy/production/docker-compose.prod.yml
+DC=(docker compose -f "$BASE" -f "$OVERLAY" --env-file .env)
+
+# Roll the app tier with NO downtime and WITHOUT a big memory spike:
+# start N new-image replicas next to the N old ones (app is ~400MB each, so the
+# overlap is cheap even on 12GB), wait until each new one actually serves, then
+# retire the old. HAProxy auto-discovers the new replicas and drains the old.
+rolling_app() {
+  local svc=app cur old id newset tries
+  cur=$("${DC[@]}" ps -q "$svc" 2>/dev/null | wc -l | tr -d ' ')
+  if [ "${cur:-0}" -lt 1 ]; then "${DC[@]}" up -d --no-deps "$svc"; return; fi
+
+  echo ">> rolling '$svc': $cur old replica(s) → new image (memory-safe overlap)"
+  old=$("${DC[@]}" ps -q "$svc")
+  "${DC[@]}" up -d --no-deps --no-recreate --scale "$svc=$((cur*2))" "$svc"
+
+  sleep 3
+  newset=""
+  for id in $("${DC[@]}" ps -q "$svc"); do
+    grep -q "$id" <<<"$old" || newset="$newset $id"
+  done
+
+  for id in $newset; do
+    printf "   waiting for %.12s " "$id"
+    tries=0
+    until docker exec "$id" sh -c 'curl -fsS http://localhost:8080/ -o /dev/null' >/dev/null 2>&1; do
+      tries=$((tries+1))
+      [ "$tries" -gt 90 ] && { echo "TIMEOUT — leaving OLD replicas in place, aborting roll"; return 1; }
+      printf "."; sleep 2
+    done
+    echo " healthy"
+  done
+
+  echo ">> retiring old '$svc' replica(s) (30s graceful drain)…"
+  for id in $old; do docker stop -t 30 "$id" >/dev/null 2>&1 && docker rm "$id" >/dev/null 2>&1 || true; done
+  "${DC[@]}" up -d --no-deps --no-recreate --scale "$svc=$cur" "$svc" >/dev/null
+  echo ">> '$svc' rolled with no downtime."
+}
+
+cmd="${1:-ps}"; shift || true
+
+case "$cmd" in
+  up)
+    "${DC[@]}" build
+    "${DC[@]}" up -d --remove-orphans
+    "${DC[@]}" ps
+    ;;
+
+  deploy)
+    "${DC[@]}" build
+    rolling_app                                   # app tier: zero-downtime
+    echo ">> updating remaining services…"
+    # Reconciles voice/queue/scheduler/edge to the new image. The already-rolled
+    # app containers match the new image, so Compose leaves them untouched.
+    # NOTE: voice-engine at VOICE_REPLICAS=1 has a brief blip here while the new
+    # one reloads its model — that needs ~3GB more RAM to avoid, i.e. a 2nd
+    # replica (not feasible on 12GB) or offloaded cloud TTS. See PRODUCTION_HA.md.
+    "${DC[@]}" up -d --remove-orphans
+    "${DC[@]}" ps
+    echo ">> watch the roll live: ssh -L 8404:127.0.0.1:8404 user@server → http://localhost:8404"
+    ;;
+
+  ps)      "${DC[@]}" ps ;;
+  logs)    "${DC[@]}" logs -f --tail=100 "$@" ;;
+  scale)   "${DC[@]}" up -d --scale "$@" ;;
+
+  validate)
+    echo ">> compose config:"; "${DC[@]}" config -q && echo "   OK"
+    echo ">> haproxy config:"
+    docker run --rm -e APP_DOMAIN=x -e VOICE_DOMAIN=y \
+      -e HAPROXY_STATS_USER=u -e HAPROXY_STATS_PASSWORD=p \
+      -v "$PWD/deploy/production/haproxy/haproxy.cfg:/c.cfg:ro" \
+      haproxy:2.9-alpine haproxy -c -f /c.cfg
+    ;;
+
+  backup)
+    ts=$(date +%F-%H%M); mkdir -p backups
+    echo ">> mysqldump → backups/db-$ts.sql.gz"
+    # pipefail (set at the top) makes a failed mysqldump fail the whole pipeline
+    # instead of leaving a silently-truncated .gz that looks like a good backup.
+    "${DC[@]}" exec -T mysql sh -c \
+      'exec mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --all-databases --single-transaction --routines --triggers' \
+      | gzip > "backups/db-$ts.sql.gz"
+    gzip -t "backups/db-$ts.sql.gz" || { echo "!! DB dump is corrupt — backup FAILED" >&2; exit 1; }
+
+    # Volumes that hold data you cannot regenerate:
+    #   voice_duckdb — per-project snapshots, knowledge base, crawled pages.
+    #                  THIS IS THE TENANT DATA. Losing it loses the product.
+    #   app_storage  — RAG source documents, per-agent voice samples
+    #   app_uploads  — customer-uploaded files served by the app
+    #   voice_uploads— ingest staging for documents
+    # Deliberately NOT backed up: voice_models (re-downloadable, ~2GB),
+    # voice_outputs (per-turn WAVs, pruned daily), redis_data (cache/queue only).
+    for v in ai-crm_voice_duckdb ai-crm_app_storage ai-crm_app_uploads ai-crm_voice_uploads; do
+      if ! docker volume inspect "$v" >/dev/null 2>&1; then
+        echo ">> volume $v does not exist yet — skipping"
+        continue
+      fi
+      echo ">> volume $v → backups/$v-$ts.tar.gz"
+      docker run --rm -v "$v:/data:ro" -v "$PWD/backups:/out" alpine \
+        tar czf "/out/$v-$ts.tar.gz" -C /data .
+      gzip -t "backups/$v-$ts.tar.gz" || { echo "!! $v archive is corrupt — backup FAILED" >&2; exit 1; }
+    done
+
+    echo
+    echo ">> wrote:"; ls -lh backups/*-"$ts".* | sed 's/^/     /'
+    echo ">> NOTE: the DuckDB files are copied live. They are transactional (a"
+    echo "   .wal is captured alongside), but for a guaranteed-clean snapshot"
+    echo "   take the backup while no ingest job is running."
+    echo ">> COPY backups/ OFF THIS SERVER now (object storage). A backup that"
+    echo "   only exists on the box it protects is not a backup."
+    ;;
+
+  exporter-user)
+    # Creates the least-privilege MySQL user that mysqld-exporter logs in as.
+    # Idempotent: re-run it any time you rotate MYSQL_EXPORTER_PASSWORD.
+    # shellcheck disable=SC1091
+    pw=$(grep -E '^MYSQL_EXPORTER_PASSWORD=' .env | head -1 | cut -d= -f2-)
+    [ -n "$pw" ] || { echo "!! set MYSQL_EXPORTER_PASSWORD in .env first" >&2; exit 1; }
+    case "$pw" in
+      *change-me*|*CHANGE_ME*) echo "!! MYSQL_EXPORTER_PASSWORD is still the placeholder" >&2; exit 1 ;;
+    esac
+    echo ">> creating/updating MySQL user 'exporter'…"
+    "${DC[@]}" exec -T mysql sh -c "exec mysql -uroot -p\"\$MYSQL_ROOT_PASSWORD\"" <<SQL
+CREATE USER IF NOT EXISTS 'exporter'@'%' IDENTIFIED BY '$pw' WITH MAX_USER_CONNECTIONS 3;
+ALTER USER 'exporter'@'%' IDENTIFIED BY '$pw';
+GRANT PROCESS, REPLICATION CLIENT ON *.* TO 'exporter'@'%';
+GRANT SELECT ON performance_schema.* TO 'exporter'@'%';
+FLUSH PRIVILEGES;
+SQL
+    echo ">> done. Restarting the exporter to pick it up…"
+    "${DC[@]}" up -d --force-recreate --no-deps mysqld-exporter
+    ;;
+
+  prune)   exec bash deploy/production/maintenance/prune.sh ;;
+  cron)    exec bash deploy/production/maintenance/install-cron.sh ;;
+
+  *) echo "unknown command: $cmd"; sed -n '4,13p' "$0"; exit 1 ;;
+esac

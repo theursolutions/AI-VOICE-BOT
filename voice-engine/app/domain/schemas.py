@@ -40,6 +40,21 @@ class LLMRequest(BaseModel):
     respond_with: RespondWith = "text"
     stream: bool = False
     metadata: Optional[Dict[str, Any]] = None
+    # Per-request provider override. Control-plane callers (SQL generation,
+    # source router) can request a stronger model (e.g. "groq") for one
+    # call while the chat path stays on the configured local provider.
+    # None / empty = use the server's configured LLM_PROVIDER.
+    provider: Optional[str] = None
+    # Per-request generation knobs. Control-plane callers (SQL generation,
+    # routers, condense) pass temperature=0 for deterministic, faster output
+    # and a small max_tokens since their replies are short. None = backend
+    # default.
+    temperature: Optional[float] = None
+    max_tokens: Optional[int] = None
+    # Per-request model override (within the chosen provider). Lets reasoning
+    # calls request a stronger local model (e.g. qwen2.5:7b) while chat stays
+    # on a fast one. None = the provider's configured default model.
+    model: Optional[str] = None
 
 
 class LLMResponse(BaseModel):

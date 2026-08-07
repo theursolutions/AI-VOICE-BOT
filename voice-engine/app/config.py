@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     # fall back to the Gemini path (kept for compatibility but not exercised
     # in the current code paths).
     llm_provider: str = Field(default="groq", alias="LLM_PROVIDER")
+    # Resilience under load: when the primary provider rate-limits (429) or
+    # has a transient error, retry with backoff, then fall back to this
+    # secondary provider (e.g. groq → anthropic, or → ollama for offline).
+    # Empty = no fallback. Must differ from llm_provider.
+    llm_fallback_provider: str = Field(default="", alias="LLM_FALLBACK_PROVIDER")
+    llm_max_retries: int = Field(default=2, alias="LLM_MAX_RETRIES")
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     anthropic_model: str = Field(default="claude-opus-4-7", alias="ANTHROPIC_MODEL")
     anthropic_max_tokens: int = Field(default=4096, alias="ANTHROPIC_MAX_TOKENS")
@@ -70,10 +76,27 @@ class Settings(BaseSettings):
         default="tts_models/multilingual/multi-dataset/xtts_v2",
         alias="COQUI_MODEL",
     )
+    # Optional: load XTTS-v2 from a local checkpoint directory instead of the
+    # Coqui model registry. The directory must contain model.pth, config.json
+    # and vocab.json. Used to run fine-tuned XTTS-v2 checkpoints (e.g. the
+    # Urdu fine-tune suhaibrashid17/XTTS-v2-Urdu-FT) while keeping the exact
+    # same streaming + voice-cloning code path. Empty = use coqui_model above.
+    xtts_checkpoint_dir: str = Field(default="", alias="XTTS_CHECKPOINT_DIR")
     whisper_model: str = Field(default="base", alias="WHISPER_MODEL")
     whisper_device: str = Field(default="cpu", alias="WHISPER_DEVICE")
     whisper_compute_type: str = Field(default="int8", alias="WHISPER_COMPUTE_TYPE")
     coqui_use_gpu: bool = Field(default=False, alias="COQUI_USE_GPU")
+
+    # --- WhatsApp calling (WebRTC media bridge) --------------------------
+    # ICE servers for the aiortc peer connection. A STUN server is enough
+    # for testing on a public host; real calls behind NAT need a TURN
+    # server (set WHATSAPP_TURN_URL + credentials).
+    whatsapp_stun_url: str = Field(
+        default="stun:stun.l.google.com:19302", alias="WHATSAPP_STUN_URL"
+    )
+    whatsapp_turn_url: str = Field(default="", alias="WHATSAPP_TURN_URL")
+    whatsapp_turn_username: str = Field(default="", alias="WHATSAPP_TURN_USERNAME")
+    whatsapp_turn_password: str = Field(default="", alias="WHATSAPP_TURN_PASSWORD")
 
     # --- Voice / audio defaults ------------------------------------------
     default_speaker_wav: str = Field(
@@ -100,10 +123,23 @@ class Settings(BaseSettings):
         default_factory=lambda: ["*"], alias="CORS_ALLOW_ORIGINS"
     )
 
-    # --- RAG / vector store ----------------------------------------------
+    # --- DuckDB (unified local store: snapshots=SQL, KB/crawler=BM25 FTS) -
+    # One file per project under this dir. Replaces the per-snapshot MySQL
+    # tables and the Qdrant vector store + embedding model.
+    duckdb_dir: str = Field(
+        default=str(Path(__file__).resolve().parent.parent / "duckdb_data"),
+        alias="DUCKDB_DIR",
+    )
+
+    # --- RAG / vector store (legacy — being retired in favour of DuckDB) --
     qdrant_url: str = Field(default="http://127.0.0.1:6333", alias="QDRANT_URL")
     qdrant_api_key: Optional[str] = Field(default=None, alias="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="crm_chunks", alias="QDRANT_COLLECTION")
+    # Embeddings (RAG vector step) — SEPARATE from the chat LLM. Set
+    # EMBEDDING_PROVIDER=ollama to keep RAG fully local (no Gemini key);
+    # use a 768-dim model (nomic-embed-text) so it matches the Qdrant
+    # collection. 'gemini' uses text-embedding-004 (needs GEMINI_API_KEY).
+    embedding_provider: str = Field(default="gemini", alias="EMBEDDING_PROVIDER")
     embedding_model: str = Field(
         default="models/text-embedding-004", alias="EMBEDDING_MODEL"
     )

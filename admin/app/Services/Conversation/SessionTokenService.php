@@ -20,6 +20,14 @@ class SessionTokenService
         // DEFAULT_SPEAKER_WAV from its .env.
         $voice = $this->resolveVoice($session);
 
+        // Language precedence: the visitor's explicit pick (widget header
+        // dropdown, stored on the session) wins, then the bound voice's
+        // language, then the project/global default. This is only the
+        // *fallback* language — the model still mirrors whatever language
+        // the user actually writes/speaks.
+        $language = data_get($session->metadata, 'language')
+            ?: ($voice?->language ?? config('services.voice.default_language', 'en'));
+
         $payload = [
             'iat'        => time(),
             'exp'        => time() + $ttl,
@@ -28,7 +36,7 @@ class SessionTokenService
             'channel'    => $session->channel,
             'voice_id'   => $voice?->id,
             'speaker_wav'=> $voice?->reference_url,
-            'language'   => $voice?->language ?? config('services.voice.default_language', 'en'),
+            'language'   => $language,
         ];
 
         $header  = $this->b64(json_encode(['alg' => 'HS256', 'typ' => 'JWT']));

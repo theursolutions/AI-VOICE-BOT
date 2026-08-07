@@ -1,0 +1,12 @@
+# MySQL PRIMARY config (advanced data-tier HA — see docs/PRODUCTION_HA.md).
+# Mount at /etc/mysql/conf.d/primary.cnf on the primary instance.
+[mysqld]
+server-id                 = 1
+log-bin                   = mysql-bin
+binlog-format             = ROW
+gtid-mode                 = ON
+enforce-gtid-consistency  = ON
+binlog-expire-logs-seconds = 604800     # keep 7 days of binlogs
+# Durability (safe defaults; relax sync_binlog for throughput if you must).
+sync-binlog               = 1
+innodb-flush-log-at-trx-commit = 1

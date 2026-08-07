@@ -7,7 +7,10 @@
     <!-- CSRF Token -->
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>{{ config('app.name', 'Laravel') }}</title>
+    <link rel="icon" href="{{ serveai_icon() }}">
+    <link rel="shortcut icon" href="{{ serveai_icon() }}">
+
+    <title>{{ config('app.name', 'Serve AI') }}</title>
 
     <!-- Fonts -->
     <link rel="dns-prefetch" href="//fonts.bunny.net">
@@ -15,6 +18,7 @@
 
     <!-- Scripts -->
     {{-- @vite(['resources/sass/app.scss', 'resources/js/app.js']) --}}
+    @include('partials.sweet-alert')
 </head>
 <body>
     <div id="app">

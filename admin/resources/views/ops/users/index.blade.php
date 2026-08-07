@@ -83,7 +83,7 @@
                                 </form>
                             @else
                                 <form method="POST" action="{{ route('ops.impersonate.start', ['userId' => $u->id]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Sign in as {{ $u->email }}? Audited.');">
+                                      data-confirm="Sign in as {{ $u->email }}? Audited.">
                                     @csrf
                                     <button type="submit" class="btn btn-secondary btn-sm" title="Sign in as">
                                         <i data-lucide="log-in" class="w-3 h-3 inline -mt-0.5"></i>
@@ -96,13 +96,13 @@
                                     </form>
                                 @else
                                     <form method="POST" action="{{ route('ops.users.disable', ['id' => $u->id]) }}" style="display:inline;"
-                                          onsubmit="return confirm('Disable {{ $u->email }}? They will be logged out + blocked from re-entering until enabled.');">
+                                          data-confirm="Disable {{ $u->email }}? They will be logged out + blocked from re-entering until enabled.">
                                         @csrf
                                         <button type="submit" class="btn btn-warning btn-sm">Disable</button>
                                     </form>
                                 @endif
                                 <form method="POST" action="{{ route('ops.users.delete', ['id' => $u->id]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Soft-delete {{ $u->email }}? They disappear from every page and cannot log in. Recoverable from \\'Include deleted\\'.');">
+                                      data-confirm="Soft-delete {{ $u->email }}? They disappear from every page and cannot log in. Recoverable from 'Include deleted'.">
                                     @csrf
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>

@@ -9,6 +9,7 @@
         "guzzlehttp/guzzle": "^7.9",
         "laravel/framework": "^10.10",
         "laravel/sanctum": "^3.3",
+        "laravel/socialite": "^5.28",
         "laravel/tinker": "^2.8",
         "laravel/ui": "^4.6"
     },
@@ -26,6 +27,7 @@
     "autoload": {
         "psr-4": {
             "App\\": "app/",
+            "Msd\\MetaChannels\\": "packages/meta-channels/src/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
         },

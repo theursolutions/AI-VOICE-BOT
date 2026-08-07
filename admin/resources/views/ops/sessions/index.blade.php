@@ -101,7 +101,7 @@
                                     <i data-lucide="eye" class="w-3 h-3 inline -mt-0.5"></i>
                                 </a>
                                 <form method="POST" action="{{ route('ops.tenant.delete', ['type' => 'session', 'projectId' => $s['project_id'], 'id' => $s['id']]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Soft-delete session #{{ $s['id'] }}? Disappears from customer + ops. Recoverable.');">
+                                      data-confirm="Soft-delete session #{{ $s['id'] }}? Disappears from customer + ops. Recoverable.">
                                     @csrf
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>

@@ -157,12 +157,11 @@ class DataSourceController extends Controller
             ->where('project_id', $project->id)
             ->firstOrFail();
 
-        $source->update([
-            'status'     => DataSource::STATUS_DISABLED,
-            'is_active'  => 'No',
-            'update_at'  => time(),
-        ]);
+        // True removal: drop owned storage (snapshot table / vectors / files),
+        // then delete the row. Never touches an external `database` source.
+        app(\App\Services\DataSource\SourceCleaner::class)->purge($source);
+        $source->delete();
 
-        return response()->json(['disabled' => true]);
+        return response()->json(['deleted' => true]);
     }
 }

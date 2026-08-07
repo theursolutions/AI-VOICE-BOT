@@ -1,0 +1,47 @@
+# Alertmanager routing.
+#
+# Alertmanager does NOT expand environment variables in this file, so paste
+# your real Slack/email destination below and restart the alertmanager service:
+#   docker compose ... restart alertmanager
+#
+# Out of the box this routes everything to a "null" receiver so Alertmanager
+# starts cleanly even before you wire up notifications.
+
+route:
+  receiver: "null"
+  group_by: ["alertname", "job"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: [severity="critical"]
+      receiver: "null"        # change to "slack" / "email" once configured
+      repeat_interval: 1h
+
+receivers:
+  - name: "null"
+
+  # ── Slack (uncomment + set the webhook URL) ───────────────────────────────
+  # - name: slack
+  #   slack_configs:
+  #     - api_url: "https://hooks.slack.com/services/XXXX/YYYY/ZZZZ"
+  #       channel: "#alerts"
+  #       send_resolved: true
+  #       title: '{{ .CommonLabels.alertname }} ({{ .CommonLabels.severity }})'
+  #       text: '{{ range .Alerts }}{{ .Annotations.summary }}\n{{ .Annotations.description }}\n{{ end }}'
+
+  # ── Email (uncomment + configure SMTP under `global:` ) ───────────────────
+  # - name: email
+  #   email_configs:
+  #     - to: "oncall@example.com"
+  #       from: "alertmanager@example.com"
+  #       smarthost: "smtp.example.com:587"
+  #       auth_username: "alertmanager@example.com"
+  #       auth_password: "..."
+  #       send_resolved: true
+
+inhibit_rules:
+  # A whole tier being down (critical) silences the per-server warnings for it.
+  - source_matchers: [severity="critical"]
+    target_matchers: [severity="warning"]
+    equal: ["job"]

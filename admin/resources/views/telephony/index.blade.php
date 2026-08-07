@@ -224,7 +224,7 @@
                         <button type="button" class="text-primary inline-flex items-center justify-center w-8 h-8 rounded hover:bg-primary/10" data-tva-modal-open="num-edit-{{ $project->id }}-{{ $idx }}" title="Edit">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
-                        <form method="POST" action="{{ route('telephony.delete-number', ['client' => $client->slug]) }}" onsubmit="return confirm('Remove this number?');" class="inline">
+                        <form method="POST" action="{{ route('telephony.delete-number', ['client' => $client->slug]) }}" data-confirm="Remove this number?" class="inline">
                             @csrf
                             <input type="hidden" name="project_id" value="{{ $project->id }}">
                             <input type="hidden" name="number_index" value="{{ $idx }}">

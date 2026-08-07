@@ -5,26 +5,60 @@
     // Section open-state — used to expand the parent menu that holds the
     // active route, and to rotate its chevron.
     $sec = [
+        'social'   => $is('chat.*', 'channels.*'),
         'ai'       => $is('bot-strategy.*', 'brain-settings.*'),
         'data'     => $is('data-sources.*', 'voices.*', 'telephony.*'),
         'project'  => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*', 'flows.*'),
         'crm'      => $is('sessions.*', 'leads.*'),
-        'members'  => $is('invitations.*'),
+        'team'     => $is('members.*', 'roles.*', 'invitations.*'),
     ];
 
     $client = request()->route('client');
     $clientSlug = is_object($client) ? $client->slug : ($client ?? null);
+
+    // On non-client-scoped pages (e.g. /profile) there's no {client} in the
+    // route, so fall back to the user's active workspace. This keeps the nav
+    // links working and gives client-scoped route() calls a value to bind.
+    if (!$clientSlug && Auth::check()) {
+        $clientSlug = optional(Auth::user()->activeClient)->slug;
+    }
+
+    // Until the email is verified, the workspace is locked to Ask AI only
+    // (mirrors the EnsureEmailVerified route gate).
+    $emailOk = !Auth::check() || Auth::user()->hasVerifiedEmail();
+
+    // Role-based module visibility. $tvaModules is shared by the
+    // layouts.master view composer (owner = all modules). Default to all
+    // so non-client / edge contexts never hide everything.
+    $mods = $tvaModules ?? array_keys((array) config('modules', []));
+    $can  = function (string $k) use ($mods, $emailOk) {
+        // Unverified → Ask AI only (and only if the role actually grants it,
+        // so the menu stays in step with module.access).
+        if (!$emailOk) {
+            return $k === 'assistant' && in_array('assistant', $mods, true);
+        }
+        return in_array($k, $mods, true);
+    };
+
+    // Section visibility — a collapsible group shows only if the member can
+    // reach at least one of its children.
+    $showSocial    = $can('messages') || $can('channels');
+    $showAi        = $can('bot_strategy');
+    $showData      = $can('data_sources') || $can('voices') || $can('telephony');
+    $showProject   = $can('profile') || $can('agents') || $can('skills') || $can('flows') || $can('widget');
+    $showCrm       = $can('conversations') || $can('leads');
+    $showWorkspace = $showAi || $showData || $showProject || $showCrm;
 @endphp
 
 <nav class="side-nav">
     <a href="{{ $clientSlug ? route('dashboard', ['client' => $clientSlug]) : url('/') }}" class="intro-x flex items-center pl-5 pt-4">
-        <img alt="NueraBot" class="w-6" src="{{ url('/assets/dist/images/logo.svg') }}">
-        <span class="hidden xl:block text-white text-lg ml-3">NueraBot</span>
+        <img alt="Serve AI" class="w-6" src="{{ serveai_icon() }}">
+        <span class="hidden xl:block text-white text-lg ml-3">Serve AI</span>
     </a>
     <div class="side-nav__devider my-6"></div>
 
     <ul>
-        {{-- Dashboard (standalone) --}}
+        {{-- Dashboard (standalone) — always available, incl. unverified users --}}
         <li>
             <a href="{{ $clientSlug ? route('dashboard', ['client' => $clientSlug]) : url('/dashboard') }}"
                class="side-menu {{ $is('dashboard', 'onboard') ? 'side-menu--active' : '' }}">
@@ -33,14 +67,83 @@
             </a>
         </li>
 
+        {{-- Verify email prompt (only while unverified) --}}
+        @unless($emailOk)
+        <li>
+            <a href="{{ route('verification.notice') }}"
+               class="side-menu {{ $is('verification.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="mail"></i></div>
+                <div class="side-menu__title">Verify email</div>
+            </a>
+        </li>
+        @endunless
+
+        {{-- Team Assistant (internal AI, RBAC project-scoped) --}}
+        @if($can('assistant'))
+        <li>
+            <a href="{{ $clientSlug ? route('assistant.index', ['client' => $clientSlug]) : '#' }}"
+               class="side-menu {{ $is('assistant.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="bot"></i></div>
+                <div class="side-menu__title">Ask AI</div>
+            </a>
+        </li>
+        @endif
+
+        {{-- Live Compute (was "Compute Mesh") — directly after Ask AI --}}
+        @if($can('compute'))
+        <li>
+            <a href="{{ $clientSlug ? route('compute.index', ['client' => $clientSlug]) : '#' }}"
+               class="side-menu {{ $is('compute.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="cpu"></i></div>
+                <div class="side-menu__title">Live Compute</div>
+            </a>
+        </li>
+        @endif
+
+        {{-- Social — agent inbox (Messages) + channel onboarding (Channels) --}}
+        @if($showSocial)
+        <li>
+            <a href="javascript:;" class="side-menu {{ $sec['social'] ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="share-2"></i></div>
+                <div class="side-menu__title">
+                    Social
+                    <div class="side-menu__sub-icon {{ $sec['social'] ? 'transform rotate-180' : '' }}"><i data-lucide="chevron-down"></i></div>
+                </div>
+            </a>
+            <ul class="{{ $sec['social'] ? 'side-menu__sub-open' : '' }}">
+                @if($can('messages'))
+                <li>
+                    <a href="{{ $clientSlug ? route('chat.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('chat.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="message-square"></i></div>
+                        <div class="side-menu__title">Messages</div>
+                    </a>
+                </li>
+                @endif
+                @if($can('channels'))
+                <li>
+                    <a href="{{ $clientSlug ? route('channels.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('channels.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="radio"></i></div>
+                        <div class="side-menu__title">Channels</div>
+                    </a>
+                </li>
+                @endif
+            </ul>
+        </li>
+        @endif
+
+        @if($showWorkspace)
         <li class="side-nav__devider my-4"></li>
         <li class="side-menu__title-section">
             <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">
                 Workspace
             </div>
         </li>
+        @endif
 
         {{-- AI Automation --}}
+        @if($showAi)
         <li>
             <a href="javascript:;" class="side-menu {{ $sec['ai'] ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="cpu"></i></div>
@@ -66,8 +169,10 @@
                 </li>
             </ul>
         </li>
+        @endif
 
         {{-- Data Connectivity --}}
+        @if($showData)
         <li>
             <a href="javascript:;" class="side-menu {{ $sec['data'] ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="link"></i></div>
@@ -77,6 +182,7 @@
                 </div>
             </a>
             <ul class="{{ $sec['data'] ? 'side-menu__sub-open' : '' }}">
+                @if($can('data_sources'))
                 <li>
                     <a href="{{ $clientSlug ? route('data-sources.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('data-sources.*') ? 'side-menu--active' : '' }}">
@@ -84,6 +190,8 @@
                         <div class="side-menu__title">Data Sources</div>
                     </a>
                 </li>
+                @endif
+                @if($can('voices'))
                 <li>
                     <a href="{{ $clientSlug ? route('voices.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('voices.*') ? 'side-menu--active' : '' }}">
@@ -91,6 +199,8 @@
                         <div class="side-menu__title">Voices</div>
                     </a>
                 </li>
+                @endif
+                @if($can('telephony'))
                 <li>
                     <a href="{{ $clientSlug ? route('telephony.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('telephony.*') ? 'side-menu--active' : '' }}">
@@ -98,10 +208,13 @@
                         <div class="side-menu__title">Telephony</div>
                     </a>
                 </li>
+                @endif
             </ul>
         </li>
+        @endif
 
         {{-- Project Data --}}
+        @if($showProject)
         <li>
             <a href="javascript:;" class="side-menu {{ $sec['project'] ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="folder"></i></div>
@@ -111,6 +224,7 @@
                 </div>
             </a>
             <ul class="{{ $sec['project'] ? 'side-menu__sub-open' : '' }}">
+                @if($can('profile'))
                 <li>
                     <a href="{{ $clientSlug ? route('project-profile.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('project-profile.*') ? 'side-menu--active' : '' }}">
@@ -118,6 +232,8 @@
                         <div class="side-menu__title">Project Profile</div>
                     </a>
                 </li>
+                @endif
+                @if($can('agents'))
                 <li>
                     <a href="{{ $clientSlug ? route('bot-agents.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('bot-agents.*') ? 'side-menu--active' : '' }}">
@@ -125,6 +241,8 @@
                         <div class="side-menu__title">Agents</div>
                     </a>
                 </li>
+                @endif
+                @if($can('skills'))
                 <li>
                     <a href="{{ $clientSlug ? route('skills.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('skills.*') ? 'side-menu--active' : '' }}">
@@ -132,6 +250,8 @@
                         <div class="side-menu__title">Skills</div>
                     </a>
                 </li>
+                @endif
+                @if($can('flows'))
                 <li>
                     <a href="{{ $clientSlug ? route('flows.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('flows.*') ? 'side-menu--active' : '' }}">
@@ -139,6 +259,8 @@
                         <div class="side-menu__title">Flow builder</div>
                     </a>
                 </li>
+                @endif
+                @if($can('widget'))
                 <li>
                     <a href="{{ $clientSlug ? route('widget-settings.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('widget-settings.*') ? 'side-menu--active' : '' }}">
@@ -146,10 +268,13 @@
                         <div class="side-menu__title">Widget</div>
                     </a>
                 </li>
+                @endif
             </ul>
         </li>
+        @endif
 
         {{-- CRM --}}
+        @if($showCrm)
         <li>
             <a href="javascript:;" class="side-menu {{ $sec['crm'] ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="briefcase"></i></div>
@@ -159,6 +284,7 @@
                 </div>
             </a>
             <ul class="{{ $sec['crm'] ? 'side-menu__sub-open' : '' }}">
+                @if($can('conversations'))
                 <li>
                     <a href="{{ $clientSlug ? route('sessions.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('sessions.*') ? 'side-menu--active' : '' }}">
@@ -166,6 +292,8 @@
                         <div class="side-menu__title">Conversations</div>
                     </a>
                 </li>
+                @endif
+                @if($can('leads'))
                 <li>
                     <a href="{{ $clientSlug ? route('leads.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('leads.*') ? 'side-menu--active' : '' }}">
@@ -173,21 +301,46 @@
                         <div class="side-menu__title">Leads</div>
                     </a>
                 </li>
+                @endif
             </ul>
         </li>
+        @endif
 
+        {{-- Team & Roles — Members + Roles + Invitations in one group --}}
+        @if($can('team'))
         <li class="side-nav__devider my-4"></li>
-        <li class="side-menu__title-section">
-            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">
-                Team
-            </div>
-        </li>
         <li>
-            <a href="{{ route('invitations.index') }}"
-               class="side-menu {{ $is('invitations.*') ? 'side-menu--active' : '' }}">
-                <div class="side-menu__icon"><i data-lucide="user-plus"></i></div>
-                <div class="side-menu__title">Invitations</div>
+            <a href="javascript:;" class="side-menu {{ $sec['team'] ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="users"></i></div>
+                <div class="side-menu__title">
+                    Team &amp; Roles
+                    <div class="side-menu__sub-icon {{ $sec['team'] ? 'transform rotate-180' : '' }}"><i data-lucide="chevron-down"></i></div>
+                </div>
             </a>
+            <ul class="{{ $sec['team'] ? 'side-menu__sub-open' : '' }}">
+                <li>
+                    <a href="{{ $clientSlug ? route('members.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('members.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="users"></i></div>
+                        <div class="side-menu__title">Members</div>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ $clientSlug ? route('roles.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('roles.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="shield"></i></div>
+                        <div class="side-menu__title">Roles</div>
+                    </a>
+                </li>
+                <li>
+                    <a href="{{ $clientSlug ? route('invitations.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('invitations.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="user-plus"></i></div>
+                        <div class="side-menu__title">Invitations</div>
+                    </a>
+                </li>
+            </ul>
         </li>
+        @endif
     </ul>
 </nav>

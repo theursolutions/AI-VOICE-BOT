@@ -1,0 +1,95 @@
+# Production edge Caddyfile — TLS/ACME only, forwards to the HAProxy ACL LB.
+#
+# Caddy keeps doing what it is best at (automatic Let's Encrypt certs, HTTP/3,
+# compression) and hands every request to HAProxy, which does the intelligent
+# load balancing, health checking, rate limiting and WebSocket affinity.
+#
+# Used by docker-compose.prod.yml (mounted over the default Caddyfile).
+
+{
+	email {$ACME_EMAIL}
+	# Deliberately NO `trusted_proxies` here: Caddy is the public edge, so any
+	# X-Forwarded-For arriving from a client is attacker-controlled. Caddy sets
+	# it from the real remote address, and HAProxy trusts only Caddy.
+}
+
+# Baseline security headers for BOTH sites. HSTS must be set HERE (the TLS
+# edge) — a header added further down the chain is useless for the very first
+# plaintext request a browser makes.
+#
+# Framing is deliberately NOT restricted here: the chat widget is designed to be
+# iframed into customers' own websites, so a blanket X-Frame-Options would break
+# the product. It is applied only to the admin UI below.
+(security_headers) {
+	header {
+		# 1 year, subdomains included. Browsers refuse plain HTTP after the
+		# first visit, which kills SSL-strip downgrade attacks.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Browser features this app never uses.
+		Permissions-Policy "geolocation=(), payment=(), usb=()"
+		-Server
+		-X-Powered-By
+	}
+}
+
+# Reusable upstream snippet → HAProxy reads the original Host header to route
+# app vs. voice, and X-Forwarded-For for per-client rate limiting / affinity.
+(to_haproxy) {
+	reverse_proxy haproxy:80 {
+		header_up Host {host}
+		header_up X-Forwarded-For {remote_host}
+		header_up X-Forwarded-Proto {scheme}
+		# Passive ejection only. No active health check against "/" here:
+		# Laravel redirects 302 and HAProxy does the real per-replica checks.
+		fail_duration 10s
+		max_fails 3
+	}
+}
+
+# ── App domain: admin UI + API (and, optionally, the monitoring UIs) ─────────
+{$APP_DOMAIN} {
+	encode zstd gzip
+	import security_headers
+
+	# Clickjacking protection for the admin panel only. `/widget*` is excluded
+	# because that is the embeddable chat surface customers iframe on their own
+	# domains — denying it there would break every live embed.
+	@not_widget not path /widget /widget/*
+	header @not_widget X-Frame-Options "DENY"
+
+	# ─────────────────────────────────────────────────────────────────────────
+	# OPTIONAL: expose Grafana at https://<APP_DOMAIN>/grafana/ instead of only
+	# via SSH tunnel. SECURITY TRADE-OFF: this puts a login page on the public
+	# internet. If you enable it:
+	#   1. Uncomment the block below.
+	#   2. In docker-compose.prod.yml (grafana service) set:
+	#        GF_SERVER_ROOT_URL: https://${APP_DOMAIN}/grafana/
+	#        GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+	#   3. (recommended) add a Caddy basic-auth layer in front — generate a hash
+	#      with:  docker run --rm caddy:2-alpine caddy hash-password --plaintext 'YOURPASS'
+	#   4. (recommended) restrict to your office/VPN IPs with the @office matcher.
+	#
+	# @grafana path /grafana /grafana/*
+	# handle @grafana {
+	#   # @office not remote_ip 203.0.113.0/24
+	#   # respond @office 403
+	#   basic_auth {
+	#     admin <PASTE_BCRYPT_HASH_FROM_caddy_hash-password>
+	#   }
+	#   reverse_proxy grafana:3000
+	# }
+
+	# Everything else → the HAProxy ACL load balancer.
+	handle {
+		import to_haproxy
+	}
+}
+
+# ── Voice domain: WebSocket pipeline, /tts, /stt, /voice/* audio, /healthz ───
+{$VOICE_DOMAIN} {
+	encode zstd gzip
+	import security_headers
+	import to_haproxy
+}

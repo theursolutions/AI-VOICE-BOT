@@ -88,9 +88,12 @@ class FlowWebController extends Controller
         $projectId = (int) $request->query('project_id');
         $flow = $this->loadFlow($client, $id, $projectId);
 
+        // Feed the project's data sources to the React editor (also served
+        // via the /definition API on mount — see projectDataSources()).
         return view('flows.editor', [
-            'client' => $client,
-            'flow'   => $flow,
+            'client'      => $client,
+            'flow'        => $flow,
+            'dataSources' => $this->projectDataSources($flow->project_id),
         ]);
     }
 
@@ -100,13 +103,33 @@ class FlowWebController extends Controller
         $projectId = (int) $request->query('project_id');
         $flow = $this->loadFlow($client, $id, $projectId);
         return response()->json([
-            'id'         => $flow->id,
-            'name'       => $flow->name,
-            'status'     => $flow->status,
-            'language'   => $flow->language,
-            'definition' => $flow->definition ?: Flow::emptyDefinition(),
-            'version'    => $flow->version,
+            'id'           => $flow->id,
+            'name'         => $flow->name,
+            'status'       => $flow->status,
+            'language'     => $flow->language,
+            'definition'   => $flow->definition ?: Flow::emptyDefinition(),
+            'version'      => $flow->version,
+            // Used by the Data Source + Send to Channel nodes' pickers.
+            // Returned here (not just the page attribute) so the editor
+            // always has fresh data regardless of HTML/asset caching.
+            'data_sources' => $this->projectDataSources($flow->project_id),
         ]);
+    }
+
+    /** @return array<int,array{id:int,name:string,type:string}> */
+    private function projectDataSources(int $projectId): array
+    {
+        return \App\Models\DataSource::where('project_id', $projectId)
+            ->where('status', '!=', \App\Models\DataSource::STATUS_DISABLED)
+            ->orderBy('name')
+            ->get(['id', 'name', 'type'])
+            ->map(fn ($s) => [
+                'id'   => (int) $s->id,
+                'name' => (string) $s->name,
+                'type' => (string) $s->type,
+            ])
+            ->values()
+            ->all();
     }
 
     /** Editor PUTs the whole graph back on save. */
@@ -222,6 +245,14 @@ class FlowWebController extends Controller
      */
     public function testStep(Request $request, Client $client, int $id): JsonResponse
     {
+        // IVR / DTMF choices are digits ("0","1","2"…). A request middleware
+        // coerces numeric strings to integers, so choice_id arrives as int 0/3
+        // and would fail a strict `string` rule. Normalise it back to a string
+        // (the runner treats it as a string anyway) so the menu buttons work.
+        if ($request->has('choice_id') && $request->input('choice_id') !== null) {
+            $request->merge(['choice_id' => (string) $request->input('choice_id')]);
+        }
+
         $data = $request->validate([
             'project_id' => 'required|integer',
             'session_id' => 'required|integer',

@@ -117,12 +117,16 @@
     return true;
   };
 
-  TvaibwcWsClient.prototype.sendText = function (text) {
-    return this._send({ type: 'text', text: text });
+  TvaibwcWsClient.prototype.sendText = function (text, language) {
+    var frame = { type: 'text', text: text };
+    if (language) frame.language = language;   // fallback reply language
+    return this._send(frame);
   };
   TvaibwcWsClient.prototype.sendAudioStart = function (opts) {
     var o = opts || {};
-    return this._send({ type: 'audio.start', format: o.format || 'pcm16', sample_rate: o.sample_rate || 16000 });
+    var frame = { type: 'audio.start', format: o.format || 'pcm16', sample_rate: o.sample_rate || 16000 };
+    if (o.language) frame.language = o.language;
+    return this._send(frame);
   };
   TvaibwcWsClient.prototype.sendAudioChunk = function (seq, base64Data) {
     return this._send({ type: 'audio.chunk', seq: seq, data: base64Data });

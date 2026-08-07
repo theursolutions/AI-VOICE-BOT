@@ -60,7 +60,7 @@
             <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Project</label>
             <select name="project_id" class="form-select mt-1 w-full md:w-1/3" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int) $projectId === (int) $p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int) $projectId === (int) $p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
         </form>
@@ -93,12 +93,12 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1">
-                    <a href="{{ route('flows.editor', ['client' => $client->slug, 'id' => $flow->id]) }}?project_id={{ $project->id }}"
+                    <a href="{{ route('flows.editor', ['client' => $client->slug, 'id' => $flow->id]) }}?project_id={{ hashid($project->id) }}"
                        class="btn btn-primary btn-sm">
                         <i data-lucide="pencil" class="w-3 h-3 inline mr-1"></i> Open editor
                     </a>
                     <form method="POST" action="{{ route('flows.destroy', ['client' => $client->slug, 'id' => $flow->id]) }}"
-                          onsubmit="return confirm('Delete flow &quot;{{ $flow->name }}&quot;? Recoverable from super-admin.');" class="inline">
+                          data-confirm="Delete flow &quot;{{ $flow->name }}&quot;? Recoverable from super-admin." class="inline">
                         @csrf @method('DELETE')
                         <input type="hidden" name="project_id" value="{{ $project->id }}">
                         <button type="submit" class="text-danger inline-flex items-center justify-center w-8 h-8 rounded hover:bg-danger/10" title="Delete">

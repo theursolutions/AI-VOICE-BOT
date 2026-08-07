@@ -1,0 +1,268 @@
+name: ai-crm
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared config for the three admin (Laravel) roles. The same image runs as
+# the web server, the queue worker pool, and the scheduler — only
+# CONTAINER_ROLE differs.
+# ─────────────────────────────────────────────────────────────────────────────
+x-admin-env: &admin-env
+  APP_NAME: ${APP_NAME:-AI Voice CRM}
+  APP_ENV: ${APP_ENV:-production}
+  APP_DEBUG: ${APP_DEBUG:-false}
+  APP_KEY: ${APP_KEY}
+  APP_URL: https://${APP_DOMAIN}
+  LOG_CHANNEL: stack
+  LOG_LEVEL: info
+  DB_CONNECTION: mysql
+  DB_HOST: mysql
+  DB_PORT: "3306"
+  DB_DATABASE: ${DB_DATABASE}
+  DB_USERNAME: ${DB_USERNAME}
+  DB_PASSWORD: ${DB_PASSWORD}
+  # Tenant chat DBs (ai-crm-client-<id>) live on the same MySQL. The app user
+  # is granted on `ai-crm-client-%` by deploy/mysql/init/01-grants.sql, so it
+  # can CREATE/use tenant DBs during provisioning without the root account.
+  TENANT_DB_HOST: mysql
+  TENANT_DB_PORT: "3306"
+  TENANT_DB_USERNAME: ${DB_USERNAME}
+  TENANT_DB_PASSWORD: ${DB_PASSWORD}
+  TENANT_DB_NAME_PREFIX: ${TENANT_DB_NAME_PREFIX:-ai-crm-client-}
+  CACHE_DRIVER: redis
+  SESSION_DRIVER: redis
+  # TLS is terminated at the edge (Caddy), so the session cookie must be marked
+  # Secure — otherwise a downgraded request would leak it in cleartext.
+  SESSION_SECURE_COOKIE: "true"
+  SESSION_SAME_SITE: lax
+  QUEUE_CONNECTION: redis
+  REDIS_HOST: redis
+  REDIS_PORT: "6379"
+  REDIS_PASSWORD: ${REDIS_PASSWORD}
+  BROADCAST_DRIVER: log
+  FILESYSTEM_DISK: local
+  # admin -> voice-engine (internal, no TLS needed on the private network)
+  PYTHON_BASE_URL: http://voice-engine:8000
+  # browser -> voice-engine WebSocket (public, via Caddy TLS)
+  PYTHON_WS_URL: wss://${VOICE_DOMAIN}/ws/turn
+  PYTHON_INTERNAL_SECRET: ${PYTHON_INTERNAL_SECRET}
+  PYTHON_JWT_SECRET: ${PYTHON_JWT_SECRET}
+  PYTHON_TOKEN_TTL: "3600"
+  VOICE_DEFAULT_PROVIDER: coqui
+  ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+  GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+
+x-admin-base: &admin-base
+  image: aicrm/admin:latest
+  build:
+    context: ./admin
+    dockerfile: Dockerfile
+  restart: unless-stopped
+  env_file: [.env]
+  # A compromised PHP process must not be able to gain privileges via setuid
+  # binaries, and needs none of Linux's default capabilities.
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  # CHOWN/FOWNER/DAC_OVERRIDE: entrypoint chowns storage. SETUID/SETGID: `su` to
+  # www-data + php-fpm forking its workers. NET_BIND_SERVICE: nginx binding.
+  cap_add: [CHOWN, FOWNER, DAC_OVERRIDE, SETUID, SETGID, NET_BIND_SERVICE]
+  depends_on:
+    mysql:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks: [aicrm]
+
+services:
+  # ── Edge: TLS termination + reverse proxy ──────────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      VOICE_DOMAIN: ${VOICE_DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL}
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+      - voice-engine
+    networks: [aicrm]
+
+  # ── Admin web (php-fpm + nginx) ────────────────────────────────────────────
+  app:
+    <<: *admin-base
+    environment:
+      <<: *admin-env
+      CONTAINER_ROLE: web
+    volumes:
+      - app_storage:/var/www/html/storage/app
+      - app_uploads:/var/www/html/public/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ── Queue workers (scale with --scale queue=N) ─────────────────────────────
+  queue:
+    <<: *admin-base
+    environment:
+      <<: *admin-env
+      CONTAINER_ROLE: queue
+    volumes:
+      - app_storage:/var/www/html/storage/app   # shared: RAG docs, agent voices
+    # `queue:work` finishes the job in hand on SIGTERM. Docker's 10s default is
+    # not enough for a long RAG ingest / TTS job — give it a full minute before
+    # SIGKILL so a deploy never kills work mid-flight.
+    stop_grace_period: 60s
+    # Without this, a worker that hangs (stuck cURL, deadlocked DB handle) stays
+    # "up" forever and silently stops consuming the queue.
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan queue:work' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # ── Scheduler (runs due artisan schedule:* tasks) ──────────────────────────
+  scheduler:
+    <<: *admin-base
+    environment:
+      <<: *admin-env
+      CONTAINER_ROLE: scheduler
+    volumes:
+      - app_storage:/var/www/html/storage/app
+    stop_grace_period: 30s
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f 'artisan schedule:work' >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  # ── Voice / AI compute engine (FastAPI, CPU) ───────────────────────────────
+  voice-engine:
+    image: aicrm/voice-engine:latest
+    build:
+      context: ./voice-engine
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file: [.env]
+    environment:
+      LARAVEL_BASE_URL: http://app:8080
+      PYTHON_INTERNAL_SECRET: ${PYTHON_INTERNAL_SECRET}
+      PYTHON_JWT_SECRET: ${PYTHON_JWT_SECRET}
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-2}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      COQUI_MODEL: ${COQUI_MODEL:-tts_models/multilingual/multi-dataset/xtts_v2}
+      COQUI_USE_GPU: "false"
+      # Unified data layer: one DuckDB file per project (snapshots = SQL,
+      # KB/crawler = BM25 FTS). Replaced Qdrant + the embedding model entirely.
+      DUCKDB_DIR: /app/duckdb_data
+      VOICE_OUTPUT_URL_PREFIX: https://${VOICE_DOMAIN}/voice
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - voice_models:/models       # XTTS/Whisper weights (downloaded on 1st boot)
+      # ALL tenant data lives here — snapshots, knowledge base, crawled pages.
+      # This MUST be a named volume or every redeploy destroys customer data.
+      - voice_duckdb:/app/duckdb_data
+      - voice_outputs:/app/voice_outputs
+      - voice_uploads:/app/uploads
+    # NOTE: DuckDB is a single-writer store guarded by file locks, so the voice
+    # tier cannot be scaled past ONE replica while it owns these files.
+    # Keep VOICE_REPLICAS=1 (see deploy/production/.env.prod.example).
+    networks: [aicrm]
+
+  # ── MySQL (central app DB + per-tenant chat DBs) ───────────────────────────
+  mysql:
+    image: mysql:8.0
+    restart: unless-stopped
+    # Sized against the 2 GB container limit set in the production overlay.
+    command: >-
+      --default-authentication-plugin=mysql_native_password
+      --innodb-buffer-pool-size=1G
+      --innodb-flush-log-at-trx-commit=1
+      --innodb-flush-method=O_DIRECT
+      --max-connections=250
+      --skip-name-resolve
+      --slow-query-log=1
+      --long-query-time=2
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_USER: ${DB_USERNAME}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Grants the app user CREATE rights on ai-crm-client-% (first init only).
+      - ./deploy/mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$$MYSQL_ROOT_PASSWORD\" --silent || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [aicrm]
+
+  # ── Redis (cache + sessions + queue) ───────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # maxmemory sits UNDER the 768M container limit so Redis evicts/errors on its
+    # own terms instead of being OOM-killed by the kernel (which would drop
+    # queued jobs and every live session). Policy is noeviction on purpose:
+    # queue jobs and sessions must never be silently discarded — if Redis fills,
+    # writes fail loudly and the Grafana alert fires.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - noeviction
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [aicrm]
+
+volumes:
+  caddy_data:
+  caddy_config:
+  app_storage:
+  app_uploads:
+  voice_models:
+  voice_duckdb:        # tenant snapshots + KB + crawler — BACK THIS UP
+  voice_outputs:
+  voice_uploads:
+  mysql_data:
+  redis_data:
+
+networks:
+  aicrm:
+    driver: bridge

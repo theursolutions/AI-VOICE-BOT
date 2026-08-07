@@ -10,6 +10,8 @@ use App\Models\Session;
 use App\Services\Conversation\SessionTokenService;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Support\Facades\Log;
+use Msd\MetaChannels\Models\ChannelConnection;
+use Msd\MetaChannels\Services\GraphClient;
 
 /**
  * Webchat counterpart to FlowRunner.
@@ -104,6 +106,12 @@ class WebFlowRunner
         // the human-readable button label (not the bare "1") so the
         // log reads naturally.
         $this->recordUserChoice($project, $session, $node, $input);
+
+        // collect_input may gather several fields in one node — it has its
+        // own handler that asks the next field or branches when all are done.
+        if (($node['type'] ?? '') === 'collect_input') {
+            return $this->stepCollectInput($project, $session, $flow, $def, $node, $input);
+        }
 
         $branch = $this->pickBranch($node, $input);
         $nextId = $this->advanceFrom($def, $node['id'], $branch);
@@ -201,6 +209,72 @@ class WebFlowRunner
                         'session_id' => $session->id,
                     ];
                     $nodeId = null;
+                    break;
+                }
+
+                case 'datasource': {
+                    // Pin the conversation to specific data source(s) so the
+                    // AI references ONLY those for the rest of this branch
+                    // (e.g. customer-support KB). Empty list = clear the scope
+                    // (back to automatic routing across all sources). Silent
+                    // pass-through node — emits no message.
+                    $ids = array_values(array_filter(array_map(
+                        'intval',
+                        (array) ($data['source_ids'] ?? []),
+                    )));
+                    $meta = (array) ($session->metadata ?? []);
+                    $meta['ds_scope'] = $ids;
+                    $session->metadata = $meta;
+                    $session->save();
+                    $nodeId = $this->advanceFrom($def, $node['id'], 'out');
+                    break;
+                }
+
+                case 'collect_input': {
+                    // Multi-field: ask the CURRENT field (by stored cursor),
+                    // halt for the reply. Capture + advance happens in
+                    // stepCollectInput on the next turn.
+                    $fields = $this->collectFields($node);
+                    $idx = (int) data_get($session->metadata, 'collect_progress.' . $node['id'], 0);
+                    if ($idx >= count($fields)) {
+                        $nodeId = $this->advanceFrom($def, $node['id'], 'collected');
+                        break;
+                    }
+                    $f = $fields[$idx];
+                    // Persist the question to the transcript, then emit an
+                    // 'input' message so the widget renders a proper typed
+                    // field (text/tel/email/number) instead of a plain bubble.
+                    if ($f['prompt'] !== '') {
+                        $this->saveMessage($project, $session, 'assistant', $f['prompt'], null, [
+                            'source' => 'flow', 'flow_id' => $flow->id,
+                        ]);
+                    }
+                    $messages[] = [
+                        'kind'       => 'input',
+                        'prompt'     => $f['prompt'],
+                        'input_type' => $f['input_type'],
+                        'field_key'  => $f['key'],
+                        'audio_url'  => null,
+                    ];
+                    $expecting = 'free_text';   // value is submitted as {text}
+                    $nodeId = null;   // halt — capture happens on the next turn
+                    $avoided++;
+                    break;
+                }
+
+                case 'send_channel': {
+                    // Send a message (text / media / catalogue / template) to a
+                    // recipient via the project's onboarded WhatsApp/Messenger/
+                    // IG account. Branches sent/error. Not a halting node.
+                    $branch = 'error';
+                    try {
+                        $branch = $this->sendChannel($project, $session, $data) ? 'sent' : 'error';
+                    } catch (\Throwable $e) {
+                        Log::warning('WebFlowRunner: send_channel failed', [
+                            'flow_id' => $flow->id, 'error' => $e->getMessage(),
+                        ]);
+                    }
+                    $nodeId = $this->advanceFrom($def, $node['id'], $branch);
                     break;
                 }
 
@@ -423,6 +497,196 @@ class WebFlowRunner
             return $text !== '' ? 'match' : 'timeout';
         }
         return 'out';
+    }
+
+    // ── collect_input + send_channel helpers ─────────────────────────
+
+    /**
+     * Normalize a collect_input node to a list of {key, prompt, input_type}.
+     * Supports the multi-field `fields` array and the legacy single field.
+     *
+     * @return array<int,array{key:string,prompt:string,input_type:string}>
+     */
+    private function collectFields(array $node): array
+    {
+        $data = $node['data'] ?? [];
+        $out = [];
+        if (!empty($data['fields']) && is_array($data['fields'])) {
+            foreach ($data['fields'] as $f) {
+                if (!is_array($f)) continue;
+                $out[] = [
+                    'key'        => trim((string) ($f['key'] ?? '')) ?: 'value',
+                    'prompt'     => (string) ($f['prompt'] ?? 'Please provide a value.'),
+                    'input_type' => (string) ($f['input_type'] ?? 'text'),
+                ];
+            }
+        }
+        if (empty($out)) {
+            // Legacy single-field shape.
+            $out[] = [
+                'key'        => trim((string) ($data['field_key'] ?? '')) ?: 'value',
+                'prompt'     => (string) ($data['prompt'] ?? 'Please provide a value.'),
+                'input_type' => (string) ($data['input_type'] ?? 'text'),
+            ];
+        }
+        return $out;
+    }
+
+    /**
+     * Handle a reply to a collect_input node. Validates + stores the current
+     * field; asks the next one if more remain (re-entering the same node);
+     * branches 'collected' when all are gathered. Invalid input re-asks the
+     * same field; empty input takes 'timeout'.
+     */
+    private function stepCollectInput(Project $project, Session $session, Flow $flow, array $def, array $node, array $input): array
+    {
+        $fields = $this->collectFields($node);
+        $key    = 'collect_progress.' . $node['id'];
+        $idx    = (int) data_get($session->metadata, $key, 0);
+        $field  = $fields[$idx] ?? null;
+        $text   = trim((string) ($input['text'] ?? ''));
+
+        $clearAndGo = function (string $handle) use ($project, $session, $flow, $def, $node) {
+            $meta = (array) ($session->metadata ?? []);
+            unset($meta['collect_progress'][$node['id']]);
+            $session->metadata = $meta;
+            $session->save();
+            return $this->walk($project, $session, $flow, $def, $this->advanceFrom($def, $node['id'], $handle), 0, 0);
+        };
+
+        // Misconfigured (no field) or empty reply → exit the node.
+        if ($field === null) {
+            return $clearAndGo('collected');
+        }
+        if ($text === '') {
+            return $clearAndGo('timeout');
+        }
+
+        // Invalid → re-ask the SAME field (stay on this node).
+        $value = $this->validateInput($field['input_type'], $text);
+        if ($value === null) {
+            return $this->walk($project, $session, $flow, $def, $node['id'], 0, 0);
+        }
+
+        // Store the value, advance the cursor.
+        $meta = (array) ($session->metadata ?? []);
+        $meta['collected'] = array_merge((array) ($meta['collected'] ?? []), [$field['key'] => $value]);
+        $idx++;
+
+        if ($idx < count($fields)) {
+            $meta['collect_progress'][$node['id']] = $idx;
+            $session->metadata = $meta;
+            $session->save();
+            // Ask the next field (re-enter this same node).
+            return $this->walk($project, $session, $flow, $def, $node['id'], 0, 0);
+        }
+
+        // All fields gathered.
+        unset($meta['collect_progress'][$node['id']]);
+        $session->metadata = $meta;
+        $session->save();
+        return $this->walk($project, $session, $flow, $def, $this->advanceFrom($def, $node['id'], 'collected'), 0, 0);
+    }
+
+    /** Returns the normalized value, or null if it fails validation. */
+    private function validateInput(string $type, string $text): ?string
+    {
+        switch ($type) {
+            case 'email':
+                return filter_var($text, FILTER_VALIDATE_EMAIL) ? strtolower($text) : null;
+            case 'phone':
+                $digits = preg_replace('/[^0-9]/', '', $text);
+                if (strlen($digits) < 7 || strlen($digits) > 15) return null;
+                return (str_starts_with(trim($text), '+') ? '+' : '') . $digits;
+            case 'number':
+                return is_numeric($text) ? $text : null;
+            case 'text':
+            default:
+                return $text;
+        }
+    }
+
+    /**
+     * Send a message to a recipient via the project's onboarded channel.
+     * Recipient = a collected field (e.g. whatsapp_number) or a literal.
+     * NOTE: WhatsApp business-initiated sends to a number that hasn't
+     * messaged in 24h require an APPROVED TEMPLATE (use payload_type=template).
+     */
+    private function sendChannel(Project $project, Session $session, array $data): bool
+    {
+        $provider = (string) ($data['provider'] ?? ChannelConnection::PROVIDER_WHATSAPP);
+        $to = $this->resolveRecipient($session, $data);
+        if ($to === '') {
+            return false;
+        }
+
+        $conn = ChannelConnection::where('project_id', $project->id)
+            ->where('provider', $provider)
+            ->where('status', ChannelConnection::STATUS_ENABLED)
+            ->first();
+        if (!$conn) {
+            Log::warning('WebFlowRunner: no enabled channel connection', [
+                'provider' => $provider, 'project_id' => $project->id,
+            ]);
+            return false;
+        }
+
+        $graph = new GraphClient($conn->access_token ?: null);
+        $from  = (string) $conn->external_id;
+        $ptype = (string) ($data['payload_type'] ?? 'text');
+        $text  = $this->interpolate((string) ($data['text'] ?? ''), $session);
+
+        if ($provider === ChannelConnection::PROVIDER_WHATSAPP) {
+            if ($ptype === 'media') {
+                return $graph->sendWhatsAppMediaByLink(
+                    $from, $to,
+                    (string) ($data['media_type'] ?? 'document'),
+                    (string) ($data['media_url'] ?? ''),
+                    $data['caption'] ?? null,
+                );
+            }
+            if ($ptype === 'template') {
+                return $graph->sendTemplate(
+                    $from, $to,
+                    (string) ($data['template_name'] ?? ''),
+                    (string) ($data['template_lang'] ?? 'en_US'),
+                );
+            }
+            return $graph->sendText($from, $to, $text) !== null;
+        }
+
+        // Messenger / Instagram
+        if ($ptype === 'media') {
+            return $graph->sendMessengerAttachment(
+                $from, $to,
+                (string) ($data['media_type'] ?? 'file'),
+                (string) ($data['media_url'] ?? ''),
+            );
+        }
+        return $graph->sendMessengerText($from, $to, $text) !== null;
+    }
+
+    /** Recipient = a captured field value, or an interpolated literal. */
+    private function resolveRecipient(Session $session, array $data): string
+    {
+        $field = trim((string) ($data['recipient_field'] ?? ''));
+        if ($field !== '') {
+            $collected = (array) data_get($session->metadata, 'collected', []);
+            return (string) ($collected[$field] ?? '');
+        }
+        return $this->interpolate((string) ($data['recipient'] ?? ''), $session);
+    }
+
+    /** Replace {{ field }} placeholders with collected session values. */
+    private function interpolate(string $tpl, Session $session): string
+    {
+        if ($tpl === '' || strpos($tpl, '{{') === false) {
+            return $tpl;
+        }
+        $collected = (array) data_get($session->metadata, 'collected', []);
+        return preg_replace_callback('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', static function ($m) use ($collected) {
+            return (string) ($collected[$m[1]] ?? '');
+        }, $tpl) ?? $tpl;
     }
 
     // ── Graph helpers (mirror FlowRunner) ────────────────────────────

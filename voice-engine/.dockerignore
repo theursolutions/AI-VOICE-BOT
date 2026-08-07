@@ -1,0 +1,45 @@
+# Build context for the voice-engine image is voice-engine/.
+# Models + caches + secrets are provided at runtime via volumes / container env.
+
+.venv
+venv
+env
+__pycache__
+**/__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Heavy / machine-generated — mounted as volumes, downloaded at runtime
+models
+checkpoints
+voice_outputs
+uploads
+# CRITICAL: local dev tenant data. Docker seeds an empty named volume from the
+# image's directory contents on first mount, so baking this in would pre-load a
+# fresh production deploy with a developer's test projects.
+duckdb_data
+*.duckdb
+*.duckdb.wal
+*.pth
+*.bin
+*.safetensors
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+
+# Secrets + logs (baked nothing; env injected by compose)
+.env
+.env.*
+!.env.example
+*.log
+
+# Tooling / VCS
+.git
+.idea
+.vscode
+test_main.http

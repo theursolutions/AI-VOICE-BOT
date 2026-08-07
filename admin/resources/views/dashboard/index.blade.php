@@ -251,7 +251,7 @@
             <div class="tva-card__title">
                 <i data-lucide="message-circle" class="w-4 h-4"></i> Recent conversations
                 @if ($primaryProject)
-                <a href="{{ route('sessions.index') }}?project_id={{ $primaryProject->id }}"
+                <a href="{{ route('sessions.index') }}?project_id={{ hashid($primaryProject->id) }}"
                    class="ml-auto text-xs text-primary" style="margin-left:auto">View all →</a>
                 @endif
             </div>
@@ -260,7 +260,7 @@
                     $name = $s->customer_name ?: 'Anonymous';
                     $initials = strtoupper(mb_substr(preg_replace('/[^A-Za-z]/', '', $name) ?: 'A', 0, 2));
                 @endphp
-                <a href="{{ route('sessions.show', ['id' => $s->id]) }}?project_id={{ $s->project_id }}"
+                <a href="{{ route('sessions.show', ['id' => $s->id]) }}?project_id={{ hashid($s->project_id) }}"
                    class="tva-list-row">
                     <div class="tva-list-row__avatar">{{ $initials }}</div>
                     <div class="tva-list-row__main">
@@ -281,7 +281,7 @@
             <div class="tva-card__title">
                 <i data-lucide="user-plus" class="w-4 h-4"></i> Recent leads
                 @if ($primaryProject)
-                <a href="{{ route('leads.index') }}?project_id={{ $primaryProject->id }}"
+                <a href="{{ route('leads.index') }}?project_id={{ hashid($primaryProject->id) }}"
                    class="ml-auto text-xs text-primary" style="margin-left:auto">View all →</a>
                 @endif
             </div>
@@ -291,7 +291,7 @@
                     $name = $lf['name'] ?? 'Unnamed';
                     $initials = strtoupper(mb_substr(preg_replace('/[^A-Za-z]/', '', $name) ?: 'L', 0, 2));
                 @endphp
-                <a href="{{ route('leads.show', ['id' => $lead->id]) }}?project_id={{ $lead->project_id }}"
+                <a href="{{ route('leads.show', ['id' => $lead->id]) }}?project_id={{ hashid($lead->project_id) }}"
                    class="tva-list-row">
                     <div class="tva-list-row__avatar" style="background:#d1fae5; color:#047857;">{{ $initials }}</div>
                     <div class="tva-list-row__main">

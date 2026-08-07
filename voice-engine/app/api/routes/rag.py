@@ -29,6 +29,10 @@ from app.services.ingest_service import (
     register_job,
 )
 
+import asyncio
+
+from pydantic import BaseModel
+
 logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_internal_secret)])
 
@@ -139,7 +143,10 @@ async def rag_status(job_id: str) -> IngestStatus:
 
 @router.post("/rag/query", response_model=RagQueryResponse)
 async def rag_query(req: RagQueryRequest, request: Request) -> RagQueryResponse:
-    retrieval = request.app.state.retrieval_service
+    # Retired: KB/crawler retrieval moved to DuckDB BM25 (POST /duck/search).
+    retrieval = getattr(request.app.state, "retrieval_service", None)
+    if retrieval is None:
+        return RagQueryResponse(passages=[])
     try:
         passages: List[Passage] = await retrieval.retrieve(
             project_id=req.project_id,
@@ -151,3 +158,47 @@ async def rag_query(req: RagQueryRequest, request: Request) -> RagQueryResponse:
         logger.exception("rag query failed")
         raise HTTPException(status_code=502, detail=f"rag query failure: {exc}") from exc
     return RagQueryResponse(passages=passages)
+
+
+class DeleteSourceRequest(BaseModel):
+    project_id: int
+    source_id: int
+
+
+@router.post("/rag/delete-source")
+async def rag_delete_source(req: DeleteSourceRequest, request: Request) -> Dict[str, Any]:
+    """Delete all vectors for one source within one project. Called when a
+    document/website data source is permanently removed in Laravel."""
+    vs = getattr(request.app.state, "vector_store", None)
+    if vs is None:
+        return {"deleted": False, "reason": "vector store unavailable"}
+    try:
+        await asyncio.to_thread(vs.delete_by_project_source, req.project_id, req.source_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("vector delete failed")
+        raise HTTPException(status_code=502, detail=f"delete failed: {exc}") from exc
+    return {"deleted": True}
+
+
+class SnapshotLoadRequest(BaseModel):
+    files: List[Dict[str, str]]
+    mysql: Dict[str, Any]
+    table: str
+
+
+@router.post("/snapshot/load")
+async def snapshot_load(req: SnapshotLoadRequest) -> Dict[str, Any]:
+    """Load a tabular upload (CSV/XLSX/JSON) into a MySQL table so the
+    text-to-SQL resolver can query it. Returns the column map + row count;
+    Laravel introspects the table schema and stores it on the data source.
+    """
+    from app.services.snapshot_loader import load_tabular
+
+    try:
+        result = await asyncio.to_thread(
+            load_tabular, req.files, req.mysql, req.table
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("snapshot load failed")
+        raise HTTPException(status_code=502, detail=f"snapshot load failure: {exc}") from exc
+    return result

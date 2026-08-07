@@ -74,7 +74,7 @@
             <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Project</label>
             <select name="project_id" class="form-select mt-1 w-full md:w-1/3" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
         </form>

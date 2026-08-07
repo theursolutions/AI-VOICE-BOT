@@ -187,7 +187,7 @@
 
             <select name="project_id" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
 
@@ -265,14 +265,14 @@
                         <td data-label="Status"><span class="tva-status is-{{ $lead->status }}">{{ $lead->status }}</span></td>
                         <td data-label="Session">
                             @if ($lead->session_id)
-                                <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $lead->session_id]) }}?project_id={{ $projectId }}"
+                                <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $lead->session_id]) }}?project_id={{ hashid($projectId) }}"
                                    style="color:#6366f1; text-decoration:none; font-family: ui-monospace, monospace; font-size:12px;">
                                     #{{ $lead->session_id }}
                                 </a>
                             @else <span style="color:#cbd5e1;">—</span> @endif
                         </td>
                         <td data-label="Open" style="text-align:right;">
-                            <a href="{{ route('leads.show', ['client' => $client->slug, 'id' => $lead->id]) }}?project_id={{ $projectId }}"
+                            <a href="{{ route('leads.show', ['client' => $client->slug, 'id' => $lead->id]) }}?project_id={{ hashid($projectId) }}"
                                class="inline-flex items-center justify-center w-8 h-8 rounded-lg" style="color:#6366f1; background:#eef2ff;"
                                title="View lead">
                                 <i data-lucide="arrow-right" class="w-4 h-4"></i>

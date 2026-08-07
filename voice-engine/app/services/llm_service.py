@@ -27,6 +27,7 @@ that's a no-op there.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -36,6 +37,21 @@ from app.config import get_settings
 from app.domain.schemas import ChatMessage
 
 logger = logging.getLogger(__name__)
+
+
+# Status codes / error names that are worth retrying or failing over on.
+_RETRYABLE_CODES = {408, 409, 425, 429, 500, 502, 503, 504}
+_RETRYABLE_HINTS = ("ratelimit", "timeout", "connection", "internalserver",
+                    "serviceunavailable", "overloaded", "apistatus")
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """True for provider rate-limits / transient errors (retry or fail over)."""
+    code = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    if isinstance(code, int) and code in _RETRYABLE_CODES:
+        return True
+    name = type(exc).__name__.lower()
+    return any(h in name for h in _RETRYABLE_HINTS)
 
 
 @dataclass
@@ -96,16 +112,19 @@ class _AnthropicBackend:
     async def close(self) -> None:
         await self._client.close()
 
-    async def chat(self, messages: List[ChatMessage]) -> ChatResult:
+    async def chat(self, messages: List[ChatMessage], temperature: Optional[float] = None,
+                   max_tokens: Optional[int] = None, model: Optional[str] = None) -> ChatResult:
         system_blocks, chat = _split_for_anthropic(messages)
         if not chat:
             return ChatResult(text="", model=self.model)
 
         kwargs: Dict[str, Any] = {
-            "model": self.model,
-            "max_tokens": self.max_tokens,
+            "model": model or self.model,
+            "max_tokens": max_tokens or self.max_tokens,
             "messages": chat,
         }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         if system_blocks:
             kwargs["system"] = system_blocks
 
@@ -201,16 +220,20 @@ class _GroqBackend:
     async def close(self) -> None:
         await self._client.close()
 
-    async def chat(self, messages: List[ChatMessage]) -> ChatResult:
+    async def chat(self, messages: List[ChatMessage], temperature: Optional[float] = None,
+                   max_tokens: Optional[int] = None, model: Optional[str] = None) -> ChatResult:
         msgs = _to_openai_messages(messages)
         if not msgs:
             return ChatResult(text="", model=self.model)
 
-        resp = await self._client.chat.completions.create(
-            model=self.model,
-            messages=msgs,
-            max_tokens=self.max_tokens,
-        )
+        kwargs: Dict[str, Any] = {
+            "model": model or self.model,
+            "messages": msgs,
+            "max_tokens": max_tokens or self.max_tokens,
+        }
+        if temperature is not None:
+            kwargs["temperature"] = temperature
+        resp = await self._client.chat.completions.create(**kwargs)
         choice = resp.choices[0]
         text = choice.message.content or ""
         usage = resp.usage
@@ -309,7 +332,25 @@ class _OllamaBackend(_GroqBackend):
 
 
 # ---------------------------------------------------------------------------
-# Public dispatcher
+# Backend factory
+# ---------------------------------------------------------------------------
+
+def _build_backend(provider: str, settings, timeout: float):
+    provider = (provider or "groq").lower()
+    if provider == "anthropic":
+        return _AnthropicBackend(settings.anthropic_api_key, settings.anthropic_model,
+                                 settings.anthropic_max_tokens, timeout)
+    if provider == "groq":
+        return _GroqBackend(settings.groq_api_key, settings.groq_model,
+                            settings.groq_max_tokens, timeout)
+    if provider == "ollama":
+        return _OllamaBackend(settings.ollama_base_url, settings.ollama_model,
+                              settings.ollama_max_tokens, timeout)
+    raise RuntimeError(f"Unknown LLM provider '{provider}'. Use 'groq', 'ollama' or 'anthropic'.")
+
+
+# ---------------------------------------------------------------------------
+# Public dispatcher — with retry + provider fallback for load resilience
 # ---------------------------------------------------------------------------
 
 class LLMService:
@@ -325,55 +366,138 @@ class LLMService:
         provider = (provider or settings.llm_provider or "groq").lower()
         self.provider = provider
 
+        # Primary backend (honors explicit overrides when supplied).
         if provider == "anthropic":
             self._backend: Any = _AnthropicBackend(
-                api_key=api_key or settings.anthropic_api_key,
-                model=model or settings.anthropic_model,
-                max_tokens=max_tokens or settings.anthropic_max_tokens,
-                timeout=timeout,
-            )
+                api_key or settings.anthropic_api_key, model or settings.anthropic_model,
+                max_tokens or settings.anthropic_max_tokens, timeout)
         elif provider == "groq":
             self._backend = _GroqBackend(
-                api_key=api_key or settings.groq_api_key,
-                model=model or settings.groq_model,
-                max_tokens=max_tokens or settings.groq_max_tokens,
-                timeout=timeout,
-            )
+                api_key or settings.groq_api_key, model or settings.groq_model,
+                max_tokens or settings.groq_max_tokens, timeout)
         elif provider == "ollama":
             self._backend = _OllamaBackend(
-                base_url=settings.ollama_base_url,
-                model=model or settings.ollama_model,
-                max_tokens=max_tokens or settings.ollama_max_tokens,
-                timeout=timeout,
-            )
+                settings.ollama_base_url, model or settings.ollama_model,
+                max_tokens or settings.ollama_max_tokens, timeout)
         else:
             raise RuntimeError(
-                f"Unknown LLM_PROVIDER '{provider}'. Use 'groq', 'ollama' or 'anthropic'."
-            )
+                f"Unknown LLM_PROVIDER '{provider}'. Use 'groq', 'ollama' or 'anthropic'.")
 
+        # Optional fallback backend for when the primary rate-limits / fails.
+        self._fallback = None
+        fb = (settings.llm_fallback_provider or "").lower()
+        if fb and fb != provider:
+            try:
+                self._fallback = _build_backend(fb, settings, timeout)
+                logger.info("LLM fallback provider enabled: %s", fb)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("LLM fallback '%s' unavailable: %s", fb, exc)
+                self._fallback = None
+
+        self._max_retries = max(0, int(settings.llm_max_retries))
         self.model = self._backend.model
+
+        # Per-request provider overrides, lazily built + cached by name.
+        # Lets control-plane calls (SQL gen, router) use a stronger model
+        # for one call while chat stays on the configured local provider.
+        self._timeout = timeout
+        self._overrides: Dict[str, Any] = {}
+
+    def _backend_for(self, provider: Optional[str]):
+        """Resolve the backend for an optional per-request provider override."""
+        if not provider:
+            return self._backend
+        provider = provider.lower()
+        if provider == self.provider:
+            return self._backend
+        if provider not in self._overrides:
+            self._overrides[provider] = _build_backend(provider, get_settings(), self._timeout)
+            logger.info("LLM override backend built on demand: %s", provider)
+        return self._overrides[provider]
 
     async def aclose(self) -> None:
         await self._backend.close()
+        if self._fallback:
+            try:
+                await self._fallback.close()
+            except Exception:  # noqa: BLE001
+                pass
+        for b in self._overrides.values():
+            try:
+                await b.close()
+            except Exception:  # noqa: BLE001
+                pass
 
-    async def chat(
-        self,
-        messages: List[ChatMessage],
-        generation_config: Optional[Dict[str, Any]] = None,
-    ) -> ChatResult:
-        return await self._backend.chat(messages)
+    async def _resilient(self, fn, label: str, primary=None):
+        """Run fn(backend) with backoff retries on the primary, then fail
+        over to the fallback backend once. `primary` defaults to the
+        configured backend but may be a per-request override backend."""
+        primary = primary or self._backend
+        delay = 0.8
+        last: Optional[Exception] = None
+        for attempt in range(self._max_retries + 1):
+            try:
+                return await fn(primary)
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+                if not _is_retryable(exc):
+                    raise   # e.g. bad request — failing over won't help
+                if attempt < self._max_retries:
+                    logger.warning("LLM %s: retryable error (%s); retry %d/%d in %.1fs",
+                                   label, type(exc).__name__, attempt + 1, self._max_retries, delay)
+                    await asyncio.sleep(delay)
+                    delay *= 2
+        # Primary exhausted on a retryable error (e.g. Groq 429 rate limit) →
+        # fail over once. Prefer the configured fallback; otherwise, when the
+        # failed call used a per-request override (e.g. provider=groq), fall
+        # back to the default configured backend (e.g. local Ollama) so a
+        # rate-limit degrades gracefully instead of erroring the whole turn.
+        alt = self._fallback
+        if alt is None and primary is not self._backend:
+            alt = self._backend
+        if alt is not None and alt is not primary:
+            logger.warning("LLM %s: primary exhausted (%s); failing over to %s",
+                           label, type(last).__name__, type(alt).__name__)
+            return await fn(alt)
+        raise last  # type: ignore[misc]
 
-    async def stream_chat(
-        self,
-        messages: List[ChatMessage],
-        generation_config: Optional[Dict[str, Any]] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
-        async for frame in self._backend.stream_chat(messages):
-            yield frame
+    async def chat(self, messages: List[ChatMessage], generation_config=None, provider: Optional[str] = None,
+                   temperature: Optional[float] = None, max_tokens: Optional[int] = None,
+                   model: Optional[str] = None) -> ChatResult:
+        return await self._resilient(
+            lambda b: b.chat(messages, temperature=temperature, max_tokens=max_tokens, model=model),
+            "chat", primary=self._backend_for(provider))
 
-    async def extract(
-        self,
-        prompt: str,
-        response_schema: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        return await self._backend.extract(prompt, response_schema)
+    async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
+        return await self._resilient(lambda b: b.extract(prompt, response_schema), "extract")
+
+    async def stream_chat(self, messages: List[ChatMessage], generation_config=None) -> AsyncIterator[Dict[str, Any]]:
+        # Retry / fail over only BEFORE the first token is emitted — once we've
+        # streamed text we can't safely restart without duplicating output.
+        backend = self._backend
+        attempt = 0
+        delay = 0.8
+        while True:
+            started = False
+            try:
+                async for frame in backend.stream_chat(messages):
+                    started = True
+                    yield frame
+                return
+            except Exception as exc:  # noqa: BLE001
+                if started or not _is_retryable(exc):
+                    raise
+                if attempt < self._max_retries:
+                    attempt += 1
+                    logger.warning("LLM stream: retryable pre-output error (%s); retry %d/%d",
+                                   type(exc).__name__, attempt, self._max_retries)
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                    continue
+                if self._fallback is not None and backend is self._backend:
+                    logger.warning("LLM stream: failing over to fallback provider")
+                    backend = self._fallback
+                    attempt = 0
+                    delay = 0.8
+                    continue
+                raise

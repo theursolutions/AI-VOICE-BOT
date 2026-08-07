@@ -1,0 +1,16 @@
+# MySQL REPLICA config (advanced data-tier HA — see docs/PRODUCTION_HA.md).
+# Mount at /etc/mysql/conf.d/replica.cnf on the replica instance.
+[mysqld]
+server-id                 = 2
+gtid-mode                 = ON
+enforce-gtid-consistency  = ON
+relay-log                 = relay-bin
+read-only                 = ON           # app writes only ever hit the primary
+super-read-only           = ON
+# One-time wiring (after both are up and a repl user exists on the primary):
+#   docker compose exec mysql-replica mysql -uroot -p... -e "
+#     CHANGE REPLICATION SOURCE TO
+#       SOURCE_HOST='mysql-primary', SOURCE_PORT=3306,
+#       SOURCE_USER='repl', SOURCE_PASSWORD='...',
+#       SOURCE_AUTO_POSITION=1, GET_SOURCE_PUBLIC_KEY=1;
+#     START REPLICA;"

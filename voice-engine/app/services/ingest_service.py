@@ -1,8 +1,13 @@
-"""Orchestrates extract → chunk → embed → upsert.
+"""Orchestrates extract → chunk → store for KB documents + crawled sites.
 
-Status is held in a process-local dict keyed by ``job_id`` (also keyed by
-``source_id`` for convenience). On restart the dict is cleared; Laravel
-is expected to retry/re-sync if it cares.
+Storage is now DuckDB full-text (BM25) instead of embeddings + Qdrant: we
+reuse the same parsers (``document_ingest``), crawler (``website_ingest``)
+and chunker, but accumulate the chunks and write them to the project's
+DuckDB file via :meth:`DuckStore.load_docs` (which (re)creates the
+``docs_<source_id>`` table + BM25 index). No embedding model, no vector DB.
+
+Status is held in a process-local dict keyed by ``job_id``. Cleared on
+restart; Laravel re-syncs if it cares.
 """
 
 from __future__ import annotations
@@ -16,8 +21,6 @@ from typing import Any, Dict, List, Optional
 from app.config import get_settings
 from app.services.chunker import chunk_text
 from app.services.document_ingest import parse_file
-from app.services.embedding_service import EmbeddingService
-from app.services.vector_store import VectorPoint, VectorStore
 from app.services.website_ingest import crawl_and_extract
 
 logger = logging.getLogger(__name__)
@@ -30,9 +33,6 @@ class IngestReport:
     errors: List[str] = field(default_factory=list)
 
 
-# Module-level status table. Keys are ``job_id`` strings.
-# This is intentionally global so the BackgroundTasks coroutine and the
-# /rag/status route both see the same data. Cleared on process restart.
 _STATUS: Dict[str, Dict[str, Any]] = {}
 
 
@@ -58,14 +58,12 @@ def get_status(job_id: str) -> Optional[Dict[str, Any]]:
 
 
 class IngestService:
-    """Wraps the embedding service + vector store + extractors."""
+    """Extract + chunk KB/website content into the DuckDB BM25 store."""
 
-    def __init__(self, embedding: EmbeddingService, vector_store: VectorStore) -> None:
-        self.embedding = embedding
-        self.vector_store = vector_store
+    def __init__(self, duck_store: Any) -> None:
+        self.duck = duck_store
         self._settings = get_settings()
 
-    # -- shared helpers ----------------------------------------------------
     def _chunk(self, text: str) -> List[str]:
         return chunk_text(
             text,
@@ -73,45 +71,27 @@ class IngestService:
             overlap=self._settings.rag_chunk_overlap,
         )
 
-    async def _embed_and_upsert(
-        self,
-        project_id: int,
-        source_id: int,
-        source_type: str,
-        chunks: List[str],
-        base_citation: Dict[str, Any],
-        report: IngestReport,
-    ) -> None:
-        if not chunks:
+    async def _store(self, project_id: int, source_id: int, chunks: List[Dict[str, Any]], report: IngestReport) -> None:
+        if self.duck is None:
+            report.errors.append("duck store unavailable")
             return
         try:
-            vectors = await self.embedding.embed_batch(chunks)
+            res = await asyncio.to_thread(self.duck.load_docs, project_id, source_id, chunks)
+            report.chunks_indexed = int(res.get("row_count", len(chunks)))
         except Exception as exc:  # noqa: BLE001
-            logger.exception("embedding batch failed")
-            report.errors.append(f"embedding failed: {exc}")
-            return
+            logger.exception("duck load_docs failed")
+            report.errors.append(f"store failed: {exc}")
 
-        points: List[VectorPoint] = []
-        for text, vec in zip(chunks, vectors):
-            points.append(
-                VectorPoint(
-                    id=self.vector_store.new_point_id(),
-                    vector=vec,
-                    payload={
-                        "project_id": int(project_id),
-                        "source_id": int(source_id),
-                        "source_type": source_type,
-                        "text": text,
-                        "citation": base_citation,
-                    },
-                )
-            )
-        try:
-            await asyncio.to_thread(self.vector_store.upsert, points)
-            report.chunks_indexed += len(points)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("vector upsert failed")
-            report.errors.append(f"upsert failed: {exc}")
+    def _finalize(self, status: Optional[Dict[str, Any]], report: IngestReport) -> None:
+        if status is None:
+            return
+        status["status"] = "failed" if report.errors and report.chunks_indexed == 0 else "done"
+        status["error"] = "; ".join(report.errors) if report.errors else None
+        status["errors"] = list(report.errors)
+        status["chunks_indexed"] = report.chunks_indexed
+        status["pages_processed"] = report.pages_processed
+        status["progress"] = 1.0
+        status["finished_at"] = time.time()
 
     # -- website ----------------------------------------------------------
     async def ingest_website(
@@ -126,49 +106,25 @@ class IngestService:
         depth = max_depth if max_depth is not None else self._settings.rag_crawl_max_depth
         pages_cap = max_pages if max_pages is not None else self._settings.rag_crawl_max_pages
         report = IngestReport()
-
         status = _STATUS.get(job_id) if job_id else None
         if status is not None:
             status["status"] = "running"
 
-        # Re-ingest: clear any prior vectors for this source.
-        try:
-            await asyncio.to_thread(self.vector_store.delete_by_source, source_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("delete_by_source failed (continuing)")
-            report.errors.append(f"delete_by_source failed: {exc}")
-
+        chunks: List[Dict[str, Any]] = []
         try:
             async for page in crawl_and_extract(url, max_depth=depth, max_pages=pages_cap):
                 report.pages_processed += 1
-                chunks = self._chunk(page.text)
-                await self._embed_and_upsert(
-                    project_id=project_id,
-                    source_id=source_id,
-                    source_type="website",
-                    chunks=chunks,
-                    base_citation={"url": page.url, "title": page.title},
-                    report=report,
-                )
+                for ch in self._chunk(page.text):
+                    chunks.append({"text": ch, "citation": {"url": page.url, "title": page.title}})
                 if status is not None:
                     status["pages_processed"] = report.pages_processed
-                    status["chunks_indexed"] = report.chunks_indexed
-                    status["progress"] = (
-                        min(1.0, report.pages_processed / max(pages_cap, 1))
-                    )
+                    status["progress"] = min(0.9, report.pages_processed / max(pages_cap, 1))
         except Exception as exc:  # noqa: BLE001
             logger.exception("website ingest crashed")
             report.errors.append(f"crawl failed: {exc}")
 
-        if status is not None:
-            status["status"] = "failed" if report.errors and report.chunks_indexed == 0 else "done"
-            status["error"] = "; ".join(report.errors) if report.errors else None
-            status["errors"] = list(report.errors)
-            status["chunks_indexed"] = report.chunks_indexed
-            status["pages_processed"] = report.pages_processed
-            status["progress"] = 1.0
-            status["finished_at"] = time.time()
-
+        await self._store(project_id, source_id, chunks, report)
+        self._finalize(status, report)
         return report
 
     # -- documents --------------------------------------------------------
@@ -184,53 +140,29 @@ class IngestService:
         if status is not None:
             status["status"] = "running"
 
-        try:
-            await asyncio.to_thread(self.vector_store.delete_by_source, source_id)
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("delete_by_source failed (continuing)")
-            report.errors.append(f"delete_by_source failed: {exc}")
-
+        chunks: List[Dict[str, Any]] = []
         total = max(len(files), 1)
         for idx, entry in enumerate(files, start=1):
             path = entry.get("path", "")
             original = entry.get("original_name") or path
             try:
                 async for extracted in parse_file(path, original_name=original):
-                    chunks = self._chunk(extracted.text)
-                    citation = dict(extracted.citation)
-                    await self._embed_and_upsert(
-                        project_id=project_id,
-                        source_id=source_id,
-                        source_type="document",
-                        chunks=chunks,
-                        base_citation=citation,
-                        report=report,
-                    )
+                    for ch in self._chunk(extracted.text):
+                        chunks.append({"text": ch, "citation": dict(extracted.citation)})
                 report.pages_processed += 1
             except Exception as exc:  # noqa: BLE001
                 logger.exception("document parse failed for %s", path)
                 report.errors.append(f"{original}: {exc}")
-
             if status is not None:
                 status["pages_processed"] = report.pages_processed
-                status["chunks_indexed"] = report.chunks_indexed
-                status["progress"] = idx / total
+                status["progress"] = min(0.9, idx / total)
 
-        if status is not None:
-            status["status"] = "failed" if report.errors and report.chunks_indexed == 0 else "done"
-            status["error"] = "; ".join(report.errors) if report.errors else None
-            status["errors"] = list(report.errors)
-            status["chunks_indexed"] = report.chunks_indexed
-            status["pages_processed"] = report.pages_processed
-            status["progress"] = 1.0
-            status["finished_at"] = time.time()
-
+        await self._store(project_id, source_id, chunks, report)
+        self._finalize(status, report)
         return report
 
 
 def register_job(job_id: str, source_id: int) -> Dict[str, Any]:
-    """Expose status initialisation to the route layer."""
-
     return _init_status(job_id, source_id)
 
 

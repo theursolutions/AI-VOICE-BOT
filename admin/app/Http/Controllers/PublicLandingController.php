@@ -67,6 +67,22 @@ class PublicLandingController extends Controller
             Log::warning('demo-call: failed to append capture', ['err' => $e->getMessage()]);
         }
 
+        // Persist to the central contacts table so it shows in the super-admin
+        // ops console (/admin/contacts). Best-effort — the JSONL above is the
+        // safety net, so a DB hiccup never breaks the visitor's submission.
+        try {
+            \App\Models\ContactLead::create([
+                'phone'      => $phone,
+                'source'     => 'demo_call',
+                'status'     => 'new',
+                'ip'         => $ip,
+                'user_agent' => substr((string) $request->userAgent(), 0, 255),
+                'referrer'   => substr((string) $request->headers->get('referer'), 0, 255),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('demo-call: failed to persist contact lead', ['err' => $e->getMessage()]);
+        }
+
         // If the demo-call feature flag isn't on, just say thanks and
         // queue the lead. The visitor never sees a failure.
         if (! config('services.demo_call.enabled', false)) {

@@ -85,7 +85,7 @@
             <label class="tva-form-label">Project</label>
             <select name="project_id" class="form-select w-full md:w-1/3" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
         </form>
@@ -175,7 +175,7 @@
                             @if ($voice->status === 'ready')
                                 <button type="button"
                                         class="tva-voice-play inline-flex items-center justify-center w-9 h-9 rounded-full"
-                                        data-audio-url="{{ route('voices.audio', ['client' => $client->slug, 'id' => $voice->id]) }}?project_id={{ $projectId }}"
+                                        data-audio-url="{{ route('voices.audio', ['client' => $client->slug, 'id' => $voice->id]) }}?project_id={{ hashid($projectId) }}"
                                         title="Preview voice">
                                     <i data-lucide="play" class="w-4 h-4"></i>
                                 </button>
@@ -190,7 +190,7 @@
                                 </form>
                             @endif
                             <form method="POST" action="{{ route('voices.destroy', ['client' => $client->slug, 'id' => $voice->id]) }}"
-                                  onsubmit="return confirm('Remove this voice?');">
+                                  data-confirm="Remove this voice?">
                                 @csrf
                                 @method('DELETE')
                                 <input type="hidden" name="project_id" value="{{ $projectId }}">

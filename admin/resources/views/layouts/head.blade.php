@@ -1,12 +1,14 @@
 <head>
     <meta charset="utf-8">
-    <link href="dist/images/logo.svg" rel="shortcut icon">
+    <link rel="icon" href="{{ serveai_icon() }}">
+    <link rel="shortcut icon" href="{{ serveai_icon() }}">
+    <link rel="apple-touch-icon" href="{{ serveai_icon() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="Midone admin is super flexible, powerful, clean & modern responsive tailwind admin template with unlimited possibilities.">
     <meta name="keywords" content="admin template, Midone Admin Template, dashboard template, flat admin template, responsive admin template, web app">
     <meta name="author" content="LEFT4CODE">
     <meta name="csrf-token" id="csrf-token" content="{{ csrf_token() }}">
-    <title>Ai NueraBot</title>
+    <title>{{ tva_setting('content.brand_name', 'Serve AI') }}</title>
     <!-- BEGIN: CSS Assets-->
     <link rel="stylesheet" href="{{url('/assets/dist/css/app.css')}}" />
     <!-- END: CSS Assets-->
@@ -84,5 +86,61 @@
         @media (max-width: 540px) {
             .content { padding-left: 12px !important; padding-right: 12px !important; }
         }
+
+        /* ── Beautiful native file inputs, project-wide ──────────────────
+           Restyles every <input type="file"> and its "Choose file" button
+           so the default OS control matches the admin theme. Pure CSS, no
+           JS, stays fully accessible + keyboard-friendly. The selectors
+           include `.form-control` to out-specify the theme's input class,
+           and inline `display:none` (used by custom upload zones such as
+           Voices) still wins, so hidden inputs stay hidden. */
+        input[type="file"]:not(.hidden),
+        input[type="file"].form-control:not(.hidden) {
+            display: block;
+            width: 100%;
+            font-size: 13px;
+            color: #64748b;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 6px;
+            cursor: pointer;
+            transition: border-color .15s, box-shadow .15s;
+        }
+        input[type="file"]:not(.hidden):hover { border-color: var(--tva-primary, #6366f1); }
+        input[type="file"]:not(.hidden):focus,
+        input[type="file"]:not(.hidden):focus-visible {
+            outline: none;
+            border-color: var(--tva-primary, #6366f1);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, .18);
+        }
+        input[type="file"]::file-selector-button,
+        input[type="file"]::-webkit-file-upload-button {
+            margin-right: 14px;
+            padding: 8px 16px;
+            border: 0;
+            border-radius: 8px;
+            background: var(--tva-gradient, linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%));
+            color: #fff;
+            font-weight: 600;
+            font-size: 13px;
+            letter-spacing: .01em;
+            cursor: pointer;
+            transition: filter .15s, transform .05s, box-shadow .15s;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+        }
+        input[type="file"]::file-selector-button:hover { filter: brightness(1.08); }
+        input[type="file"]::-webkit-file-upload-button:hover { filter: brightness(1.08); }
+        input[type="file"]::file-selector-button:active { transform: translateY(1px); }
+        html.dark input[type="file"]:not(.hidden),
+        html.dark input[type="file"].form-control:not(.hidden) {
+            background: #1b2433;
+            border-color: #334155;
+            color: #94a3b8;
+        }
+        html.dark input[type="file"]:not(.hidden):hover { border-color: var(--tva-primary, #818cf8); }
     </style>
+
+    {{-- Themed alert/confirm system (replaces native alert()/confirm()). --}}
+    @include('partials.sweet-alert')
 </head>

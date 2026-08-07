@@ -1,0 +1,50 @@
+# Line-ending policy.
+#
+# This repo is developed on Windows (core.autocrlf=true) but every deployment
+# artefact is consumed by Linux. A CRLF shell script fails on Linux with the
+# infamous "bash\r: No such file or directory", and a CRLF config file can be
+# parsed wrongly or silently ignored. So force LF on everything the server runs,
+# regardless of each developer's local git settings.
+
+# Sensible default: let git decide for text, normalise to LF in the repo.
+* text=auto eol=lf
+
+# ── MUST be LF: executed or parsed on Linux ─────────────────────────────────
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+.dockerignore   text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.cfg           text eol=lf
+*.conf          text eol=lf
+*.cnf           text eol=lf
+*.ini           text eol=lf
+Caddyfile       text eol=lf
+*.sql           text eol=lf
+*.py            text eol=lf
+*.php           text eol=lf
+.env.example    text eol=lf
+*.env.example   text eol=lf
+
+# ── Binary: never touch ─────────────────────────────────────────────────────
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.eot    binary
+*.pdf    binary
+*.pptx   binary
+*.xlsx   binary
+*.zip    binary
+*.gz     binary
+*.wav    binary
+*.mp3    binary
+*.pth    binary
+*.bin    binary
+*.safetensors binary
+*.duckdb binary

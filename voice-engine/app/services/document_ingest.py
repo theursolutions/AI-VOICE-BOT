@@ -1,6 +1,6 @@
 """Parse uploaded documents into ``ExtractedChunk`` records.
 
-Supported extensions: ``.pdf``, ``.docx``, ``.csv``, ``.txt``, ``.json``.
+Supported extensions: ``.pdf``, ``.docx``, ``.csv``, ``.txt``, ``.json``, ``.xlsx``, ``.xls``.
 
 KNOWN LIMITATION: this module reads from a local absolute filesystem
 path. For the MVP, Laravel and the voice-engine share the same Windows
@@ -177,12 +177,51 @@ def _parse_json_sync(path: str, original_name: str) -> list[ExtractedChunk]:
     return out
 
 
+def _parse_xlsx_sync(path: str, original_name: str) -> list[ExtractedChunk]:
+    """Parse an Excel workbook — every row of every sheet becomes a
+    ``col: val | col: val`` chunk, same shape as CSV/JSON rows so the
+    embedder indexes them identically. Requires pandas + openpyxl."""
+    import pandas as pd  # heavy; lazy import
+    try:
+        sheets = pd.read_excel(path, sheet_name=None, dtype=str)
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"could not read Excel file: {exc}") from exc
+
+    out: list[ExtractedChunk] = []
+    for sheet_name, df in sheets.items():
+        df = df.fillna("")
+        cols = [str(c).strip() for c in df.columns]
+        for i, (_, row) in enumerate(df.iterrows(), start=1):
+            parts = []
+            for col, val in zip(cols, row.tolist()):
+                sval = str(val).strip()
+                if col and sval:
+                    parts.append(f"{col}: {sval}")
+            text = " | ".join(parts)
+            if not text.strip():
+                continue
+            out.append(
+                ExtractedChunk(
+                    text=text,
+                    citation={
+                        "file_path": path,
+                        "original_name": original_name,
+                        "sheet": str(sheet_name),
+                        "row": i,
+                    },
+                )
+            )
+    return out
+
+
 _PARSERS = {
     ".pdf":  _parse_pdf_sync,
     ".docx": _parse_docx_sync,
     ".csv":  _parse_csv_sync,
     ".txt":  _parse_txt_sync,
     ".json": _parse_json_sync,
+    ".xlsx": _parse_xlsx_sync,
+    ".xls":  _parse_xlsx_sync,
 }
 
 

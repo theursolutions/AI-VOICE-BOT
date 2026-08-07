@@ -6,7 +6,7 @@
         <!-- BEGIN: Register Info -->
         <div class="hidden xl:flex flex-col min-h-screen">
             <a href="" class="-intro-x flex items-center pt-5">
-                <img alt="Midone - HTML Admin Template" class="w-6" src="{{url('/assets/dist/images/logo.svg')}}">
+                <img alt="Midone - HTML Admin Template" class="w-6" src="{{serveai_icon()}}">
                 <span class="text-white text-lg ml-3">  NeuraBot </span> 
             </a>
             <div class="my-auto">
@@ -73,6 +73,8 @@
                         <button type="submit" class="btn btn-primary py-3 px-4 w-full xl:w-32 xl:mr-3 align-top">Register</button>
                         <a href="{{url('/login')}}" class="btn btn-outline-secondary py-3 px-4 w-full xl:w-32 mt-3 xl:mt-0 align-top">Sign in</a>
                     </div>
+
+                    @include('auth.partials.social-buttons')
                 </div>
             </form>
         </div>

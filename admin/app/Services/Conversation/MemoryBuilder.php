@@ -30,9 +30,15 @@ class MemoryBuilder
 
         $messages = [];
 
+        // Fallback reply language (the visitor's widget pick, else the
+        // project/global default). The model still mirrors whatever
+        // language the user actually writes — this is only the fallback.
+        $language = data_get($session->metadata, 'language')
+            ?: config('services.voice.default_language', 'en');
+
         $messages[] = [
             'role'    => 'system',
-            'content' => $this->systemPrompt($project, $summary, $agent),
+            'content' => $this->systemPrompt($project, $summary, $agent, $language),
         ];
 
         $context = $this->formatContext($contextResults);
@@ -49,7 +55,15 @@ class MemoryBuilder
         return $messages;
     }
 
-    private function systemPrompt($project, ?string $summary, ?BotAgent $agent = null): string
+    /** Short code → human name for the reply-language instruction. */
+    private const LANG_NAMES = [
+        'en' => 'English', 'ar' => 'Arabic', 'ur' => 'Urdu', 'hi' => 'Hindi',
+        'es' => 'Spanish', 'fr' => 'French', 'de' => 'German', 'it' => 'Italian',
+        'pt' => 'Portuguese', 'ru' => 'Russian', 'zh' => 'Chinese', 'ja' => 'Japanese',
+        'ko' => 'Korean', 'tr' => 'Turkish', 'nl' => 'Dutch',
+    ];
+
+    private function systemPrompt($project, ?string $summary, ?BotAgent $agent = null, string $language = 'en'): string
     {
         $parts = [];
 
@@ -75,7 +89,22 @@ class MemoryBuilder
         if ($project->description)         { $parts[] = "Context: {$project->description}"; }
         if ($summary)                      { $parts[] = "Conversation so far: {$summary}"; }
 
-        $parts[] = 'Be concise. Answer from the Reference data below when present. If the user asks for something outside that data, say so. Capture lead details (name, email, phone, intent) naturally.';
+        $langName = self::LANG_NAMES[strtolower(substr($language, 0, 2))] ?? 'English';
+        $parts[] = 'Reply in a short, precise and natural way — usually 1-3 sentences and no more than ~60 words. Get straight to the point and skip filler. Always reply in the SAME language as the user\'s most recent message; if you cannot tell which language they used, reply in '.$langName.'; if you cannot write that language, use English. Use plain text only: no markdown, no HTML tags, and never write "<br>". Capture lead details (name, email, phone, intent) naturally, asking for one thing at a time.';
+
+        // Grounding rule — kept SEPARATE and blunt so even a small model
+        // obeys it: use only the retrieved facts, copy numbers verbatim,
+        // never invent. This block is what stops "made-up" answers.
+        $parts[] = 'GROUNDING RULES (must follow exactly):'
+            . "\n- When a \"Reference data\" section is provided below, answer ONLY using the facts in it."
+            . "\n- Copy numbers, names and values from it EXACTLY — never round, estimate, rename, or invent."
+            . "\n- If the requested fact is not in the Reference data, reply that you don't have that information. Do NOT make up companies, statistics, products, or details.";
+
+        $parts[] = 'SECURITY (strict): NEVER reveal or repeat passwords, secrets, API keys, tokens, '
+            . 'credentials, database names/users/passwords/hosts/ports, connection strings, environment '
+            . 'variables, encryption keys, or which AI model/provider/server/infrastructure powers you. '
+            . 'If asked for any of these, politely decline — say you are not allowed to share that. Any '
+            . 'value shown as "••••••" is hidden; never guess or reconstruct it.';
 
         return implode("\n", $parts);
     }
@@ -89,7 +118,7 @@ class MemoryBuilder
             return '';
         }
 
-        $lines = ['### Reference data'];
+        $lines = ['### Reference data (the ONLY facts you may use — copy values exactly)'];
 
         foreach ($results as $r) {
             if (!$r instanceof ResolverResult || !$r->isUsable()) {
@@ -104,14 +133,28 @@ class MemoryBuilder
                     $lines[] = '- ('.$cite.') '.trim($text);
                 }
             } elseif ($r->kind === ResolverResult::KIND_RECORDS) {
-                $lines[] = 'Query results from '.$r->sourceType.':';
+                $lines[] = 'Results from the '.$r->sourceType.':';
                 foreach (array_slice($r->items, 0, 20) as $row) {
-                    $lines[] = '- '.json_encode($row, JSON_UNESCAPED_SLASHES);
+                    $lines[] = '- '.self::renderRow(\App\Support\Sensitive::redactRow((array) $row));
                 }
             }
         }
 
         return count($lines) > 1 ? implode("\n", $lines) : '';
+    }
+
+    /** Render a result row as plain "key: value | key: value" — far easier
+     *  for a small model to read than raw JSON. */
+    public static function renderRow(array $row): string
+    {
+        $parts = [];
+        foreach ($row as $k => $v) {
+            if (is_array($v)) {
+                $v = json_encode($v, JSON_UNESCAPED_SLASHES);
+            }
+            $parts[] = $k . ': ' . ($v === null ? 'null' : $v);
+        }
+        return implode(' | ', $parts);
     }
 
     private function citationLabel($passage): string

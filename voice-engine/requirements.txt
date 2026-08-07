@@ -18,7 +18,11 @@ faster-whisper>=1.0
 webrtcvad>=2.0.10
 
 # --- TTS (Coqui XTTS-v2) ---
-TTS>=0.22
+# Use the maintained community fork (importable as `TTS`, same XTTS code paths).
+# The original `TTS` 0.22.0 is unmaintained and pins pandas<2.0, which conflicts
+# with pandas>=2.0 below. coqui-tts allows pandas 2.x and Python 3.11/3.12, and
+# matches the version running in voice-engine/.venv (coqui-tts 0.27.5).
+coqui-tts>=0.27.5,<0.28
 torch>=2.1
 torchaudio>=2.1
 soundfile>=0.12
@@ -26,12 +30,26 @@ librosa>=0.10
 numpy>=1.22
 
 # --- RAG / ingestion ---
-qdrant-client>=1.9
+# NOTE: qdrant-client was removed — the vector store is retired in favour of the
+# DuckDB layer below (see app/api/http.py, which pins vector_store to None).
 google-generativeai>=0.7
 trafilatura>=1.10
 pypdf>=4.2
 python-docx>=1.1
 pandas>=2.0
+openpyxl>=3.1
+xlrd>=2.0
+# Data-snapshot → SQL loader (auto-tabulate uploads for text-to-SQL).
+pymysql>=1.1
+# Unified local store: per-project file, SQL for snapshots + BM25 FTS for
+# KB/crawler text. Replaces the Qdrant vector store + embedding model.
+duckdb>=1.1
+
+# --- WhatsApp Business Calling (WebRTC media bridge) — optional ---
+# Only needed for the live WhatsApp voice-call channel. The app boots
+# fine without these; the /whatsapp/call/* routes just won't mount.
+aiortc>=1.9
+av>=11.0
 
 # --- Misc ---
 requests>=2.31

@@ -81,6 +81,10 @@ class ChatController
             'customer_email' => $payload['customer_email'] ?? null,
             'metadata'       => $metadata,
         ];
+        // Visitor's language pick from the widget header dropdown.
+        if (!empty($payload['language'])) {
+            $body['language'] = $payload['language'];
+        }
         if (!empty($payload['external_id'])) {
             $body['external_id'] = $payload['external_id'];
         }

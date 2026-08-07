@@ -104,7 +104,7 @@
                 <label class="form-label">Answer calls with this conversation flow</label>
                 @if (($flows ?? collect())->isEmpty())
                     <div class="text-sm text-slate-500 p-3 bg-slate-50 rounded border border-slate-200">
-                        No active flows yet. <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ $project->id }}" class="text-primary">Build one in the Flow Builder</a> (set status to <b>active</b> to make it bindable).
+                        No active flows yet. <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ hashid($project->id) }}" class="text-primary">Build one in the Flow Builder</a> (set status to <b>active</b> to make it bindable).
                     </div>
                 @else
                     <select name="flow_id" class="form-select">

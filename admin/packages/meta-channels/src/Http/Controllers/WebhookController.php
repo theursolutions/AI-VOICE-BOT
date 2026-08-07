@@ -1,0 +1,295 @@
+<?php
+
+namespace Msd\MetaChannels\Http\Controllers;
+
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
+use Msd\MetaChannels\Contracts\HandlesInboundCall;
+use Msd\MetaChannels\Jobs\ProcessInboundMessage;
+use Msd\MetaChannels\MetaManager;
+use Msd\MetaChannels\Models\ChannelConnection;
+use Msd\MetaChannels\Services\GraphClient;
+use Msd\MetaChannels\Support\InboundCall;
+use Msd\MetaChannels\Support\InboundMessage;
+
+/**
+ * Single Meta webhook for WhatsApp. Handles BOTH messaging (value.messages)
+ * and calling (value.calls) — Meta delivers both on the same callback URL.
+ */
+class WebhookController
+{
+    public function __construct(private MetaManager $meta) {}
+
+    /** Verification handshake (Meta calls this once when you save the URL). */
+    public function verify(Request $request): Response
+    {
+        $expected  = $this->meta->verifyToken();
+        // PHP rewrites dotted query keys: hub.mode → hub_mode.
+        $mode      = (string) $request->input('hub_mode');
+        $token     = (string) $request->input('hub_verify_token');
+        $challenge = (string) $request->input('hub_challenge');
+
+        if ($mode === 'subscribe' && $expected !== '' && hash_equals($expected, $token)) {
+            return response($challenge, 200)->header('Content-Type', 'text/plain');
+        }
+        Log::warning('MetaChannels webhook verify failed', ['mode' => $mode]);
+        return response('Forbidden', 403);
+    }
+
+    public function webhook(Request $request): JsonResponse
+    {
+        if (!$this->meta->signatureValid($request->getContent(), (string) $request->header('X-Hub-Signature-256', ''))) {
+            Log::warning('MetaChannels webhook: invalid signature');
+            return response()->json(['error' => 'invalid signature'], 403);
+        }
+        if (config('meta.whatsapp.app_secret') === null || config('meta.whatsapp.app_secret') === '') {
+            Log::notice('MetaChannels webhook: no app_secret — signature check skipped.');
+        }
+
+        $payload = $request->json()->all();
+        $object  = (string) data_get($payload, 'object');
+
+        foreach (data_get($payload, 'entry', []) as $entry) {
+            if ($object === 'whatsapp_business_account') {
+                $this->handleWhatsappEntry($entry);
+            } elseif ($object === 'instagram') {
+                $this->handleMessengerEntry($entry, ChannelConnection::PROVIDER_INSTAGRAM);
+            } elseif ($object === 'page') {
+                $this->handleMessengerEntry($entry, ChannelConnection::PROVIDER_FACEBOOK_PAGE);
+            }
+        }
+
+        return response()->json(['received' => true]);
+    }
+
+    /** WhatsApp Cloud API: entry[].changes[].value.{messages|calls}. */
+    private function handleWhatsappEntry(array $entry): void
+    {
+        foreach (data_get($entry, 'changes', []) as $change) {
+            $value = $change['value'] ?? [];
+            $phoneNumberId = (string) data_get($value, 'metadata.phone_number_id');
+            if ($phoneNumberId === '') {
+                continue;
+            }
+            $conn = $this->meta->resolveWhatsappConnection($phoneNumberId);
+            if (!$conn) {
+                Log::warning('MetaChannels: inbound for unknown/disabled number', ['phone_number_id' => $phoneNumberId]);
+                continue;
+            }
+            if (!empty($value['calls'])) {
+                $this->handleCalls($value['calls'], $phoneNumberId, $conn);
+            }
+            if (!empty($value['messages'])) {
+                $this->handleMessages($value, $phoneNumberId, $conn);
+            }
+        }
+    }
+
+    /**
+     * Messenger Platform (Facebook Page + Instagram): entry[].messaging[].
+     * Each event: {sender:{id PSID/IGSID}, recipient:{id page/ig}, message:{mid, text, is_echo?}}.
+     */
+    private function handleMessengerEntry(array $entry, string $provider): void
+    {
+        foreach (data_get($entry, 'messaging', []) as $event) {
+            // Skip echoes of our own sends, delivery/read receipts, reactions.
+            if (data_get($event, 'message.is_echo')) {
+                continue;
+            }
+            $text = (string) data_get($event, 'message.text', '');
+            $attachments = [];
+            foreach (data_get($event, 'message.attachments', []) as $att) {
+                $url = (string) data_get($att, 'payload.url', '');
+                if ($url === '') {
+                    continue;
+                }
+                $t = (string) ($att['type'] ?? 'file');
+                $attachments[] = [
+                    'type' => $t === 'file' ? 'document' : $t,  // image|audio|video|document
+                    'url'  => $url,
+                ];
+            }
+            if (trim($text) === '' && empty($attachments)) {
+                continue; // delivery/read receipt, reaction, etc.
+            }
+
+            $mid = (string) data_get($event, 'message.mid', '');
+            if ($mid !== '' && !Cache::add('meta:msg:' . $mid, 1, now()->addHours(6))) {
+                continue;
+            }
+
+            $psid  = (string) data_get($event, 'sender.id', '');
+            $bizId = (string) (data_get($event, 'recipient.id') ?: ($entry['id'] ?? ''));
+            if ($psid === '' || $bizId === '') {
+                continue;
+            }
+
+            $conn = $this->meta->resolveConnection($provider, $bizId);
+            if (!$conn) {
+                Log::warning('MetaChannels: inbound for unknown/disabled channel', [
+                    'provider' => $provider, 'biz_id' => $bizId,
+                ]);
+                continue;
+            }
+
+            ProcessInboundMessage::dispatch(new InboundMessage(
+                projectId:         (int) $conn->project_id,
+                provider:          $provider,
+                channelExternalId: $bizId,
+                from:              $psid,
+                senderName:        null,
+                text:              $text,
+                messageId:         $mid ?: null,
+                accessToken:       $conn->access_token ?: null,
+                attachments:       $attachments,
+            ));
+        }
+    }
+
+    private function handleMessages(array $value, string $phoneNumberId, ChannelConnection $conn): void
+    {
+        $names = [];
+        foreach (data_get($value, 'contacts', []) as $c) {
+            $names[(string) data_get($c, 'wa_id')] = data_get($c, 'profile.name');
+        }
+
+        foreach ($value['messages'] as $msg) {
+            $waId = (string) ($msg['id'] ?? '');
+            if ($waId !== '' && !Cache::add('meta:msg:' . $waId, 1, now()->addHours(6))) {
+                continue; // dedup re-deliveries
+            }
+            $from = (string) ($msg['from'] ?? '');
+            if ($from === '') {
+                continue;
+            }
+
+            [$text, $attachments] = $this->parseWhatsAppContent((string) ($msg['type'] ?? ''), $msg);
+            if (trim($text) === '' && empty($attachments)) {
+                continue; // unsupported type (location, reaction, etc.)
+            }
+
+            ProcessInboundMessage::dispatch(new InboundMessage(
+                projectId:         (int) $conn->project_id,
+                provider:          ChannelConnection::PROVIDER_WHATSAPP,
+                channelExternalId: $phoneNumberId,
+                from:              $from,
+                senderName:        $names[$from] ?? null,
+                text:              $text,
+                messageId:         $waId ?: null,
+                accessToken:       $conn->access_token ?: null,
+                attachments:       $attachments,
+            ));
+        }
+    }
+
+    /**
+     * Split a WhatsApp message into [text, attachments]. Media messages
+     * carry a media id we resolve+download later; their caption (if any)
+     * becomes the text.
+     *
+     * @return array{0:string, 1:array}
+     */
+    private function parseWhatsAppContent(string $type, array $msg): array
+    {
+        if ($type === 'text') {
+            return [(string) data_get($msg, 'text.body', ''), []];
+        }
+        $media = ['image', 'audio', 'voice', 'video', 'document', 'sticker'];
+        if (in_array($type, $media, true)) {
+            $node = $msg[$type] ?? [];
+            return [
+                (string) ($node['caption'] ?? ''),
+                [[
+                    'type'     => $type === 'voice' ? 'audio' : $type,
+                    'media_id' => $node['id'] ?? null,
+                    'mime'     => $node['mime_type'] ?? null,
+                    'filename' => $node['filename'] ?? null,
+                    'caption'  => $node['caption'] ?? null,
+                ]],
+            ];
+        }
+
+        // Replies to interactive messages we sent: button taps, list picks,
+        // and WhatsApp Flow form submissions. Surfacing these as text means
+        // the bot/agent (and the order tool) actually see the customer's
+        // choice / captured data.
+        if ($type === 'interactive') {
+            $i  = $msg['interactive'] ?? [];
+            $it = $i['type'] ?? '';
+            if ($it === 'button_reply') {
+                return [(string) data_get($i, 'button_reply.title', ''), []];
+            }
+            if ($it === 'list_reply') {
+                return [trim((string) data_get($i, 'list_reply.title', '') . ' ' . (string) data_get($i, 'list_reply.description', '')), []];
+            }
+            if ($it === 'nfm_reply') {   // Flow form submission
+                $raw = data_get($i, 'nfm_reply.response_json');
+                $decoded = is_string($raw) ? json_decode($raw, true) : (is_array($raw) ? $raw : null);
+                $text = 'Form submitted';
+                if (is_array($decoded)) {
+                    $pairs = [];
+                    foreach ($decoded as $k => $v) {
+                        if ($k === 'flow_token') continue;
+                        $pairs[] = $k . ': ' . (is_scalar($v) ? $v : json_encode($v));
+                    }
+                    if ($pairs) {
+                        $text = 'Form submitted — ' . implode(', ', $pairs);
+                    }
+                }
+                return [$text, [['type' => 'flow_reply', 'data' => $decoded]]];
+            }
+        }
+        return ['', []];
+    }
+
+    private function handleCalls(array $calls, string $phoneNumberId, ChannelConnection $conn): void
+    {
+        $handler = app(HandlesInboundCall::class);
+        $graph   = new GraphClient($conn->access_token ?: null);
+
+        foreach ($calls as $call) {
+            $callId = (string) ($call['id'] ?? '');
+            $event  = (string) ($call['event'] ?? '');
+            if ($callId === '') {
+                continue;
+            }
+
+            if ($event === 'terminate') {
+                $handler->onTerminate($callId);
+                continue;
+            }
+
+            if ($event !== 'connect') {
+                continue;
+            }
+
+            $sdpOffer = (string) data_get($call, 'session.sdp', '');
+            if ($sdpOffer === '') {
+                Log::warning('MetaChannels: call connect without SDP', ['call_id' => $callId]);
+                continue;
+            }
+
+            $answer = $handler->answer(new InboundCall(
+                projectId:         (int) $conn->project_id,
+                callId:            $callId,
+                channelExternalId: $phoneNumberId,
+                from:              (string) ($call['from'] ?? ''),
+                sdpOffer:          $sdpOffer,
+                accessToken:       $conn->access_token ?: null,
+            ));
+
+            if ($answer === null || trim($answer) === '') {
+                $graph->rejectCall($phoneNumberId, $callId);
+                continue;
+            }
+
+            // pre_accept warms the media path; accept finalises. Both carry
+            // the answer. pre_accept failure is non-fatal.
+            $graph->answerCall($phoneNumberId, $callId, 'pre_accept', $answer);
+            $graph->answerCall($phoneNumberId, $callId, 'accept', $answer);
+        }
+    }
+}

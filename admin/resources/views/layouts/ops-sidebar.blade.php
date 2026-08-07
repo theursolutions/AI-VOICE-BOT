@@ -13,8 +13,8 @@
 
 <nav class="side-nav">
     <a href="{{ route('ops.overview') }}" class="intro-x flex items-center pl-5 pt-4">
-        <img alt="NueraBot Ops" class="w-6" src="{{ url('/assets/dist/images/logo.svg') }}">
-        <span class="hidden xl:block text-white text-lg ml-3">NueraBot</span>
+        <img alt="Serve AI Ops" class="w-6" src="{{ serveai_icon() }}">
+        <span class="hidden xl:block text-white text-lg ml-3">Serve AI</span>
         <span class="hidden xl:inline-block ops-internal-badge ml-2">Internal</span>
     </a>
     <div class="side-nav__devider my-6"></div>
@@ -87,6 +87,35 @@
             <a href="{{ route('ops.users.index') }}" class="side-menu {{ $is('ops.users.*') ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="users"></i></div>
                 <div class="side-menu__title">Users</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.modules.index') }}" class="side-menu {{ $is('ops.modules.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="toggle-right"></i></div>
+                <div class="side-menu__title">Modules</div>
+            </a>
+        </li>
+
+        <li class="side-nav__devider my-4"></li>
+        <li class="side-menu__title-section">
+            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Marketing Site</div>
+        </li>
+        <li>
+            <a href="{{ route('ops.contacts.index') }}" class="side-menu {{ $is('ops.contacts.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="phone-incoming"></i></div>
+                <div class="side-menu__title">Website Contacts</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.seo.index') }}" class="side-menu {{ $is('ops.seo.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="search"></i></div>
+                <div class="side-menu__title">SEO</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.content.index') }}" class="side-menu {{ $is('ops.content.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="layout-template"></i></div>
+                <div class="side-menu__title">Page Content</div>
             </a>
         </li>
 

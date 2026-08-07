@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\DataSource;
 use App\Models\Project;
 use App\Models\Skill;
 use App\Services\Tenant\TenantManager;
@@ -29,7 +30,9 @@ class SkillWebController extends Controller
         $projectId = (int) ($request->query('project_id') ?: optional($projects->first())->id);
         $project = $projects->firstWhere('id', $projectId);
 
-        $skills = collect();
+        $skills       = collect();
+        $webhookTools = collect();
+        $skillActions = [];   // skill_id => int[] linked data_source ids
         if ($project) {
             $this->tenants->useFor($project);
             $skills = Skill::where('project_id', $project->id)
@@ -37,11 +40,85 @@ class SkillWebController extends Controller
                 ->orderByDesc('is_default')
                 ->orderBy('name')
                 ->get();
+
+            // Webhook "action" tools available in this project (app DB).
+            $webhookTools = DataSource::where('project_id', $project->id)
+                ->where('type', DataSource::TYPE_WEBHOOK)
+                ->orderBy('name')
+                ->get(['id', 'name', 'status']);
+
+            // Pre-select the actions each skill already grants.
+            foreach ($skills as $sk) {
+                $skillActions[$sk->id] = $sk->actionIds();
+            }
         }
 
+        $toolTemplates = config('tool_templates', []);
+
         return view('skills.index', compact(
-            'client', 'projects', 'project', 'projectId', 'skills'
+            'client', 'projects', 'project', 'projectId',
+            'skills', 'webhookTools', 'skillActions', 'toolTemplates'
         ));
+    }
+
+    /**
+     * Create a webhook tool from a prebuilt library template
+     * (config/tool_templates.php) and link it to this skill in one step.
+     * The template supplies name/intent/method/args; the user supplies
+     * only the endpoint URL + auth.
+     */
+    public function addActionFromTemplate(Request $request, Client $client, int $id): RedirectResponse
+    {
+        $data = $request->validate([
+            'project_id'   => 'required|integer',
+            'template_key' => 'required|string',
+            'name'         => 'nullable|string|max:120',
+            'url'          => 'required|url|max:2048',
+            'auth_type'    => 'nullable|in:none,bearer,basic,api_key,header',
+            'auth_value'   => 'nullable|string|max:1024',
+            'auth_header'  => 'nullable|string|max:120',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        $skill = Skill::findOrFail($id);
+        abort_unless((int) $skill->project_id === $project->id, 404);
+
+        $template = collect(config('tool_templates', []))
+            ->firstWhere('key', $data['template_key']);
+        abort_unless($template, 404, 'Unknown tool template.');
+
+        $authValue = $data['auth_value'] ?? null;
+        if ($authValue !== null && $authValue !== '') {
+            $authValue = \Illuminate\Support\Facades\Crypt::encryptString($authValue);
+        }
+
+        $now    = time();
+        $source = DataSource::create([
+            'project_id' => $project->id,
+            'type'       => DataSource::TYPE_WEBHOOK,
+            'name'       => $data['name'] ?: $template['name'],
+            'config'     => [
+                'url'         => $data['url'],
+                'method'      => strtoupper($template['method'] ?? 'GET'),
+                'when_to_use' => $template['when_to_use'] ?? '',
+                'auth_type'   => $data['auth_type'] ?? ($template['auth_type'] ?? 'none'),
+                'auth_value'  => $authValue,
+                'auth_header' => $data['auth_header'] ?? null,
+                'args'        => is_array($template['args'] ?? null) ? $template['args'] : [],
+                'from_template' => $template['key'],
+            ],
+            'status'     => DataSource::STATUS_ACTIVE,
+            'created_at' => $now,
+            'update_at'  => $now,
+        ]);
+
+        // Append to the skill's existing actions (don't clobber them).
+        $skill->syncActions(array_merge($skill->actionIds(), [$source->id]));
+
+        return back()
+            ->withInput(['project_id' => $project->id])
+            ->with('success', "Added \"{$source->name}\" to skill \"{$skill->name}\".");
     }
 
     public function store(Request $request, Client $client): RedirectResponse
@@ -52,6 +129,8 @@ class SkillWebController extends Controller
             'description' => 'nullable|string|max:500',
             'sla_seconds' => 'nullable|integer|min:0',
             'is_default'  => 'nullable|boolean',
+            'action_ids'   => 'nullable|array',
+            'action_ids.*' => 'integer',
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
@@ -62,7 +141,7 @@ class SkillWebController extends Controller
         }
 
         $now = time();
-        Skill::create([
+        $skill = Skill::create([
             'project_id'  => $project->id,
             'name'        => $data['name'],
             'description' => $data['description'] ?? null,
@@ -72,6 +151,9 @@ class SkillWebController extends Controller
             'created_at'  => $now,
             'update_at'   => $now,
         ]);
+
+        // Actions (webhook tools) this skill grants.
+        $skill->syncActions($this->validActionIds($project->id, $data['action_ids'] ?? []));
 
         return back()
             ->withInput(['project_id' => $project->id])
@@ -87,6 +169,8 @@ class SkillWebController extends Controller
             'sla_seconds' => 'nullable|integer|min:0',
             'is_default'  => 'nullable|boolean',
             'status'      => 'required|in:active,archived',
+            'action_ids'   => 'nullable|array',
+            'action_ids.*' => 'integer',
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
@@ -109,6 +193,8 @@ class SkillWebController extends Controller
             'update_at'   => time(),
         ]);
 
+        $skill->syncActions($this->validActionIds($project->id, $data['action_ids'] ?? []));
+
         return back()
             ->withInput(['project_id' => $project->id])
             ->with('success', "Skill \"{$skill->name}\" updated.");
@@ -128,6 +214,27 @@ class SkillWebController extends Controller
         return back()
             ->withInput(['project_id' => $project->id])
             ->with('success', "Skill \"{$name}\" deleted.");
+    }
+
+    /**
+     * Keep only IDs that are genuinely webhook tools in this project —
+     * stops a tampered form from linking another project's data source.
+     *
+     * @param  int[]  $ids
+     * @return int[]
+     */
+    private function validActionIds(int $projectId, array $ids): array
+    {
+        if (empty($ids)) {
+            return [];
+        }
+
+        return DataSource::where('project_id', $projectId)
+            ->where('type', DataSource::TYPE_WEBHOOK)
+            ->whereIn('id', array_map('intval', $ids))
+            ->pluck('id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
     }
 
     private function guard(Client $client, int $projectId): Project

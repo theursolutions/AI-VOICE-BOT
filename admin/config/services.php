@@ -44,6 +44,51 @@ return [
         'internal_secret' => env('PYTHON_INTERNAL_SECRET'),
         'jwt_secret'      => env('PYTHON_JWT_SECRET'),
         'token_ttl'       => (int) env('PYTHON_TOKEN_TTL', 3600),
+        // Control-plane reasoning model (text-to-SQL, source router, tool
+        // picker). These tasks need a capable model even when chat runs on
+        // a small local model. Empty = use the server's chat LLM_PROVIDER.
+        // Only the question + table/column NAMES are sent here — never the
+        // row data (chat + SQL execution stay on the configured providers).
+        'reasoning_provider' => env('LLM_REASONING_PROVIDER', ''),
+        // Optional model override for those reasoning calls. Lets chat stay on
+        // a fast small model (e.g. llama3.2:1b) while SQL/routing run on a
+        // capable local one (e.g. qwen2.5:7b) — all on Ollama, no cloud. Empty
+        // = use the provider's configured default model.
+        'reasoning_model' => env('LLM_REASONING_MODEL', ''),
+    ],
+
+    // Where auto-tabulated data-snapshot uploads (CSV/XLSX/JSON) are
+    // materialised as SQL tables so they can be queried with text-to-SQL
+    // instead of semantic RAG. Defaults to the app's own MySQL server, in
+    // a dedicated database. One table per snapshot (snap_<project>_<source>).
+    'snapshot_db' => [
+        'host'     => env('SNAPSHOT_DB_HOST', env('DB_HOST', '127.0.0.1')),
+        'port'     => (int) env('SNAPSHOT_DB_PORT', env('DB_PORT', 3306)),
+        'name'     => env('SNAPSHOT_DB_NAME', 'ai_crm_snapshots'),
+        'user'     => env('SNAPSHOT_DB_USER', env('DB_USERNAME', 'root')),
+        'password' => env('SNAPSHOT_DB_PASSWORD', env('DB_PASSWORD', '')),
+    ],
+
+    // Meta WhatsApp/Instagram/Facebook config now lives in the
+    // msd/meta-channels package (config/meta.php, key: `meta`).
+
+    // Laravel Socialite — Facebook driver, used for the OAuth handshake of
+    // channel onboarding (the per-provider scopes + redirect are set at
+    // call time in ChannelOnboardController).
+    'facebook' => [
+        'client_id'     => env('META_APP_ID'),
+        'client_secret' => env('META_APP_SECRET', env('META_WHATSAPP_APP_SECRET')),
+        'redirect'      => env('META_OAUTH_REDIRECT'),
+    ],
+
+    // Google sign-in (Socialite). Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET
+    // in .env to enable the "Continue with Google" button. The redirect is
+    // set per-request in SocialAuthController, so the value here is only a
+    // fallback for `php artisan` contexts.
+    'google' => [
+        'client_id'     => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
     'twilio' => [

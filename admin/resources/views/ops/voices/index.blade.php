@@ -84,7 +84,7 @@
                                 </form>
                             @else
                                 <form method="POST" action="{{ route('ops.tenant.delete', ['type' => 'voice', 'projectId' => $v['project_id'], 'id' => $v['id']]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Soft-delete voice #{{ $v['id'] }} ({{ $v['name'] }})? Disappears from customer + ops. Recoverable.');">
+                                      data-confirm="Soft-delete voice #{{ $v['id'] }} ({{ $v['name'] }})? Disappears from customer + ops. Recoverable.">
                                     @csrf
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>

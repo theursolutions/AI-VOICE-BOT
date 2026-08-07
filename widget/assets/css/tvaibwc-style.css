@@ -197,6 +197,80 @@
         background: rgba(239, 68, 68, 0.30) !important;
     }
 
+    /* ─── Language picker (header dropdown) ─────────────────────────
+       A small pill (globe + 2-letter code + caret) opening a menu of
+       response languages. The pick is only the fallback/default — the
+       bot still mirrors whatever language the visitor actually writes. */
+    .tvaibwc-lang-select {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+    }
+    /* Override the 32x32 icon-tile sizing for the wider pill toggle. */
+    .tvaibwc-header-actions .tvaibwc-lang-toggle {
+        width: auto;
+        height: 32px;
+        padding: 0 7px;
+        gap: 5px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+    .tvaibwc-lang-toggle .tvaibwc-lang-code { letter-spacing: .04em; }
+    .tvaibwc-lang-toggle .tvaibwc-lang-caret {
+        font-size: 9px;
+        opacity: .8;
+        transition: transform .15s ease;
+    }
+    .tvaibwc-lang-select.open .tvaibwc-lang-caret { transform: rotate(180deg); }
+
+    .tvaibwc-lang-menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 168px;
+        max-height: 260px;
+        overflow-y: auto;
+        background: var(--tvaibwc-primary-color);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-radius: 10px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+        padding: 5px;
+        z-index: 1002;
+        display: none;
+    }
+    .tvaibwc-lang-select.open .tvaibwc-lang-menu { display: block; }
+
+    /* Override the 32x32 tile sizing for the full-width menu rows. */
+    .tvaibwc-header-actions .tvaibwc-lang-option {
+        width: 100%;
+        height: auto;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 10px;
+        border: none;
+        border-radius: 7px;
+        background: transparent;
+        color: #fff;
+        font-size: 13px;
+        text-align: left;
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+    }
+    .tvaibwc-header-actions .tvaibwc-lang-option:hover {
+        background: rgba(255, 255, 255, 0.14);
+        box-shadow: none;
+    }
+    .tvaibwc-lang-option .tvaibwc-lang-option-code {
+        font-size: 11px;
+        font-weight: 700;
+        opacity: .6;
+        letter-spacing: .04em;
+    }
+    .tvaibwc-header-actions .tvaibwc-lang-option.is-selected {
+        background: rgba(255, 255, 255, 0.20);
+    }
+    .tvaibwc-lang-option.is-selected .tvaibwc-lang-option-code { opacity: 1; }
+
     /* Widget Content */
     .tvaibwc-widget-content {
         flex: 1;
@@ -217,13 +291,29 @@
         color: var(--tvaibwc-dark-text);
     }
 
+    /* The chat tab lays its children out as a column so the message
+       list flexes/scrolls on its own while the flow actions bar (the
+       "Back to main menu" pill) sits directly above the input. The
+       message list, actions bar and the floating input no longer fight
+       over a hard-coded height, which is what used to leave dead space
+       at the end and push the back-pill off-screen.
+       padding-bottom reserves the band occupied by the absolutely
+       positioned input container so the last message + back-pill never
+       hide underneath it (tune alongside the input footprint). */
+    #tvaibwc-chatContent.active {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        padding-bottom: 92px;
+    }
+
     /* Chat Messages */
     .tvaibwc-chat-messages {
         display: flex;
         flex-direction: column;
         gap: 10px;
-        margin-bottom: 110px;
-        height: calc(100% - 110px);
+        flex: 1 1 auto;
+        min-height: 0;
         overflow-y: auto;
     }
 
@@ -2015,6 +2105,77 @@ emoji-picker {
     border-left-color: #1e3a8a;
     color: #ffffff;
 }
+
+/* ── collect_input card — a question + a typed input field ───────────── */
+.tvaibwc-message.tvaibwc-bot.tvaibwc-flow-inputcard {
+    max-width: 92% !important;
+    width: 360px;
+    padding-bottom: 4px;
+}
+.tvaibwc-flow-input-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    width: 100%;
+}
+.tvaibwc-flow-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: #ffffff;
+    color: #0f172a;
+    border: 1px solid #e2e8f0;
+    border-left: 3px solid #3b82f6;
+    border-radius: 8px;
+    padding: 9px 12px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: border-color .15s ease, box-shadow .15s ease;
+}
+.tvaibwc-flow-input::placeholder { color: #94a3b8; }
+.tvaibwc-flow-input:focus {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, .15);
+}
+.tvaibwc-flow-input:disabled { opacity: .6; }
+.tvaibwc-flow-input-send {
+    flex: 0 0 auto;
+    width: 40px;
+    border: none;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: #ffffff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 6px rgba(59, 130, 246, .3);
+    transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+}
+.tvaibwc-flow-input-send:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59, 130, 246, .4); }
+.tvaibwc-flow-input-send:active { transform: translateY(0); }
+.tvaibwc-flow-input-send:disabled { opacity: .5; cursor: default; transform: none; box-shadow: none; }
+.tvaibwc-flow-input-err {
+    color: #dc2626;
+    font-size: 11.5px;
+    margin-top: 6px;
+    line-height: 1.3;
+}
+.tvaibwc-flow-inputcard.is-submitted .tvaibwc-flow-input-row { opacity: .7; }
+
+/* Dark theme */
+.tvaibwc-message.tvaibwc-bot.tvaibwc-flow-inputcard.dark .tvaibwc-flow-input {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-color: #334155;
+    border-left-color: #3b82f6;
+}
+.tvaibwc-message.tvaibwc-bot.tvaibwc-flow-inputcard.dark .tvaibwc-flow-input::placeholder { color: #64748b; }
+.tvaibwc-message.tvaibwc-bot.tvaibwc-flow-inputcard.dark .tvaibwc-flow-input:focus {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(96, 165, 250, .18);
+}
+.tvaibwc-flow-inputcard.dark .tvaibwc-flow-input-err { color: #f87171; }
 
 @keyframes voicePulse {
   0%, 100% { height: 4px; opacity: 0.4; }

@@ -51,9 +51,12 @@ class BotAgentWebController extends Controller
                 ->get();
         }
 
+        // Team users selectable as human agents.
+        $users = $client->users()->get(['users.id', 'users.name', 'users.email']);
+
         return view('bot-agents.index', compact(
             'client', 'projects', 'project', 'projectId',
-            'agents', 'skills', 'voices'
+            'agents', 'skills', 'voices', 'users'
         ));
     }
 
@@ -66,16 +69,22 @@ class BotAgentWebController extends Controller
             BotAgent::where('project_id', $project->id)->update(['is_default' => false]);
         }
 
+        $type = ($data['type'] ?? 'ai') === 'human' ? BotAgent::TYPE_HUMAN : BotAgent::TYPE_AI;
+
         $now = time();
         $agent = BotAgent::create([
-            'project_id' => $project->id,
-            'name'       => $data['name'],
-            'voice_id'   => $data['voice_id'] ?? null,
-            'persona'    => $data['persona']  ?? null,
-            'is_default' => !empty($data['is_default']),
-            'status'     => BotAgent::STATUS_ACTIVE,
-            'created_at' => $now,
-            'update_at'  => $now,
+            'project_id'       => $project->id,
+            'name'             => $data['name'],
+            'type'             => $type,
+            'user_id'          => $type === BotAgent::TYPE_HUMAN ? ($data['user_id'] ?? null) : null,
+            'presence'         => BotAgent::PRESENCE_OFFLINE,
+            'max_active_chats' => $type === BotAgent::TYPE_HUMAN ? (int) ($data['max_active_chats'] ?? 3) : 3,
+            'voice_id'         => $type === BotAgent::TYPE_HUMAN ? null : ($data['voice_id'] ?? null),
+            'persona'          => $type === BotAgent::TYPE_HUMAN ? null : ($data['persona'] ?? null),
+            'is_default'       => !empty($data['is_default']),
+            'status'           => BotAgent::STATUS_ACTIVE,
+            'created_at'       => $now,
+            'update_at'        => $now,
         ]);
 
         if (!empty($data['skill_ids'])) {
@@ -101,13 +110,18 @@ class BotAgentWebController extends Controller
                 ->update(['is_default' => false]);
         }
 
+        $type = ($data['type'] ?? $agent->type ?? 'ai') === 'human' ? BotAgent::TYPE_HUMAN : BotAgent::TYPE_AI;
+
         $agent->update([
-            'name'       => $data['name'],
-            'voice_id'   => $data['voice_id'] ?? null,
-            'persona'    => $data['persona']  ?? null,
-            'is_default' => !empty($data['is_default']),
-            'status'     => $data['status'] ?? BotAgent::STATUS_ACTIVE,
-            'update_at'  => time(),
+            'name'             => $data['name'],
+            'type'             => $type,
+            'user_id'          => $type === BotAgent::TYPE_HUMAN ? ($data['user_id'] ?? null) : null,
+            'max_active_chats' => $type === BotAgent::TYPE_HUMAN ? (int) ($data['max_active_chats'] ?? 3) : $agent->max_active_chats,
+            'voice_id'         => $type === BotAgent::TYPE_HUMAN ? null : ($data['voice_id'] ?? null),
+            'persona'          => $type === BotAgent::TYPE_HUMAN ? null : ($data['persona'] ?? null),
+            'is_default'       => !empty($data['is_default']),
+            'status'           => $data['status'] ?? BotAgent::STATUS_ACTIVE,
+            'update_at'        => time(),
         ]);
 
         $agent->skills()->sync(array_fill_keys($data['skill_ids'] ?? [], ['created_at' => time()]));
@@ -137,13 +151,16 @@ class BotAgentWebController extends Controller
     private function validateInput(Request $request, bool $forUpdate = false): array
     {
         $rules = [
-            'project_id' => 'required|integer',
-            'name'       => 'required|string|max:120',
-            'voice_id'   => 'nullable|integer',
-            'persona'    => 'nullable|string|max:4000',
-            'skill_ids'  => 'nullable|array',
-            'skill_ids.*'=> 'integer',
-            'is_default' => 'nullable|boolean',
+            'project_id'       => 'required|integer',
+            'name'             => 'required|string|max:120',
+            'type'             => 'nullable|in:ai,human',
+            'user_id'          => 'nullable|integer|required_if:type,human',
+            'max_active_chats' => 'nullable|integer|min:1|max:50',
+            'voice_id'         => 'nullable|integer',
+            'persona'          => 'nullable|string|max:4000',
+            'skill_ids'        => 'nullable|array',
+            'skill_ids.*'      => 'integer',
+            'is_default'       => 'nullable|boolean',
         ];
         if ($forUpdate) {
             $rules['status'] = 'required|in:active,archived';

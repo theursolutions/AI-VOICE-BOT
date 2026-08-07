@@ -1,0 +1,284 @@
+# =============================================================================
+# Production HA overlay.  Apply ON TOP of the base compose file:
+#
+#   docker compose -f docker-compose.yml -f deploy/production/docker-compose.prod.yml \
+#                  --env-file .env up -d
+#
+# (the deploy/production/deploy.sh helper wraps this)
+#
+# What it changes vs. the single-node base:
+#   • inserts HAProxy as the ACL load balancer; Caddy now feeds HAPropy
+#   • runs the stateless tiers (app, voice-engine) as redundant replicas
+#   • adds CPU/RAM limits + log rotation + tighter healthchecks everywhere
+#   • adds a full monitoring/alerting stack (Prometheus/Grafana/Alertmanager)
+#
+# Requires Docker Compose v2.24+ (uses the !override / !reset merge tags).
+# =============================================================================
+
+# Cap every container's logs so a chatty service can never fill the disk and
+# take the host down. Applied per-service below via the YAML anchor.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  # ── Edge: Caddy now terminates TLS and forwards to HAProxy ─────────────────
+  caddy:
+    <<: *logging
+    # Swap the Caddyfile for the production one (TLS edge -> haproxy:80).
+    volumes: !override
+      - ./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: !override
+      haproxy:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 256M }
+
+  # ── ACL load balancer: routes, health-checks, rate-limits, WS affinity ─────
+  haproxy:
+    image: haproxy:2.9-alpine
+    restart: unless-stopped
+    <<: *logging
+    # Run with a writable runtime dir for the admin socket.
+    user: root
+    command: ["haproxy", "-W", "-db", "-f", "/usr/local/etc/haproxy/haproxy.cfg"]
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      VOICE_DOMAIN: ${VOICE_DOMAIN}
+      HAPROXY_STATS_USER: ${HAPROXY_STATS_USER:-admin}
+      HAPROXY_STATS_PASSWORD: ${HAPROXY_STATS_PASSWORD:?set HAPROXY_STATS_PASSWORD in .env}
+    volumes:
+      - ./deploy/production/haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - haproxy_run:/var/run/haproxy
+    # HAProxy is internal-only; Caddy is the sole public edge. Expose the stats
+    # port to localhost only (optional convenience for SSH-tunnel access).
+    ports:
+      - "127.0.0.1:8404:8404"
+    healthcheck:
+      # `haproxy -c` validates the running config is loadable.
+      test: ["CMD", "sh", "-c", "haproxy -c -f /usr/local/etc/haproxy/haproxy.cfg >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      - app
+      - voice-engine
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 256M }
+
+  # ── Admin web: redundant, health-gated replicas ────────────────────────────
+  app:
+    <<: *logging
+    deploy:
+      # Override per-host with APP_REPLICAS in .env. 2+ removes the app-tier SPOF
+      # and enables zero-downtime rolling restarts (HAProxy drains one at a time).
+      replicas: ${APP_REPLICAS:-2}
+      resources:
+        limits:    { cpus: "2", memory: 1024M }
+        reservations: { cpus: "0.5", memory: 384M }
+      # The keys below are honoured by Swarm (docs/PRODUCTION_HA.md §multi-node);
+      # Compose ignores them, which is harmless.
+      update_config: { parallelism: 1, delay: 15s, order: start-first, failure_action: rollback, monitor: 60s }
+      rollback_config: { parallelism: 1, order: start-first }
+      restart_policy: { condition: any, delay: 5s, max_attempts: 0 }
+
+  # ── Queue workers: scale for throughput ────────────────────────────────────
+  queue:
+    <<: *logging
+    deploy:
+      replicas: ${QUEUE_REPLICAS:-3}
+      resources:
+        limits: { cpus: "1", memory: 512M }
+      restart_policy: { condition: any, delay: 5s }
+
+  scheduler:
+    <<: *logging
+    # Exactly one scheduler — more would double-fire cron tasks.
+    deploy:
+      replicas: 1
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  # ── Voice engine: replicas + a real healthcheck (sticky-routed by HAProxy) ─
+  voice-engine:
+    <<: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s        # first boot lazy-downloads ~2GB of XTTS weights
+    deploy:
+      # CPU XTTS is the ceiling — size against CONCURRENT calls (see SCALING.md).
+      replicas: ${VOICE_REPLICAS:-1}
+      resources:
+        limits:    { cpus: "4", memory: 6144M }
+        reservations: { cpus: "1", memory: 2048M }
+      # stop-first (NOT start-first): a 2nd voice replica needs ~3GB more RAM to
+      # run concurrently, which a 12GB box can't spare — so under Swarm we stop
+      # the old replica before starting the new one (brief voice blip, no OOM).
+      # To make voice deploys zero-downtime too: offload TTS to cloud (light
+      # replicas) or add RAM/a node, then switch this to order: start-first.
+      update_config: { parallelism: 1, delay: 30s, order: stop-first }
+      restart_policy: { condition: any, delay: 10s }
+
+  # ── Data services: hardened with limits + log rotation ─────────────────────
+  mysql:
+    <<: *logging
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 2048M }
+        reservations: { memory: 512M }
+
+  redis:
+    <<: *logging
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 768M }
+
+  #============================================================================
+  # OBSERVABILITY — you cannot keep something up that you cannot see.
+  #============================================================================
+  prometheus:
+    image: prom/prometheus:v2.53.3
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+    volumes:
+      - ./deploy/production/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/production/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 1024M }
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    environment:
+      ALERT_SLACK_WEBHOOK: ${ALERT_SLACK_WEBHOOK:-}
+    volumes:
+      - ./deploy/production/monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 128M }
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      # Accessed via SSH tunnel on localhost:3000 by default. To publish behind
+      # Caddy at https://<domain>/grafana/, also set:
+      #   GF_SERVER_ROOT_URL: https://${APP_DOMAIN}/grafana/
+      #   GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      # Auto-provisioned datasource + dashboard providers, and the dashboard
+      # JSON files themselves (loaded on boot — no manual import).
+      - ./deploy/production/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/production/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    # Reach it via an SSH tunnel to localhost:3000, or expose behind Caddy.
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    restart: unless-stopped
+    <<: *logging
+    command:
+      - --path.rootfs=/host
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.3", memory: 128M }
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    <<: *logging
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    restart: unless-stopped
+    <<: *logging
+    volumes:
+      - ./deploy/production/monitoring/blackbox.yml:/etc/blackbox_exporter/config.yml:ro
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.2", memory: 64M }
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.66.0
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      REDIS_ADDR: redis://redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.2", memory: 64M }
+
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    restart: unless-stopped
+    <<: *logging
+    # Credentials come from the environment, NOT a checked-in my.cnf — that file
+    # shipped a placeholder password that silently broke DB metrics, and putting
+    # the real one in it would commit a secret to git.
+    # Create the least-privilege user once with: ./deploy.sh exporter-user
+    command:
+      - --mysqld.address=mysql:3306
+      - --mysqld.username=exporter
+    environment:
+      MYSQLD_EXPORTER_PASSWORD: ${MYSQL_EXPORTER_PASSWORD:?set MYSQL_EXPORTER_PASSWORD in .env}
+    networks: [aicrm]
+    deploy:
+      resources:
+        limits: { cpus: "0.2", memory: 64M }
+
+volumes:
+  haproxy_run:
+  prometheus_data:
+  alertmanager_data:
+  grafana_data:

@@ -12,6 +12,7 @@
         </div>
 
         <div class="tva-modal__body">
+            @php $atype = old('type', $agent->type ?? 'ai'); @endphp
             <div class="grid grid-cols-2 gap-3 mb-3">
                 <div>
                     <label class="form-label">Name <span class="text-danger">*</span></label>
@@ -20,6 +21,37 @@
                            placeholder="Sarah">
                 </div>
                 <div>
+                    <label class="form-label">Type</label>
+                    <select name="type" class="form-select" onchange="(function(s){var f=s.closest('form');f.querySelectorAll('.js-human').forEach(e=>e.style.display=s.value==='human'?'':'none');f.querySelectorAll('.js-ai').forEach(e=>e.style.display=s.value==='human'?'none':'');})(this)">
+                        <option value="ai" @selected($atype==='ai')>🤖 AI agent</option>
+                        <option value="human" @selected($atype==='human')>🙋 Human agent</option>
+                    </select>
+                </div>
+            </div>
+
+            {{-- Human agent fields --}}
+            <div class="grid grid-cols-2 gap-3 mb-3 js-human" style="{{ $atype==='human' ? '' : 'display:none' }}">
+                <div>
+                    <label class="form-label">Team user <span class="text-danger">*</span></label>
+                    <select name="user_id" class="form-select">
+                        <option value="">— pick a user —</option>
+                        @foreach (($users ?? []) as $u)
+                            <option value="{{ $u->id }}" @selected(($agent->user_id ?? null) == $u->id)>{{ $u->name }} ({{ $u->email }})</option>
+                        @endforeach
+                    </select>
+                    <small class="text-slate-500 text-xs">The person who logs in and takes over chats.</small>
+                </div>
+                <div>
+                    <label class="form-label">Max concurrent chats</label>
+                    <input type="number" name="max_active_chats" min="1" max="50" class="form-control"
+                           value="{{ old('max_active_chats', $agent->max_active_chats ?? 3) }}">
+                    <small class="text-slate-500 text-xs">Capacity before new chats queue.</small>
+                </div>
+            </div>
+
+            {{-- AI agent fields --}}
+            <div class="js-ai" style="{{ $atype==='human' ? 'display:none' : '' }}">
+                <div class="mb-3">
                     <label class="form-label">Voice</label>
                     <select name="voice_id" class="form-select">
                         <option value="">— project default —</option>
@@ -30,20 +62,19 @@
                         @endforeach
                     </select>
                 </div>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Persona / system prompt</label>
-                <textarea name="persona" rows="5" maxlength="4000" class="form-control"
-                          placeholder="You handle billing questions. Be empathetic and concise. Confirm account details before discussing balances.">{{ old('persona', $agent->persona ?? '') }}</textarea>
-                <small class="text-slate-500 text-xs">Injected into the LLM as a system message so the bot stays in this character.</small>
+                <div class="mb-3">
+                    <label class="form-label">Persona / system prompt</label>
+                    <textarea name="persona" rows="5" maxlength="4000" class="form-control"
+                              placeholder="You handle billing questions. Be empathetic and concise.">{{ old('persona', $agent->persona ?? '') }}</textarea>
+                    <small class="text-slate-500 text-xs">Injected into the LLM as a system message so the bot stays in this character.</small>
+                </div>
             </div>
 
             <div class="mb-3">
                 <label class="form-label">Skills</label>
                 @if ($skills->isEmpty())
                     <div class="text-xs text-slate-500">
-                        No skills yet. <a href="{{ route('skills.index', ['client' => $client->slug]) }}?project_id={{ $projectId }}" class="text-primary">Create one first</a>.
+                        No skills yet. <a href="{{ route('skills.index', ['client' => $client->slug]) }}?project_id={{ hashid($projectId) }}" class="text-primary">Create one first</a>.
                     </div>
                 @else
                     @php

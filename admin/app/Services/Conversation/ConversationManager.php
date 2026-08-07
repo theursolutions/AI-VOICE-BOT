@@ -6,6 +6,7 @@ use App\Jobs\ExtractLeadFromTurn;
 use App\Models\Message;
 use App\Models\Session;
 use App\Services\DataSource\DataSourceRouter;
+use App\Services\Conversation\HumanRouter;
 
 class ConversationManager
 {
@@ -14,11 +15,23 @@ class ConversationManager
         private PythonClient $python,
         private DataSourceRouter $sources,
         private ToolPicker $toolPicker,
+        private HumanRouter $humans,
     ) {}
 
     public function handle(Session $session, Message $userMessage, string $respondWith = 'text'): Message
     {
         $start = microtime(true);
+
+        // A human agent has taken this conversation over — the AI stays quiet.
+        if (data_get($session->metadata, 'meta.bot_paused')) {
+            return new Message([
+                'session_id' => $session->id,
+                'project_id' => $session->project_id,
+                'role'       => 'assistant',
+                'content'    => 'A member of our team is handling your request and will reply here shortly.',
+                'metadata'   => ['handoff' => true, 'transient' => true],
+            ]);
+        }
 
         $contextResults = [];
         if ($userMessage->content) {
@@ -34,15 +47,37 @@ class ConversationManager
                 ->map(fn ($m) => ['role' => $m->role, 'content' => (string) ($m->content ?? '')])
                 ->all();
 
+            // Capability gate: restrict tool use to the actions granted by
+            // the session agent's skills (see Skill::toolGatingForAgent).
+            $toolGate = \App\Models\Skill::toolGatingForAgent($session->agent_id);
+
+            // Audience gate: this path serves customers, so only sources /
+            // tools the owner opted in are offered (see customer_visible).
+            $customerFacing = $session->isCustomerFacing();
+
             $webhookDecision = $this->toolPicker->pick(
                 $session->project_id,
                 $history,
                 $userMessage->content,
+                $toolGate,
+                $customerFacing,
             );
 
-            $resolverContext = [];
+            // AI decided to escalate → hand off to a human and stop here.
+            if ($webhookDecision && ($webhookDecision['tool_id'] ?? null) === ToolPicker::HANDOFF) {
+                return $this->escalateToHuman($session);
+            }
+
+            $resolverContext = ['tool_gate' => $toolGate, 'customer_facing' => $customerFacing];
             if ($webhookDecision) {
                 $resolverContext['webhook_decision'] = $webhookDecision;
+            }
+
+            // Flow "Data Source" node may have pinned this conversation to
+            // specific source(s) (stored on the session). Honor that scope.
+            $scope = (array) data_get($session->metadata, 'ds_scope', []);
+            if (!empty($scope)) {
+                $resolverContext['source_ids'] = array_values($scope);
             }
 
             $contextResults = $this->sources->onlyUsable(
@@ -86,6 +121,36 @@ class ConversationManager
         $session->save();
 
         ExtractLeadFromTurn::dispatch($session->project_id, $session->id, $assistant->id);
+
+        return $assistant;
+    }
+
+    /** Route the chat to a human agent and reply with a connect message. */
+    private function escalateToHuman(Session $session): Message
+    {
+        $human = $this->humans->handoff($session);   // assigns or queues + pauses the bot
+        $now = time();
+
+        $text = $human
+            ? "I'm connecting you with {$human->name} from our team — one moment."
+            : 'Thanks for your patience — a member of our team will be with you shortly.';
+
+        $assistant = Message::create([
+            'session_id' => $session->id,
+            'project_id' => $session->project_id,
+            'role'       => 'assistant',
+            'content'    => $text,
+            'metadata'   => array_filter([
+                'handoff'           => true,
+                'assigned_agent_id' => $human?->id,
+                'queued'            => $human ? null : true,
+            ]),
+            'created_at' => $now,
+        ]);
+
+        $session->last_activity_at = $now;
+        $session->update_at = $now;
+        $session->save();
 
         return $assistant;
     }

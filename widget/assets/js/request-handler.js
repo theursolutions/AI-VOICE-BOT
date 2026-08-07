@@ -334,11 +334,11 @@ function tvaibwcMakeStreamingBubble() {
                 streaming = true;
             }
             buffer += chunk;
-            $text.text(buffer);
+            $text.html(tvaibwc_textToHtml(buffer));
             tvaibwc_scrollToBottom();
         },
         replace: function (text) {
-            $text.removeClass('typing').text(text);
+            $text.removeClass('typing').html(tvaibwc_textToHtml(text));
             buffer = text;
             streaming = true;
             tvaibwc_scrollToBottom();
@@ -355,7 +355,11 @@ function tvaibwcMakeStreamingBubble() {
                 $bubble.remove();
                 tvaibwc_addAudioMessage(audioId, audioUrl, 5, 'tvaibwc-bot');
             } else if (text) {
-                typeWriter($text, cleanResponseText(text), 30);
+                // Render with real line breaks. (We drop the per-char
+                // typewriter here — it appended one character at a time,
+                // which split "<br>" into visible characters; the WS
+                // path already gives the live-typing feel.)
+                $text.removeClass('typing voice').html(tvaibwc_textToHtml(text));
             } else {
                 $text.removeClass('typing voice').text('(empty response)');
             }
@@ -616,7 +620,7 @@ function tvaibwcMakeVoiceBubble() {
             } else if (text) {
                 $('#tvaibwc-chatMessages').append(
                     '<div class="tvaibwc-message tvaibwc-bot ' + (dark ? 'dark' : '') + '">' +
-                        '<div class="tvaibwc-message-text">' + text + '</div>' +
+                        '<div class="tvaibwc-message-text">' + tvaibwc_textToHtml(text) + '</div>' +
                         '<div class="tvaibwc-message-time">' + tvaibwc_getCurrentTime() + '</div>' +
                     '</div>'
                 );
@@ -729,7 +733,7 @@ $(document).on('submit', '#create_chat_response', function (e) {
 
             // ───── WS path (preferred) ─────
             if (s.wsReady && s.ws) {
-                s.ws.sendText(rawText);
+                s.ws.sendText(rawText, window.tvaibwcGetLang ? window.tvaibwcGetLang() : 'en');
                 clearInput();
                 return;
             }
@@ -761,7 +765,7 @@ $(document).on('submit', '#create_chat_response', function (e) {
                 // Use WS regardless of reply mode — avoids the 120s
                 // HTTP cURL timeout when the resolver chain is long.
                 if (gotWs) {
-                    s.ws.sendText(rawText);
+                    s.ws.sendText(rawText, window.tvaibwcGetLang ? window.tvaibwcGetLang() : 'en');
                     return;
                 }
 
@@ -858,7 +862,11 @@ window.tvaibwcVoiceStart = function () {
         onStart: function (sr) {
             console.log('[tvaibwc] mic on, sample_rate=' + sr +
                         ', ctx.state=' + (s.mic && s.mic.ctx && s.mic.ctx.state));
-            s.ws.sendAudioStart({ format: 'pcm16', sample_rate: sr });
+            s.ws.sendAudioStart({
+                format: 'pcm16',
+                sample_rate: sr,
+                language: window.tvaibwcGetLang ? window.tvaibwcGetLang() : 'en',
+            });
         },
         onChunk: function (seq, b64) {
             if (seq % 10 === 0) console.log('[tvaibwc] sent audio.chunk seq=' + seq + ' bytes=' + (b64.length * 3/4 | 0));

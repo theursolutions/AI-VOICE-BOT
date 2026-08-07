@@ -144,16 +144,19 @@ class VectorStore:
                 )
             )
 
-        result = self._client.search(
+        # qdrant-client >=1.10 removed ``search`` in favour of ``query_points``
+        # (the older method now raises AttributeError). ``query_points``
+        # returns a response object whose ``.points`` holds the ScoredPoints.
+        response = self._client.query_points(
             collection_name=self.collection,
-            query_vector=query_vector,
+            query=query_vector,
             limit=top_k,
             query_filter=qmodels.Filter(must=must),
             with_payload=True,
         )
         return [
             SearchHit(id=str(p.id), score=float(p.score), payload=dict(p.payload or {}))
-            for p in result
+            for p in response.points
         ]
 
     def delete_by_source(self, source_id: int) -> None:
@@ -170,6 +173,33 @@ class VectorStore:
                             key="source_id",
                             match=qmodels.MatchValue(value=int(source_id)),
                         )
+                    ]
+                )
+            ),
+            wait=True,
+        )
+
+    def delete_by_project_source(self, project_id: int, source_id: int) -> None:
+        """Delete vectors for one source within ONE project. Source IDs are
+        only unique per-tenant (project 1 and 2 can both have source #6), so
+        scoping by project_id too prevents deleting another project's data."""
+        if self._client is None:
+            return
+        from qdrant_client.http import models as qmodels  # type: ignore
+
+        self._client.delete(
+            collection_name=self.collection,
+            points_selector=qmodels.FilterSelector(
+                filter=qmodels.Filter(
+                    must=[
+                        qmodels.FieldCondition(
+                            key="project_id",
+                            match=qmodels.MatchValue(value=int(project_id)),
+                        ),
+                        qmodels.FieldCondition(
+                            key="source_id",
+                            match=qmodels.MatchValue(value=int(source_id)),
+                        ),
                     ]
                 )
             ),

@@ -45,7 +45,7 @@
         <div class="flex-1">
             <div style="font-size:20px; font-weight:700;">Skills</div>
             <div style="font-size:13px; opacity:.9; margin-top:4px;">
-                Routing categories — billing, support, sales. Assign agents to skills, then route calls + chats to the right pool.
+                Capability bundles — billing, support, sales. Give a skill a set of actions (tools), assign skills to agents, then route calls + chats to the right pool. An agent can only use the actions its skills grant.
             </div>
         </div>
     </div>
@@ -66,7 +66,7 @@
             <label class="text-xs text-slate-500 uppercase tracking-wider font-semibold">Project</label>
             <select name="project_id" class="form-select mt-1 w-full md:w-1/3" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
         </form>
@@ -99,12 +99,16 @@
                                 <span class="tva-sk-tile__chip is-archived">ARCHIVED</span>
                             @endif
                             <span class="tva-sk-tile__chip">{{ $skill->agents_count ?? 0 }} agent(s)</span>
+                            <span class="tva-sk-tile__chip">{{ count($skillActions[$skill->id] ?? []) }} action(s)</span>
                         </div>
                         @if ($skill->description)
                             <div class="text-xs text-slate-500 mt-1 truncate" title="{{ $skill->description }}">{{ $skill->description }}</div>
                         @endif
                     </div>
                     <div class="flex items-center gap-1">
+                        <button type="button" class="text-emerald-600 inline-flex items-center justify-center w-8 h-8 rounded hover:bg-emerald-600/10" data-tva-modal-open="skill-library-{{ $skill->id }}" title="Add action from library">
+                            <i data-lucide="library" class="w-4 h-4"></i>
+                        </button>
                         <button type="button" class="text-primary inline-flex items-center justify-center w-8 h-8 rounded hover:bg-primary/10" data-tva-modal-open="skill-edit-{{ $skill->id }}" title="Edit">
                             <i data-lucide="pencil" class="w-4 h-4"></i>
                         </button>
@@ -116,13 +120,15 @@
 
                 {{-- ── Edit modal ────────────────────────────────────── --}}
                 @include('skills._modal', [
-                    'modalId'   => "skill-edit-{$skill->id}",
-                    'title'     => "Edit skill",
-                    'action'    => route('skills.update', ['client' => $client->slug, 'id' => $skill->id]),
-                    'method'    => 'PATCH',
-                    'projectId' => $projectId,
-                    'skill'     => $skill,
-                    'showStatus'=> true,
+                    'modalId'      => "skill-edit-{$skill->id}",
+                    'title'        => "Edit skill",
+                    'action'       => route('skills.update', ['client' => $client->slug, 'id' => $skill->id]),
+                    'method'       => 'PATCH',
+                    'projectId'    => $projectId,
+                    'skill'        => $skill,
+                    'showStatus'   => true,
+                    'webhookTools' => $webhookTools,
+                    'selectedActionIds' => $skillActions[$skill->id] ?? [],
                 ])
 
                 {{-- ── Delete modal ──────────────────────────────────── --}}
@@ -146,6 +152,77 @@
                         </form>
                     </div>
                 </div>
+
+                {{-- ── Tool library modal (add prebuilt actions) ─────────── --}}
+                <div id="skill-library-{{ $skill->id }}" class="tva-modal" hidden>
+                    <div class="tva-modal__backdrop" data-tva-modal-close></div>
+                    <div class="tva-modal__panel" style="max-width:560px;">
+                        <div class="tva-modal__head">
+                            <i data-lucide="library" class="w-4 h-4 mr-2 inline" style="color:#059669;"></i>
+                            Tool library · {{ $skill->name }}
+                            <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        </div>
+                        <div class="tva-modal__body" style="max-height:62vh; overflow:auto;">
+                            <p class="text-xs text-slate-500 mb-3">
+                                Pick a prebuilt action. Name, intent and arguments are preconfigured — just add your
+                                endpoint URL + auth. It's created and attached to this skill in one step.
+                            </p>
+                            @forelse ($toolTemplates as $tpl)
+                                <details class="border rounded mb-2">
+                                    <summary class="flex items-center gap-2 p-2 cursor-pointer text-sm">
+                                        <i data-lucide="{{ $tpl['icon'] ?? 'plug' }}" class="w-4 h-4"></i>
+                                        <span class="font-medium">{{ $tpl['name'] }}</span>
+                                        <span class="tva-sk-tile__chip">{{ $tpl['category'] ?? 'Tool' }}</span>
+                                        <span class="ml-auto text-[10px] text-slate-400">{{ $tpl['method'] ?? 'GET' }}</span>
+                                    </summary>
+                                    <form method="POST" action="{{ route('skills.actions.from-template', ['client' => $client->slug, 'id' => $skill->id]) }}" class="p-3 border-t">
+                                        @csrf
+                                        <input type="hidden" name="project_id" value="{{ $projectId }}">
+                                        <input type="hidden" name="template_key" value="{{ $tpl['key'] }}">
+                                        <div class="text-xs text-slate-500 mb-2">{{ $tpl['when_to_use'] }}</div>
+                                        @if (!empty($tpl['args']))
+                                            <div class="text-[11px] text-slate-400 mb-2">Sends: {{ implode(', ', array_keys($tpl['args'])) }}</div>
+                                        @endif
+                                        <div class="mb-2">
+                                            <label class="form-label">Tool name</label>
+                                            <input type="text" name="name" class="form-control" value="{{ $tpl['name'] }}" maxlength="120">
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label">Endpoint URL <span class="text-danger">*</span></label>
+                                            <input type="url" name="url" class="form-control" required placeholder="{{ $tpl['url_hint'] ?? 'https://...' }}">
+                                        </div>
+                                        <div class="grid grid-cols-2 gap-2 mb-2">
+                                            <div>
+                                                <label class="form-label">Auth</label>
+                                                <select name="auth_type" class="form-select">
+                                                    @foreach (['none','bearer','basic','api_key','header'] as $a)
+                                                        <option value="{{ $a }}" @selected(($tpl['auth_type'] ?? 'none') === $a)>{{ $a }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="form-label">Auth value</label>
+                                                <input type="text" name="auth_value" class="form-control" placeholder="token / key (optional)">
+                                            </div>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label class="form-label">Auth header <span class="text-xs text-slate-400">(api_key / header only)</span></label>
+                                            <input type="text" name="auth_header" class="form-control" placeholder="X-Api-Key">
+                                        </div>
+                                        @if (!empty($tpl['note']))
+                                            <div class="text-[11px] text-slate-400 mb-2">{{ $tpl['note'] }}</div>
+                                        @endif
+                                        <button type="submit" class="btn btn-primary btn-sm">
+                                            <i data-lucide="plus" class="w-3 h-3 mr-1 inline"></i> Add to skill
+                                        </button>
+                                    </form>
+                                </details>
+                            @empty
+                                <div class="text-xs text-slate-500">No templates configured.</div>
+                            @endforelse
+                        </div>
+                    </div>
+                </div>
             @empty
                 <div class="col-span-full text-center py-10 text-slate-400">
                     <i data-lucide="tag" class="w-10 h-10 inline mb-2"></i>
@@ -158,13 +235,15 @@
 
     {{-- ── Create modal ─────────────────────────────────────────────── --}}
     @include('skills._modal', [
-        'modalId'   => 'skill-create',
-        'title'     => 'New skill',
-        'action'    => route('skills.store', ['client' => $client->slug]),
-        'method'    => 'POST',
-        'projectId' => $projectId,
-        'skill'     => null,
-        'showStatus'=> false,
+        'modalId'      => 'skill-create',
+        'title'        => 'New skill',
+        'action'       => route('skills.store', ['client' => $client->slug]),
+        'method'       => 'POST',
+        'projectId'    => $projectId,
+        'skill'        => null,
+        'showStatus'   => false,
+        'webhookTools' => $webhookTools,
+        'selectedActionIds' => [],
     ])
 </div>
 

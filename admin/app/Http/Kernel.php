@@ -35,6 +35,9 @@ class Kernel extends HttpKernel
             \Illuminate\Session\Middleware\StartSession::class,
             \Illuminate\View\Middleware\ShareErrorsFromSession::class,
             \App\Http\Middleware\VerifyCsrfToken::class,
+            // Decode hashed ids in route params + query/body BEFORE binding
+            // resolution and controllers run. Dual-mode: raw ints pass through.
+            \App\Http\Middleware\DecodeHashids::class,
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\EnsureActiveAccount::class,
         ],
@@ -61,6 +64,9 @@ class Kernel extends HttpKernel
         'twilio.signature' => \App\Http\Middleware\TwilioSignature::class,
         'active.client' => \App\Http\Middleware\EnsureActiveClient::class,
         'workspace.provisioned' => \App\Http\Middleware\EnsureWorkspaceProvisioned::class,
+        'module.access' => \App\Http\Middleware\EnsureModuleAccess::class,
+        'module.enabled' => \App\Http\Middleware\EnsureModuleEnabled::class,
+        'email.verified.gate' => \App\Http\Middleware\EnsureEmailVerified::class,
         'super-admin' => \App\Http\Middleware\IsSuperAdmin::class,
         'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
         'auth.session' => \Illuminate\Session\Middleware\AuthenticateSession::class,

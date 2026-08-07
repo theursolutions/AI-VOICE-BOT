@@ -36,6 +36,10 @@ class DataSource extends Model
         'status',
         'last_synced_at',
         'last_error',
+        // Audience gate — may a customer-facing channel (web chat / voice)
+        // use this source? Internal "Ask AI" ignores it. See migration
+        // 2026_06_28_130000_add_customer_visible_to_data_sources.
+        'customer_visible',
     ];
 
     protected $casts = [
@@ -44,6 +48,7 @@ class DataSource extends Model
         'created_at' => 'integer',
         'updated_at' => 'integer',
         'deleted_at' => 'integer',
+        'customer_visible' => 'boolean',
     ];
 
     public $timestamps = false;

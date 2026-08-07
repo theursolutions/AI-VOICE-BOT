@@ -1,0 +1,39 @@
+# Dependencies are installed/built inside the image
+/vendor
+/node_modules
+
+# Local secrets & runtime state — supplied via container env / volumes
+.env
+.env.*
+!.env.example
+
+# Stale compiled caches from the dev machine — would otherwise be baked in and
+# shadow the container's env (a dev config.php points at the dev DB; a dev
+# packages.php references dev-only providers). Regenerated fresh in the image
+# build + at container start.
+/bootstrap/cache/*.php
+
+/storage/app/*
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*
+/public/build
+/public/hot
+/public/storage
+
+# Tooling / VCS / editor cruft
+.git
+.github
+.idea
+.vscode
+.fleet
+.phpunit.cache
+.phpunit.result.cache
+tests
+*.log
+Homestead.json
+Homestead.yaml
+auth.json
+npm-debug.log
+yarn-error.log

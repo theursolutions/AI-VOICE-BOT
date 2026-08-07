@@ -24,6 +24,7 @@ from app.api.routes import health as health_route
 from app.api.routes import llm as llm_route
 from app.api.routes import stt as stt_route
 from app.api.routes import tts as tts_route
+from app.api.routes import audio as audio_route
 from app.integrations.laravel_client import LaravelClient
 from app.services.llm_service import LLMService
 from app.services.extractor_service import ExtractorService
@@ -65,7 +66,11 @@ async def lifespan(app: FastAPI):
 
     def _build_tts():
         from app.services.tts_service import TTSService
-        return TTSService(model_name=settings.coqui_model, gpu=settings.coqui_use_gpu)
+        return TTSService(
+            model_name=settings.coqui_model,
+            gpu=settings.coqui_use_gpu,
+            checkpoint_dir=settings.xtts_checkpoint_dir,
+        )
 
     app.state.stt_service = _try_init("stt_service", _build_stt)
     app.state.tts_service = _try_init("tts_service", _build_tts)
@@ -84,32 +89,31 @@ async def lifespan(app: FastAPI):
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Warm-up of '%s' failed: %s", _name, exc)
 
-    # Optional RAG services — require qdrant-client + trafilatura + etc.
-    def _build_rag():
-        from app.services.embedding_service import EmbeddingService
-        from app.services.ingest_service import IngestService
-        from app.services.retrieval_service import RetrievalService
-        from app.services.vector_store import VectorStore
-        emb  = EmbeddingService()
-        vs   = VectorStore()
-        return {
-            "embedding_service": emb,
-            "vector_store": vs,
-            "ingest_service": IngestService(embedding=emb, vector_store=vs),
-            "retrieval_service": RetrievalService(embedding=emb, vector_store=vs),
-        }
+    # Unified DuckDB store (snapshots=SQL, KB/crawler=BM25 FTS). Replaces the
+    # MySQL snapshot tables AND the Qdrant vector store + embedding model.
+    def _build_duck():
+        from app.services.duck_store import DuckStore
+        return DuckStore(settings.duckdb_dir)
 
-    rag = _try_init("rag", _build_rag) or {}
-    app.state.embedding_service = rag.get("embedding_service")
-    app.state.vector_store      = rag.get("vector_store")
-    app.state.ingest_service    = rag.get("ingest_service")
-    app.state.retrieval_service = rag.get("retrieval_service")
+    app.state.duck_store = _try_init("duck_store", _build_duck)
+
+    # KB/website ingest now writes BM25 docs into DuckDB (no embeddings).
+    def _build_ingest():
+        from app.services.ingest_service import IngestService
+        return IngestService(duck_store=app.state.duck_store)
+
+    app.state.ingest_service = _try_init("ingest_service", _build_ingest)
+
+    # Qdrant + embedding model fully retired (replaced by DuckDB above).
+    app.state.embedding_service = None
+    app.state.vector_store      = None
+    app.state.retrieval_service = None
 
     logger.info(
-        "Voice CRM Agent FastAPI started — stt=%s tts=%s rag=%s",
+        "Voice CRM Agent FastAPI started — stt=%s tts=%s store=%s",
         bool(app.state.stt_service),
         bool(app.state.tts_service),
-        bool(app.state.retrieval_service),
+        "duckdb" if app.state.duck_store else "none",
     )
     try:
         yield
@@ -154,6 +158,7 @@ def create_app() -> FastAPI:
     app.include_router(extract_route.router, tags=["extract"])
     app.include_router(stt_route.router, tags=["stt"])
     app.include_router(tts_route.router, tags=["tts"])
+    app.include_router(audio_route.router, tags=["audio"])
     app.include_router(admin_route.router, tags=["admin"])
 
     # Optional routers — import lazily so missing deps don't break boot.
@@ -162,6 +167,12 @@ def create_app() -> FastAPI:
         app.include_router(rag_route.router, tags=["rag"])
     except Exception as exc:  # noqa: BLE001
         logger.warning("RAG routes not available: %s", exc)
+
+    try:
+        from app.api.routes import duck as duck_route
+        app.include_router(duck_route.router, tags=["duck"])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("DuckDB routes not available: %s", exc)
 
     try:
         from app.api import ws as ws_route
@@ -176,6 +187,14 @@ def create_app() -> FastAPI:
         app.include_router(phone_route.router, tags=["phone"])
     except Exception as exc:  # noqa: BLE001
         logger.warning("Phone (Twilio Media Streams) route not available: %s", exc)
+
+    # WhatsApp Business Calling — WebRTC media bridge (aiortc). Optional:
+    # only mounts if aiortc/av are installed, so the app boots without them.
+    try:
+        from app.integrations.meta import whatsapp_call as wa_call_route
+        app.include_router(wa_call_route.router, tags=["whatsapp-call"])
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("WhatsApp call (WebRTC) route not available: %s", exc)
 
     # Legacy endpoints — keep working under /legacy until callers migrate.
     try:

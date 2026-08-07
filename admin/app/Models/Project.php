@@ -13,6 +13,24 @@ class Project extends Model
     // (e.g. Session->project from a tenant DB) don't try `tenant.projects`.
     protected $connection = 'mysql';
 
+    /**
+     * Restrict a query to projects a member may access on a client.
+     * Owners / all-access members (allowedProjectIds === null) are
+     * unrestricted; otherwise limited to their assigned project ids.
+     * Explicit, NOT a global scope, so tenant resolution is never hidden.
+     */
+    public function scopeAccessibleBy($query, $user, int $clientId)
+    {
+        if (!$user || !method_exists($user, 'allowedProjectIds')) {
+            return $query;
+        }
+        $ids = $user->allowedProjectIds($clientId);
+        if (is_array($ids)) {
+            $query->whereIn($this->getTable() . '.id', $ids);
+        }
+        return $query;
+    }
+
     protected $fillable = [
         'name',
         'api_key',

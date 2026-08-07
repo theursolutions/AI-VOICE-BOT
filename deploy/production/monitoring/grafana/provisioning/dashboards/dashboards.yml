@@ -1,0 +1,14 @@
+# Tells Grafana to load every dashboard JSON under the mounted path on boot.
+apiVersion: 1
+
+providers:
+  - name: ai-crm
+    orgId: 1
+    folder: "AI Voice CRM"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

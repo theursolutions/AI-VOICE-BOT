@@ -70,7 +70,18 @@ class RegisterController extends Controller
                 'updated_at'     => time(),
             ]);
 
-            $user->attachMembership($client->id, null, $user->id);
+            // The signup user is the agency Owner: an all-access role they
+            // can later use to invite teammates with narrower custom roles.
+            $ownerRole = \App\Models\Role::create([
+                'client_id'  => $client->id,
+                'name'       => 'Owner',
+                'modules'    => ['*'],
+                'is_owner'   => true,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+
+            $user->attachMembership($client->id, null, $user->id, $ownerRole->id);
 
             $user->forceFill([
                 'active_client_id' => $client->id,
@@ -87,6 +98,14 @@ class RegisterController extends Controller
         }
 
         Auth::login($user);
+
+        // Kick off email verification via the 6-digit OTP (no-op if the
+        // account is already verified, e.g. an existing user adding a
+        // second workspace). They land on the dashboard and are prompted
+        // to verify from there.
+        if (!$user->hasVerifiedEmail()) {
+            $user->sendEmailVerificationNotification();
+        }
 
         return redirect(route('dashboard', ['client' => $client->slug]));
     }

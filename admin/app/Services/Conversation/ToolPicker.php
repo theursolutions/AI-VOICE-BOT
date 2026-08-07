@@ -2,7 +2,9 @@
 
 namespace App\Services\Conversation;
 
+use App\Models\BotAgent;
 use App\Models\DataSource;
+use App\Models\Skill;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -21,20 +23,37 @@ use Throwable;
  */
 class ToolPicker
 {
+    /** Sentinel tool id meaning "escalate this chat to a human agent". */
+    public const HANDOFF = 'handoff';
+
     public function __construct(private PythonClient $python) {}
 
     /**
      * @param array<int, array{role:string, content:string}> $recentHistory
-     * @return array{tool_id:int, args:array<string,mixed>}|null
+     * @param array{gated:int[], allowed:int[]} $toolGate  Agent capability
+     *        gate from Skill::toolGatingForAgent(). Empty = no gating (all
+     *        project tools are offered).
+     * @param bool $customerFacing  On customer-facing turns, only webhook
+     *        tools the owner marked customer_visible are offered (the
+     *        human-handoff option is unaffected). Internal turns pass false.
+     * @return array{tool_id:int|string, args:array<string,mixed>}|null
      */
-    public function pick(int $projectId, array $recentHistory, string $userQuery): ?array
+    public function pick(int $projectId, array $recentHistory, string $userQuery, array $toolGate = [], bool $customerFacing = false): ?array
     {
-        $tools = $this->loadWebhookTools($projectId);
-        if (empty($tools)) {
+        $tools = $this->loadWebhookTools($projectId, $toolGate, $customerFacing);
+
+        // Offer "transfer to a human" only when the project actually has
+        // human agents — otherwise there's no point routing the LLM.
+        $hasHumans = BotAgent::where('project_id', $projectId)
+            ->where('type', BotAgent::TYPE_HUMAN)
+            ->where('status', BotAgent::STATUS_ACTIVE)
+            ->exists();
+
+        if (empty($tools) && !$hasHumans) {
             return null;
         }
 
-        $prompt = $this->buildPrompt($tools, $recentHistory, $userQuery);
+        $prompt = $this->buildPrompt($tools, $recentHistory, $userQuery, $hasHumans);
 
         try {
             $resp = $this->python->llm(
@@ -56,9 +75,15 @@ class ToolPicker
         $decoded = json_decode($m[0], true);
         if (!is_array($decoded)) return null;
 
-        $toolId = (int) ($decoded['tool_id'] ?? 0);
-        $args   = is_array($decoded['args'] ?? null) ? $decoded['args'] : [];
+        $rawId = $decoded['tool_id'] ?? null;
+        $args  = is_array($decoded['args'] ?? null) ? $decoded['args'] : [];
 
+        // Escalation to a human is handled by the caller, not as a webhook.
+        if ($rawId === self::HANDOFF) {
+            return ['tool_id' => self::HANDOFF, 'args' => $args];
+        }
+
+        $toolId = (int) ($rawId ?? 0);
         if ($toolId <= 0) return null;
 
         // Sanity check: tool_id must belong to a webhook of this project.
@@ -73,14 +98,25 @@ class ToolPicker
         return ['tool_id' => $toolId, 'args' => $args];
     }
 
-    /** @return array<int, array{id:int, name:string, when_to_use:string, args:array}> */
-    private function loadWebhookTools(int $projectId): array
+    /**
+     * @param array{gated:int[], allowed:int[]} $toolGate
+     * @return array<int, array{id:int, name:string, when_to_use:string, args:array}>
+     */
+    private function loadWebhookTools(int $projectId, array $toolGate = [], bool $customerFacing = false): array
     {
         return DataSource::where('project_id', $projectId)
             ->where('type', DataSource::TYPE_WEBHOOK)
             ->where('status', DataSource::STATUS_ACTIVE)
             ->where('is_active', 'Yes')
+            // Audience gate: hide owner-restricted tools from customers.
+            // Internal turns pass false and see every tool.
+            ->when($customerFacing, fn ($q) => $q->where('customer_visible', true))
             ->get()
+            // Only offer tools the session's agent is allowed to use. A
+            // tool bound to one or more skills is offered solely to agents
+            // holding one of those skills; unbound tools stay global. With
+            // an empty gate (no agent / no skill_actions) every tool shows.
+            ->filter(fn (DataSource $s) => empty($toolGate) || Skill::toolPermitted((int) $s->id, $toolGate))
             ->map(function (DataSource $s) {
                 $cfg = $s->config ?? [];
                 return [
@@ -90,12 +126,18 @@ class ToolPicker
                     'args'        => is_array($cfg['args'] ?? null) ? $cfg['args'] : [],
                 ];
             })
+            ->values()
             ->all();
     }
 
-    private function buildPrompt(array $tools, array $history, string $userQuery): string
+    private function buildPrompt(array $tools, array $history, string $userQuery, bool $hasHumans = false): string
     {
         $toolDesc = '';
+        if ($hasHumans) {
+            $toolDesc .= "- tool_id=\"handoff\"  name=\"Transfer to a human agent\"\n"
+                . "  when_to_use: the customer explicitly asks for a human/agent/representative, is upset or frustrated, or you cannot resolve their request and a person is needed.\n"
+                . "  args: {}\n";
+        }
         foreach ($tools as $t) {
             $argsLine = !empty($t['args'])
                 ? 'args: ' . json_encode($t['args'], JSON_UNESCAPED_SLASHES)

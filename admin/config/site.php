@@ -1,0 +1,217 @@
+<?php
+
+/*
+|--------------------------------------------------------------------------
+| Marketing-site defaults (SEO + landing-page content)
+|--------------------------------------------------------------------------
+|
+| Source of truth for the PUBLIC website (welcome / welcome-v2). Every
+| value here is the fallback used when the matching row in `site_settings`
+| is empty — so a fresh install (no rows) renders the site exactly as the
+| original hardcoded blade did. Super-admins override these from
+|   /admin/seo       → the `seo.*` keys
+|   /admin/content   → the `content.*` keys
+|
+| Read them anywhere via the helpers in app/Helpers/Function.php:
+|   tva_setting('seo.meta_title')         // single value, stored-or-default
+|   tva_seo_all()                         // full merged seo array
+|
+*/
+
+return [
+
+    // ── SEO / head-tag defaults ──────────────────────────────────────
+    'seo' => [
+        // Core meta
+        'meta_title'        => 'Serve AI — your AI receptionist that never sleeps',
+        'meta_description'  => 'Serve AI — AI receptionist + CRM that never sleeps. Voice calls, web chat, lead capture. Drop your data, watch it work.',
+        'meta_keywords'     => 'AI receptionist, AI voice agent, CRM, lead capture, voice bot, chatbot, call automation',
+        'author'            => 'Serve AI',
+        'theme_color'       => '#3b82f6',
+        'canonical_url'     => env('APP_URL', 'http://localhost'),
+
+        // Crawl control — when false, an X-Robots noindex,nofollow meta is emitted
+        'allow_indexing'    => true,
+
+        // Open Graph (Facebook / LinkedIn / WhatsApp link previews)
+        'og_title'          => 'Serve AI — your AI receptionist that never sleeps',
+        'og_description'    => 'Answers calls & chats 24/7 in your own cloned voice, qualifies leads, drops them in your CRM.',
+        'og_image'          => '',          // absolute URL recommended (1200×630)
+        'og_type'           => 'website',
+        'og_site_name'      => 'Serve AI',
+
+        // Twitter / X card
+        'twitter_card'      => 'summary_large_image',
+        'twitter_site'      => '',          // @handle
+        'twitter_image'     => '',
+
+        // Search-console / site verification
+        'google_site_verification' => '',   // GSC meta token (content="…")
+        'bing_site_verification'   => '',    // Bing msvalidate.01 token
+        'verification_file_name'   => '',    // e.g. googleXXXXXXXX.html (served from /)
+        'verification_file_body'   => '',
+
+        // Analytics & tag managers
+        'ga4_id'            => '',           // G-XXXXXXXXXX
+        'gtm_id'            => '',           // GTM-XXXXXXX
+        'facebook_pixel'    => '',           // numeric pixel id
+
+        // Icons — blank = auto (uses serveai_icon(): your uploaded logo,
+        // else the built-in SVG). Set here or in /admin/seo to override.
+        'favicon_url'       => '',
+        'apple_touch_icon'  => '',
+
+        // Structured data (JSON-LD Organization + WebSite)
+        'structured_data'   => true,
+        'org_name'          => 'Serve AI',
+        'org_logo'          => '/assets/dist/images/logo.svg',
+        'org_phone'         => '',
+        'org_email'         => '',
+        'social_links'      => [],           // array of profile URLs
+
+        // Raw HTML appended to <head> (advanced — verification, extra tags)
+        'custom_head_html'  => '',
+
+        // robots.txt body (served as a real file at /robots.txt)
+        'robots_txt'        => "User-agent: *\nDisallow:\n",
+
+        // sitemap.xml entries — written to a real file at /sitemap.xml
+        // each: ['loc' => '/', 'changefreq' => 'weekly', 'priority' => '1.0']
+        'sitemap_urls'      => [
+            ['loc' => '/',               'changefreq' => 'weekly',  'priority' => '1.0'],
+            ['loc' => '/v2',             'changefreq' => 'monthly', 'priority' => '0.6'],
+            ['loc' => '/register',       'changefreq' => 'monthly', 'priority' => '0.7'],
+            ['loc' => '/login',          'changefreq' => 'monthly', 'priority' => '0.5'],
+            ['loc' => '/contact',        'changefreq' => 'monthly', 'priority' => '0.6'],
+            ['loc' => '/about',          'changefreq' => 'monthly', 'priority' => '0.5'],
+            ['loc' => '/privacy',        'changefreq' => 'yearly',  'priority' => '0.4'],
+            ['loc' => '/terms',          'changefreq' => 'yearly',  'priority' => '0.4'],
+            ['loc' => '/refund-policy',  'changefreq' => 'yearly',  'priority' => '0.4'],
+            ['loc' => '/cookies',        'changefreq' => 'yearly',  'priority' => '0.3'],
+            ['loc' => '/security',       'changefreq' => 'yearly',  'priority' => '0.4'],
+        ],
+    ],
+
+    // ── Landing-page editable content (mirrors welcome.blade.php) ─────
+    'content' => [
+        'brand_name'        => 'Serve AI',
+
+        // Hero
+        'hero_eyebrow'      => 'Live · AI Mission Console',
+        'hero_title'        => 'Your AI receptionist that',
+        'hero_title_accent' => 'never sleeps.',
+        'hero_subtitle'     => 'Serve AI answers your calls and chats 24/7 in your own cloned voice, qualifies leads on the spot, and drops them straight into your CRM. Drop your data — watch it work.',
+        'hero_cta_label'    => 'Call me now →',
+        'hero_callbar_msg'  => 'Our AI agent will call you in under 10 seconds.',
+        'hero_meta1'        => 'No credit card',
+        'hero_meta2'        => 'Your data stays in your DB',
+        'hero_meta3'        => 'Set up in 90 seconds',
+
+        // Mission Console section
+        'how_eyebrow'       => 'Mission Console',
+        'how_title'         => 'Every call. Every chat. Every lead — in real time.',
+        'how_lead'          => "Watch a call come in, the agent transcribe + respond live, and a fresh lead land in your CRM — three glass panels you'll see every day inside Serve AI.",
+
+        // Launch sequence (steps)
+        'steps_eyebrow'     => 'Launch sequence',
+        'steps_title'       => 'From signup to first call in 90 seconds.',
+        'steps_lead'        => 'Four steps. No code. No engineers. Done before your coffee cools.',
+        'step1_title'       => 'Drop your data',
+        'step1_body'        => 'Paste a URL, upload a CSV, or connect your DB. We index it in 30 seconds.',
+        'step2_title'       => 'Pick a voice',
+        'step2_body'        => 'Choose from 30+ voices or clone yours from a 10-second sample.',
+        'step3_title'       => 'Connect a number',
+        'step3_body'        => 'Bring a Twilio number, or get one of ours. Route per skill or agent.',
+        'step4_title'       => 'Go live',
+        'step4_body'        => 'Embed the chat widget on your site. Watch your dashboard fill with leads.',
+
+        // Trust strip
+        'trust1_num' => '<1s',   'trust1_label' => 'first-byte response',
+        'trust2_num' => '99.9%', 'trust2_label' => 'call delivery',
+        'trust3_num' => '30+',   'trust3_label' => 'voices · 13 languages',
+        'trust4_num' => 'SOC 2', 'trust4_label' => 'roadmap Q3',
+
+        // ── Channels strip ───────────────────────────────────────────
+        'channels_eyebrow'  => 'One agent. Every channel.',
+        'channels_title'    => 'Your customers reach out everywhere. Now you answer everywhere.',
+        'channels_lead'     => 'The same brain — your data, your voice, your rules — picks up the phone, replies on WhatsApp, and chats on your website. No channel left on read.',
+        'channel1_icon' => '📞', 'channel1_title' => 'Voice calls',      'channel1_body' => 'Inbound & outbound phone, answered in a human voice.',
+        'channel2_icon' => '💬', 'channel2_title' => 'Website chat',      'channel2_body' => 'One script tag. Live in minutes on any site.',
+        'channel3_icon' => '🟢', 'channel3_title' => 'WhatsApp',          'channel3_body' => 'Official Cloud API. Templates, media, and flows.',
+        'channel4_icon' => '📸', 'channel4_title' => 'Instagram',         'channel4_body' => 'DMs and story replies handled automatically.',
+        'channel5_icon' => '👍', 'channel5_title' => 'Facebook',          'channel5_body' => 'Messenger conversations, never missed again.',
+        'channel6_icon' => '✉️', 'channel6_title' => 'SMS & more',         'channel6_body' => 'Text fallback and new channels added over time.',
+
+        // ── Platform feature grid (covers every module) ──────────────
+        'platform_eyebrow'  => 'The whole platform',
+        'platform_title'    => 'Everything you need to turn conversations into customers.',
+        'platform_lead'     => 'Not a chatbot bolted onto a CRM — one system where the agent that talks to your customers and the CRM that remembers them are the same thing.',
+        'feat1_icon'  => '🎙️', 'feat1_title' => 'Voice cloning',           'feat1_body' => 'Clone your own voice from a 10-second sample, or choose from 30+ studio voices across 13 languages. Every agent can sound different.',
+        'feat2_icon'  => '🧠', 'feat2_title' => 'Knows your business', 'feat2_body' => 'Point it at your website, upload your price list or brochures, or connect your system. Now it answers real questions — “is this in stock?”, “what are your hours?”, “where’s my order?” — from your actual information.',
+        'feat3_icon'  => '📥', 'feat3_title' => 'Omnichannel inbox',        'feat3_body' => 'Every WhatsApp, Instagram, Facebook and web conversation in one shared inbox. Jump in live, hand back to the bot, never lose context.',
+        'feat4_icon'  => '🧭', 'feat4_title' => 'Visual flow builder',      'feat4_body' => 'Design guided conversations with a drag-and-drop canvas — qualify, route, book, and collect — then test it live before going public.',
+        'feat5_icon'  => '🎭', 'feat5_title' => 'Multi-agent & skills',     'feat5_body' => 'Spin up sales, support and billing personas. Route by phone number or skill pool. Each agent gets its own voice, tools and knowledge.',
+        'feat6_icon'  => '🎯', 'feat6_title' => 'Automatic lead capture',   'feat6_body' => 'The agent extracts names, intent and contact details mid-conversation and drops a qualified lead straight into your CRM — scored and ready.',
+        'feat7_icon'  => '🔒', 'feat7_title' => 'Per-table access control', 'feat7_body' => 'Decide exactly which tables and columns the AI may read. Sensitive data stays invisible to the model. Privacy by design, not by promise.',
+        'feat8_icon'  => '🌍', 'feat8_title' => 'Speaks their language',     'feat8_body' => 'Auto-detects the language a customer uses and replies in kind. One agent serves a global audience without a single extra setup step.',
+        'feat9_icon'  => '🔌', 'feat9_title' => 'Choose your AI engine',     'feat9_body' => 'Use a top AI provider for the smartest answers, or a private model that runs entirely on your own servers for maximum privacy. Switch anytime in one click — your choice, your budget.',
+        'feat10_icon' => '👥', 'feat10_title' => 'Teams, roles & access',    'feat10_body' => 'Invite your team with custom roles and per-project permissions. Owners decide who sees billing, who edits flows, who works the inbox.',
+        'feat11_icon' => '📊', 'feat11_title' => 'Conversations & insights', 'feat11_body' => 'Replay every call and chat with full transcripts. See what customers ask, where they drop off, and what your agent is closing.',
+        'feat12_icon' => '🏢', 'feat12_title' => 'Your data, your database',  'feat12_body' => 'True multi-tenant isolation — every customer’s data lives in its own database. Nothing pooled, nothing shared, nothing leaked.',
+
+        // ── Security / control section ───────────────────────────────
+        'security_eyebrow'  => 'Built for trust',
+        'security_title'    => 'Enterprise-grade control, without the enterprise contract.',
+        'security_lead'     => 'You hand an AI the keys to your customers and your data. We built it so you stay in control of both.',
+        'security1_title' => 'Isolated by tenant',   'security1_body' => 'Each workspace gets its own database. Your data is never mixed with anyone else’s.',
+        'security2_title' => 'You gate the AI',       'security2_body' => 'Field-level access controls let you hide sensitive columns from the model entirely.',
+        'security3_title' => 'Human handover',        'security3_body' => 'Your team can take over any conversation instantly — and hand it back when it’s done.',
+        'security4_title' => 'Full audit trail',      'security4_body' => 'Every action and every conversation is logged and replayable. Nothing happens in the dark.',
+        'security5_title' => 'Run it your way',        'security5_body' => 'Use our cloud, your own LLM keys, or fully local models. Your stack, your choice.',
+        'security6_title' => 'No lock-in',            'security6_body' => 'Export your leads and conversations whenever you want. Cancel anytime, keep your data.',
+
+        // ── FAQ ──────────────────────────────────────────────────────
+        'faq_eyebrow'   => 'Questions, answered',
+        'faq_title'     => 'Everything you’re probably wondering.',
+        'faq1_q' => 'How long does setup actually take?',
+        'faq1_a' => 'Most teams are live in under five minutes. Connect a data source, pick a voice, drop the chat widget on your site — and your agent starts answering. Connecting a phone number or WhatsApp takes a few minutes more.',
+        'faq2_q' => 'Do I need any technical skills or developers?',
+        'faq2_a' => 'No. Everything — data sources, voices, flows, channels and team access — is configured from a point-and-click dashboard. If you can fill in a form, you can launch an agent.',
+        'faq3_q' => 'Where does the agent get its answers?',
+        'faq3_a' => 'Only from the data you give it: your website, your documents, and your databases. It does not make things up about your business — and you control exactly which data it can see.',
+        'faq4_q' => 'Is my customer data safe?',
+        'faq4_a' => 'Yes. Every workspace is isolated in its own database, you choose which tables and columns the AI may read, and every conversation is logged and exportable. You can also bring your own AI keys or run models locally.',
+        'faq5_q' => 'Can it really sound like me?',
+        'faq5_a' => 'A 10-second sample is enough to clone your voice, or you can pick from 30+ ready-made voices in 13 languages. Different agents can use different voices for sales, support, or billing.',
+        'faq6_q' => 'What does it cost, and can I cancel?',
+        'faq6_a' => 'Start free — no credit card required. Upgrade when you’re ready, cancel anytime, and take your data with you. No long-term contracts, no lock-in.',
+
+        // ── Use cases / who it's for ─────────────────────────────────
+        'cases_eyebrow'  => 'Made for your business',
+        'cases_title'    => 'If you have customers, it pays for itself.',
+        'cases_lead'     => 'It doesn’t matter what you sell — if people call, message, or fill in a form, you’re losing some of them to slow replies and missed calls. Here’s what changes.',
+        'case1_icon' => '🛍️', 'case1_title' => 'Shops & online stores',  'case1_body' => 'Answers “do you have this?”, “how much?”, and “where’s my order?” instantly — and turns browsers into buyers, even at 2am.',
+        'case2_icon' => '🦷', 'case2_title' => 'Clinics & salons',        'case2_body' => 'Books appointments, answers patients after hours, and stops no-shows from missed calls. Your front desk never sleeps.',
+        'case3_icon' => '🏠', 'case3_title' => 'Real estate & property',  'case3_body' => 'Replies to every listing enquiry in seconds, qualifies the serious buyers, and books viewings while you’re showing another home.',
+        'case4_icon' => '🍽️', 'case4_title' => 'Restaurants & hospitality', 'case4_body' => 'Takes reservations, answers menu and hours questions, and handles the dinner-rush phone calls you can’t pick up.',
+        'case5_icon' => '🧰', 'case5_title' => 'Services & trades',        'case5_body' => 'Captures job details from every caller, gives quotes from your price list, and makes sure no lead slips away while you’re on a job.',
+        'case6_icon' => '📈', 'case6_title' => 'Agencies & B2B',           'case6_body' => 'Qualifies leads around the clock, books demos straight into your calendar, and hands sales a CRM full of ready-to-call prospects.',
+
+        // ── Final CTA ────────────────────────────────────────────────
+        'cta_title'         => 'Ready to never miss a lead again?',
+        'cta_subtitle'      => "Spin up your agent in 90 seconds. Cancel anytime. We won't sleep on a single call.",
+        'cta_button'        => 'Start free — no card required →',
+
+        // ── Footer / contact (EDIT THESE in /admin/content) ──────────
+        // Placeholders below — update with your real business details.
+        'footer_tagline'    => 'The AI receptionist and CRM that answers every call, chat and message — 24/7, in your own voice.',
+        'contact_phone'     => '+1 (555) 010-0100',
+        'contact_email'     => 'hello@serveai.com',
+        'contact_address'   => 'Your Company HQ · City, Country',
+        'social_twitter'    => '',   // full URL, e.g. https://x.com/serveai
+        'social_linkedin'   => '',
+        'social_facebook'   => '',
+        'social_instagram'  => '',
+        'footer_text'       => '',  // empty → falls back to auto "© {year} {brand}" line
+    ],
+];

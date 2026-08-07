@@ -260,7 +260,7 @@
             <label class="tva-form-label">Project</label>
             <select name="project_id" class="form-select w-full md:w-1/3" onchange="this.form.submit()">
                 @foreach ($projects as $p)
-                    <option value="{{ $p->id }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
+                    <option value="{{ hashid($p->id) }}" @selected((int)$projectId === (int)$p->id)>{{ $p->name }}</option>
                 @endforeach
             </select>
         </form>
@@ -367,7 +367,7 @@
                         </label>
                         @if (($flows ?? collect())->isEmpty())
                             <div class="tva-form-help" style="background: #fef3c7; border: 1px solid #fde68a; padding: 9px 12px; border-radius: 6px; color: #92400e;">
-                                No active flows yet. <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ $project->id }}" style="color: #b45309; font-weight: 600;">Build one in the Flow Builder</a> and set its status to <b>active</b> to make it bindable. Until then, every chat starts in free-form AI mode.
+                                No active flows yet. <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ hashid($project->id) }}" style="color: #b45309; font-weight: 600;">Build one in the Flow Builder</a> and set its status to <b>active</b> to make it bindable. Until then, every chat starts in free-form AI mode.
                             </div>
                         @else
                             <select name="default_flow_id" id="ws_default_flow_id" class="form-control">
@@ -521,7 +521,7 @@
                             ['show_expand_button', 'Expand button',            'Lets visitors expand the widget to fullscreen'],
                             ['show_visitor_modes', 'New / Returning tiles',    'Big buttons on the home screen'],
                             ['show_history_tab',   'History tab',              'Bottom-nav tab listing past conversations'],
-                            ['show_powered_by',    'Powered-by footer',        'Small "Powered by NueraBot" line at the bottom'],
+                            ['show_powered_by',    'Powered-by footer',        'Small "Powered by Serve AI" line at the bottom'],
                         ];
                     @endphp
                     <div class="tva-toggle-grid">

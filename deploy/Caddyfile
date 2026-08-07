@@ -1,0 +1,23 @@
+# Caddy reverse proxy + automatic HTTPS.
+# Domains and ACME email come from the environment (set in .env / compose).
+#
+# Local testing without real DNS: set APP_DOMAIN/VOICE_DOMAIN to e.g.
+# "localhost" and Caddy will issue a self-signed internal cert, or replace
+# the site addresses below with ":80" to serve plain HTTP.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# ── Admin UI + HTTP API (Laravel) ────────────────────────────────────────────
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:8080
+}
+
+# ── Voice engine: WebSocket pipeline, /tts, /stt, /voice/* audio, /healthz ───
+{$VOICE_DOMAIN} {
+	encode zstd gzip
+	# Caddy transparently upgrades /ws/turn WebSocket connections.
+	reverse_proxy voice-engine:8000
+}

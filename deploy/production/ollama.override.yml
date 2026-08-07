@@ -1,0 +1,53 @@
+# OPTIONAL: add a LOCAL LLM (Ollama) as a SAFETY NET behind cloud Groq.
+#
+# Wiring: Groq stays the PRIMARY LLM (fast, low RAM). If Groq rate-limits (429),
+# errors, or times out, the voice-engine automatically fails over to a local
+# Ollama model — so you keep answering even when the cloud provider is flaky or
+# you've hit a quota. Best of both worlds on a 24 GB box.
+#
+# Apply as a THIRD overlay (after the base + prod overlay):
+#   docker compose -f docker-compose.yml \
+#     -f deploy/production/docker-compose.prod.yml \
+#     -f deploy/production/ollama.override.yml up -d
+#
+# Pull the fallback model once (saved in the ollama_models volume):
+#   docker compose -f docker-compose.yml -f deploy/production/docker-compose.prod.yml \
+#     -f deploy/production/ollama.override.yml exec ollama ollama pull qwen2.5:7b
+#
+# ── RAM on a 24 GB box ───────────────────────────────────────────────────────
+# Baseline (stack + XTTS) ≈ 10 GB. A 7B model loads ~6 GB ONLY while it's
+# actively generating (Ollama lazy-loads on first use, unloads after ~5 min
+# idle). Since Groq is primary, Ollama mostly sits idle (~few hundred MB) and
+# only spikes during a fallback — so ~16 GB peak, ~8 GB headroom. Comfortable.
+#   • 7B (qwen2.5:7b / llama3.1:8b) ≈ 6 GB  → recommended on this box
+#   • 13–14B                        ≈ 9 GB  → fits, slower on CPU
+#   • 70B                           ≈ 43 GB → NOT possible without a GPU host
+# For full local-LLM speed you still want a GPU; on CPU keep it as the fallback.
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama_models:/root/.ollama
+    networks: [aicrm]
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+    deploy:
+      resources:
+        limits: { cpus: "6", memory: 10240M }
+
+  # Groq primary + Ollama fallback. The voice-engine retries Groq, then fails
+  # over to the local model. (fallback must differ from the primary.)
+  voice-engine:
+    environment:
+      LLM_PROVIDER: ${LLM_PROVIDER:-groq}
+      LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
+      OLLAMA_BASE_URL: http://ollama:11434/v1
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+    depends_on:
+      - ollama
+
+volumes:
+  ollama_models:

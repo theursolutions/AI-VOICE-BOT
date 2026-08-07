@@ -41,6 +41,36 @@
                     </div>
                 @endif
             </div>
+            {{-- Actions (webhook tools) this skill grants. An agent that
+                 holds this skill can invoke exactly these tools. --}}
+            @php
+                $tools    = $webhookTools ?? collect();
+                $selected = $selectedActionIds ?? [];
+            @endphp
+            <div class="mb-3">
+                <label class="form-label">
+                    Actions <span class="text-xs text-slate-400 font-normal">— tools an agent with this skill can use</span>
+                </label>
+                @if ($tools->isEmpty())
+                    <div class="text-xs text-slate-500 border rounded p-3 bg-slate-50">
+                        No action tools yet. Add <b>webhook tools</b> under Data Sources, then link them here.
+                    </div>
+                @else
+                    <div class="border rounded p-2" style="max-height:180px; overflow:auto;">
+                        @foreach ($tools as $tool)
+                            <label class="flex items-center gap-2 py-1 cursor-pointer text-sm">
+                                <input type="checkbox" name="action_ids[]" value="{{ $tool->id }}"
+                                       @checked(in_array((int) $tool->id, array_map('intval', (array) $selected), true))>
+                                <span>{{ $tool->name }}</span>
+                                @if (($tool->status ?? 'active') !== 'active')
+                                    <span class="text-[10px] text-slate-400">({{ $tool->status }})</span>
+                                @endif
+                            </label>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+
             <label class="flex items-center gap-2 cursor-pointer mt-2">
                 <input type="hidden" name="is_default" value="0">
                 <input type="checkbox" name="is_default" value="1" @checked(!empty($skill?->is_default))>

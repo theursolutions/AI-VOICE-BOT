@@ -27,12 +27,15 @@
                 <!-- BEGIN: Top Bar -->
                 @include('layouts.topbar')
                 <!-- END: Top Bar -->
+                <!-- Verify-email nudge (Dashboard + Ask AI, only while unverified) -->
+                @include('partials.verify-email-banner')
                 <!-- BEGIN Actual page content -->
                 @yield('content')
                 <!-- END: Actual page content -->
             </div>
             <!-- END: Content -->
         </div>
+        @include('layouts.nav-collapse')
         @include('layouts.footer')
     </body>
 </html>

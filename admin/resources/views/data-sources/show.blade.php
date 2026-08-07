@@ -175,7 +175,7 @@
             </form>
             <form method="POST" class="inline"
                   action="{{ route('data-sources.destroy', ['id' => $source->id]) }}"
-                  onsubmit="return confirm('Disable this data source?');">
+                  data-confirm="Disable this data source?">
                 @csrf
                 <button type="submit" class="btn btn-danger">
                     <i data-lucide="x-circle" class="w-4 h-4 mr-2"></i> Disable
@@ -207,8 +207,43 @@
                     <span class="tva-pill-dot" style="background:{{ $statusColor }}"></span>
                     {{ $statusLabel }}
                 </span>
+                <div class="mt-2">
+                    <span class="tva-pill" title="Who can use this source">
+                        <i data-lucide="{{ $source->customer_visible ? 'users' : 'lock' }}" class="w-3 h-3 mr-1"></i>
+                        {{ $source->customer_visible ? 'Customers + team' : 'Internal only' }}
+                    </span>
+                </div>
             </div>
         </div>
+    </div>
+
+    {{-- ── Customer access control (owner) ──────────────────────────── --}}
+    <div class="tva-card mb-6" style="border-left:4px solid {{ $source->customer_visible ? '#22c55e' : '#94a3b8' }};">
+        <div class="tva-card__title">
+            <i data-lucide="shield-check" class="w-4 h-4"></i> Customer access
+        </div>
+        <form method="POST" action="{{ route('data-sources.visibility', ['id' => $source->id]) }}">
+            @csrf
+            <div class="flex items-start justify-between gap-4 flex-wrap">
+                <div style="max-width: 640px;">
+                    <label class="form-check form-switch" style="display:flex; align-items:center; gap:10px;">
+                        <input type="hidden" name="customer_visible" value="0">
+                        <input class="form-check-input" type="checkbox" name="customer_visible" value="1"
+                               {{ $source->customer_visible ? 'checked' : '' }}>
+                        <span class="font-medium" style="font-size:14px;">Let customers use this source</span>
+                    </label>
+                    <p class="text-xs mt-2" style="color:#64748b; line-height:1.6;">
+                        When <b>on</b>, the public web-chat &amp; voice widget can answer customer
+                        questions using this source. When <b>off</b>, only your team's internal
+                        <b>Ask AI</b> assistant can use it. With no sources turned on, the customer
+                        bot answers general questions about the project only.
+                    </p>
+                </div>
+                <button type="submit" class="btn btn-primary" style="white-space:nowrap;">
+                    <i data-lucide="save" class="w-4 h-4 mr-2"></i> Save access
+                </button>
+            </div>
+        </form>
     </div>
 
     {{-- ── Last error banner (if any) ───────────────────────────────── --}}
@@ -321,16 +356,55 @@
             <div class="tva-card__title">
                 <i data-lucide="activity" class="w-4 h-4"></i> Ingestion status
             </div>
+
+            {{-- Authoritative state: what's actually indexed on disk right now.
+                 Survives engine restarts (unlike the live job below). --}}
+            @isset($indexed)
+                @if ($indexed['count'] > 0)
+                    <div class="tva-error-card" style="background:linear-gradient(135deg,#f0fdf4 0%,#dcfce7 100%); border-color:#86efac;">
+                        <div class="tva-error-card__icon" style="background:#dcfce7; color:#15803d;">
+                            <i data-lucide="check-circle" class="w-4 h-4"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-semibold mb-1" style="color:#166534; font-size:13px;">Indexed &amp; searchable</div>
+                            <div style="font-size:12px; color:#166534;">
+                                <b>{{ number_format($indexed['count']) }}</b> {{ $indexed['label'] }} live in the search index.
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div class="tva-error-card" style="background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%); border-color:#fcd34d;">
+                        <div class="tva-error-card__icon" style="background:#fef3c7; color:#b45309;">
+                            <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                        </div>
+                        <div class="flex-1">
+                            <div class="font-semibold mb-1" style="color:#92400e; font-size:13px;">Nothing indexed yet</div>
+                            <div style="font-size:12px; color:#92400e;">
+                                No {{ $indexed['label'] }} found in the search index. Click <b>Resync</b> above to re-ingest.
+                            </div>
+                        </div>
+                    </div>
+                @endif
+            @endisset
+
+            {{-- Live job detail (best-effort; the engine forgets jobs on restart). --}}
             @if ($remote)
                 @if (isset($remote['error']))
-                    <div class="tva-error-card">
+                    <div class="tva-error-card mt-3">
                         <div class="tva-error-card__icon"><i data-lucide="alert-triangle" class="w-4 h-4"></i></div>
                         <div class="tva-error-card__msg">{{ $remote['error'] }}</div>
                     </div>
                 @else
+                    <div class="text-xs mt-3 mb-1" style="color:#64748b; text-transform:uppercase; letter-spacing:.05em; font-weight:600;">Last job</div>
                     <div class="tva-code">{{ json_encode($remote, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) }}</div>
                 @endif
-            @else
+            @elseif ($jobMissing)
+                <div class="text-xs mt-3" style="color:#94a3b8; line-height:1.6;">
+                    <i data-lucide="info" class="w-3 h-3 inline -mt-0.5"></i>
+                    Live job tracking resets when the voice engine restarts, so the last
+                    ingestion job is no longer listed. Your indexed data above is unaffected.
+                </div>
+            @elseif (!isset($indexed))
                 <div class="text-center py-8" style="color:#94a3b8;">
                     <i data-lucide="inbox" class="w-10 h-10 inline mb-2 opacity-60"></i>
                     <div class="text-sm" style="font-weight:600;">No ingestion job yet</div>

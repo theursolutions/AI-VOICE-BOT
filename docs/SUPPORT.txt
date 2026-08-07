@@ -1,0 +1,472 @@
+===============================================================================
+SUPPORT KNOWLEDGE BASE  -  AI VOICE CRM
+Plain-text edition. Full formatted version: docs/SUPPORT_KB.md
+===============================================================================
+
+Audience : IT support team (helpdesk / NOC / on-call engineers)
+Purpose  : The playbook to take a ticket from intake -> triage -> resolution
+           -> escalation for the AI Voice CRM platform.
+
+Companion docs: DEPLOYMENT.md, SCALING.md, API_CONTRACT.md,
+                WHATSAPP_CALLING_INTEGRATION.md
+
+
+-------------------------------------------------------------------------------
+1. HOW TO USE THIS DOCUMENT
+-------------------------------------------------------------------------------
+1. Log the ticket + collect intake info (sec 6).
+2. Classify severity (sec 5) - this starts the SLA clock.
+3. Triage with the decision tree (sec 7) to find the failing component.
+4. Resolve using the matching article in the issue catalog (sec 8).
+5. Escalate if out of scope or past SLA threshold (sec 9).
+6. Communicate + close with templates (sec 10); write a KB note if novel (16).
+
+
+-------------------------------------------------------------------------------
+2. PLATFORM AT A GLANCE
+-------------------------------------------------------------------------------
+A multi-tenant AI Voice/Chat CRM. Customers (tenants) get an AI agent that
+answers chat, WhatsApp/Instagram/Facebook, and voice, backed by their own
+knowledge base, with human-agent handoff.
+
+COMPONENTS (what breaks, and where to look):
+
+  caddy        Caddy 2        TLS + reverse proxy (ports 80/443)
+               health: curl -I https://crm.<domain>
+               logs  : docker compose logs caddy
+
+  app          Laravel        Admin UI + HTTP API (nginx + PHP-FPM)
+               health: curl -I https://crm.<domain>
+               logs  : docker compose logs app
+
+  queue        Laravel worker Inbound messages, lead extraction, RAG sync
+               health: docker compose ps queue
+               logs  : docker compose logs queue
+
+  scheduler    schedule:work  Cron-style jobs
+               logs  : docker compose logs scheduler
+
+  voice-engine FastAPI        STT (Whisper) -> LLM -> TTS (XTTS), RAG ingest
+               health: curl https://voice.<domain>/healthz  -> {"status":"ok"}
+               logs  : docker compose logs voice-engine
+
+  qdrant       Qdrant         Vector store for RAG / knowledge base
+  mysql        MySQL 8        Central DB ai-crm-config + per-tenant chat DBs
+  redis        Redis 7        Cache + sessions + queue backend
+
+NOTE: Only Caddy is exposed to the internet (80/443). Everything else talks
+over the private "aicrm" Docker network by service name. voice-engine listens
+on :8000 inside Docker (dev/local installs use :8002). Health route is
+/healthz, NOT /health.
+
+REQUEST FLOW (mental model):
+  Customer -> Caddy -> app (Laravel)
+                        |  text turn  -> queue worker -> LLM provider (Groq/...)
+                        |  voice turn -> voice-engine (WS /ws/turn) -> STT->LLM->TTS
+                        |  knowledge  -> voice-engine -> qdrant (RAG retrieval)
+                        +- WhatsApp/IG/FB -> /api/whatsapp/webhook -> queue
+  voice-engine -> app (turn-completed webhook, shared PYTHON_INTERNAL_SECRET)
+
+KEY CONCEPTS:
+  - Tenant / Project : each customer has its own chat DB ai-crm-client-<id>.
+                       "Unknown database" = tenant not provisioned.
+  - Bot Agent        : the AI persona. type=ai or type=human (handoff).
+  - Skill/DataSource/Flow : what the AI can do / knows / scripted flows.
+  - Human handoff    : AI escalates to a human agent or queues; bot pauses.
+  - 24-hour window   : outside WhatsApp's 24h window you may only send approved
+                       templates, not free-form messages.
+  - Compute Mesh     : live scaling dashboard. Shows DESIRED scale; actual
+                       provisioning is the orchestrator's job.
+
+
+-------------------------------------------------------------------------------
+3. SUPPORT MODEL (TIERS & ROLES)
+-------------------------------------------------------------------------------
+Tier 1 - Helpdesk          : Intake, classification, known fixes, status comms.
+                             Health checks, restart a service, follow a catalog
+                             article, reset a user, re-run provisioning.
+Tier 2 - Platform engineer : Anything Tier 1 can't fix from the catalog.
+                             Deep log reading, DB queries, config/env changes,
+                             queue scaling, RAG re-ingest.
+Tier 3 - Engineering/vendor: Bugs, data corruption, provider outages, code
+                             changes, provider tickets (Groq/Meta/host).
+
+GOLDEN RULES:
+  - Never run a destructive command (down -v, DROP, re-provision over data,
+    force-push) without Tier 2+ approval AND a fresh backup.
+  - Tenant/customer data is confidential. Don't export or paste into external
+    tools.
+  - Production config/.env changes only via the approved change process (11).
+  - Always reproduce/verify before declaring resolved.
+
+
+-------------------------------------------------------------------------------
+4. OPERATING HOURS & ON-CALL   (fill in for your org)
+-------------------------------------------------------------------------------
+  Helpdesk hours        : ____
+  After-hours on-call   : ____  (Tier 2 rotation)
+  Escalation manager    : ____
+  Status / comms channel: ____
+
+
+-------------------------------------------------------------------------------
+5. SEVERITY CLASSIFICATION & SLA
+-------------------------------------------------------------------------------
+Classify by BUSINESS IMPACT, not by how hard it looks.
+
+  S1 Critical : Platform down/unusable for all/most tenants; data loss/breach.
+                e.g. site down (502/all), MySQL down, all voice/chat failing,
+                security incident.
+                Response 15 min | Resolution/workaround 4 h (continuous effort)
+
+  S2 High     : Major feature down for one tenant or a channel platform-wide.
+                e.g. one tenant can't chat, WhatsApp inbound dead, voice
+                replies failing, queue stuck.
+                Response 30 min | Resolution 8 h
+
+  S3 Medium   : Degraded/partial; workaround exists.
+                e.g. slow voice, one data source not syncing, intermittent.
+                Response 4 business h | Resolution 3 business days
+
+  S4 Low      : Cosmetic, question, config request.
+                Response 1 business day | Resolution best effort
+
+SLA clock starts at ticket creation. If you'll miss resolution, escalate one
+tier BEFORE the breach. S1 pages on-call immediately.
+
+
+-------------------------------------------------------------------------------
+6. INTAKE CHECKLIST (collect before you touch anything)
+-------------------------------------------------------------------------------
+  [ ] Tenant / project name + project_id (which customer?)
+  [ ] What they were doing (web chat / WhatsApp / IG / FB / voice call)
+  [ ] Exact symptom + error text / screenshot (verbatim)
+  [ ] When it started + ongoing or intermittent
+  [ ] Scope: one user, one tenant, or everyone?
+  [ ] Recent changes: deploy, config edit, DNS, provider key, new data source
+  [ ] Repro steps (can support reproduce it?)
+  [ ] Affected URL (crm.<domain> vs voice.<domain>) + approx timestamp
+
+FIRST MOVE for any "it's broken": run the health checks in sec 12.
+80% of triage is "which box is red".
+
+
+-------------------------------------------------------------------------------
+7. TRIAGE DECISION TREE
+-------------------------------------------------------------------------------
+Is the website (crm.<domain>) reachable?
+|- No  (timeout/no response)
+|       -> Caddy up? DNS resolving? ports 80/443 open?     -> 8.1 / 8.2
+|       -> 502 from Caddy? app booting or crashed          -> 8.3
+|
++- Yes -> Can users log in / use the admin UI?
+          |- No (500/errors) -> app/DB issue               -> 8.3 / 8.4
+          +- Yes -> What's failing?
+                    |- Text/chat AI not replying           -> 8.5 (queue/LLM)
+                    |- Voice call broken/silent/slow       -> 8.6 (voice-engine)
+                    |- Knowledge base wrong/empty          -> 8.7 (RAG/Qdrant)
+                    |- WhatsApp/IG/FB send/receive         -> 8.8 (Meta)
+                    |- "Unknown database ai-crm-client-N"  -> 8.9 (tenant)
+                    |- Human handoff / agent console       -> 8.10
+                    +- One user / login / permission       -> 8.11
+
+
+-------------------------------------------------------------------------------
+8. ISSUE CATALOG (symptom -> fix)
+-------------------------------------------------------------------------------
+Each: Symptom -> Likely cause -> Tier-1 fix -> Escalate when.
+Run commands from the deployment dir (where docker-compose.yml lives).
+
+8.1 WEBSITE COMPLETELY UNREACHABLE (timeout, no response)
+  Cause: Caddy down, server down, DNS, or firewall (ports 80/443).
+  Fix : 1) docker compose ps - caddy up? If not: docker compose up -d caddy
+        2) nslookup crm.<domain> - points at server IP?
+        3) Confirm 80/443 open at firewall.
+        4) Server reachable (ping/SSH)? If host down -> infra issue.
+  Escalate (T2): host down, or Caddy won't start.
+
+8.2 CADDY CAN'T GET / RENEW A TLS CERTIFICATE
+  Symptom: cert warning, or ACME errors in: docker compose logs caddy
+  Cause  : DNS not pointing at server yet, or 80/443 blocked (LE can't validate)
+  Fix    : confirm DNS + ports, then docker compose restart caddy, watch logs.
+           New DNS can take time to propagate.
+  Escalate: DNS/ports correct but issuance still fails.
+
+8.3 502 / 503 BAD GATEWAY FROM CADDY
+  Cause: upstream (app or voice-engine) still booting or crashed.
+  Fix : 1) docker compose ps - find the unhealthy service.
+        2) Just after deploy/restart this is NORMAL for a few min. Wait.
+        3) docker compose logs --tail=100 app (or voice-engine) for real error.
+        4) Restart loop -> 8.4 / 8.6.
+  Escalate: still 502 after services report healthy.
+
+8.4 app CONTAINER WON'T START / 500 ERRORS
+  - "APP_KEY is empty" -> key never generated. T2:
+      docker compose run --rm app php artisan key:generate --show
+      paste into .env APP_KEY=, then docker compose up -d
+  - Can't connect to MySQL -> mysql not healthy yet, or wrong DB_PASSWORD.
+      Check docker compose ps mysql / logs mysql.
+  - Changed .env but no effect -> config cached at start; docker compose up -d.
+  - Generic 500 -> docker compose logs --tail=200 app. In prod APP_DEBUG=false
+    hides detail, so the log is the source of truth.
+  Escalate (T2): any code-level exception or migration failure.
+
+8.5 CHAT AI DOESN'T REPLY (text channels)
+  Cause (in order):
+   1) Queue worker down/stuck - inbound + replies run on the queue.
+      docker compose ps queue ; logs --tail=100 queue.
+      Fix: docker compose up -d queue. Backlog? scale: up -d --scale queue=4.
+   2) LLM provider error / 429 - confirm provider key set & valid
+      (GROQ_API_KEY by default). Sustained 429: T2 sets LLM_FALLBACK_PROVIDER +
+      2nd key, or raises tier (SCALING.md).
+   3) Wrong/empty key - e.g. LLM_PROVIDER=anthropic with empty ANTHROPIC_API_KEY
+      -> every turn fails. Default working provider = groq.
+  Fix: restart queue; verify key; check Compute Mesh (queue depth/failed jobs).
+  Escalate: keys valid + provider up but replies still fail.
+
+8.6 VOICE BROKEN (silent, no reply, or very slow)
+  First: curl https://voice.<domain>/healthz -> {"status":"ok"} ?
+         /metrics for model readiness + LLM provider.
+  - /stt or /tts return 503 -> models failed to load (low RAM or download
+    failed). logs voice-engine; ensure >=8 GB RAM; docker compose restart
+    voice-engine.
+  - Unhealthy ~10 min on first boot -> NORMAL: downloading XTTS (~1.8 GB) +
+    Whisper. Watch logs -f voice-engine; healthcheck has a 10-min grace.
+  - Replies very slow -> KNOWN: CPU TTS (XTTS) ~1s/character. Voice must use the
+    WS streaming path (/ws/turn) which synthesizes sentence-by-sentence. A few
+    concurrent calls saturate one CPU box. Fix: GPU host, or enable ElevenLabs
+    (cloud TTS, per-project). See SCALING.md.
+  - "empty_input / no transcribable audio" -> client-side mic (browser
+    AudioContext suspended); server STT is fine. Hard-refresh + retry; ensure
+    current widget build.
+  Escalate: persistent 503 after restart w/ enough RAM, or concurrent-call
+            capacity limits (GPU / cloud TTS decision) -> T2/T3.
+
+8.7 KNOWLEDGE BASE / RAG GIVES WRONG OR EMPTY ANSWERS
+  Cause: docs not ingested, ingest failed, or Qdrant unavailable.
+  Fix : 1) docker compose ps qdrant healthy?
+        2) Data source recently added? Ingest is async on the queue - check
+           logs queue for ingest errors.
+        3) Re-trigger sync from admin UI (Data Sources -> re-sync).
+  Escalate (T2): re-ingest manually / inspect Qdrant collection (crm_chunks).
+  NOTE: "data snapshot" (CSV/JSON/XLSX) uploads use the SAME ingest pipeline as
+        documents and should flip pending -> active on upload. If one is stuck
+        at "pending", click Resync on the data source (voice-engine must be
+        reachable). A snapshot that never leaves pending after resync means the
+        voice-engine /rag/ingest call is failing - check voice-engine logs.
+
+8.8 WHATSAPP / INSTAGRAM / FACEBOOK NOT SENDING OR RECEIVING
+  Inbound not arriving:
+    - One webhook handles all three: GET|POST /api/whatsapp/webhook. Verify
+      Meta's webhook is subscribed + verify token matches.
+    - Inbound processed on the queue -> confirm queue is up (8.5).
+  Outbound fails / "can't send free-form message":
+    - 24-HOUR WINDOW CLOSED - outside Meta's 24h window only APPROVED TEMPLATES
+      send. By design. Use a template, or wait for customer to message first.
+    - Token/connection issue - access token expired or lacks scope. Re-connect
+      the channel (Channels page -> reconnect/OAuth). Check channel_onboarding
+      _logs on the Channels page; use Retry.
+  Calls (WhatsApp Business Calling): WebRTC bridge is v1/experimental; needs
+    public host + TURN. Treat as T3.
+  Escalate: token/permission errors needing Meta app config / App Review scopes.
+
+8.9 "Unknown database ai-crm-client-N"
+  Cause: tenant DB never provisioned for that project.
+  Fix : docker compose exec app php artisan tenant:provision <project_id>
+        (no id = all active projects)
+  After a tenant SCHEMA change:
+        docker compose exec app php artisan tenant:migrate [<id>]
+  Escalate: provisioning errors (DB privileges, MySQL down).
+
+8.10 HUMAN HANDOFF / AGENT CONSOLE ISSUES
+  - AI won't escalate -> handoff tool only offered when project has a HUMAN
+    agent that is ONLINE with spare capacity. Check Agents page: type=human,
+    presence=online, under max_active_chats.
+  - Conversation stuck "queued" -> no online human w/ matching skill/capacity.
+    Bring an agent online or raise capacity.
+  - Bot keeps replying after handoff -> bot-pause not set; re-claim/resolve from
+    console (bot pauses while a human owns the chat).
+  - Console not updating -> it POLLS (~6s list / ~4s thread), not live sockets;
+    short delay expected. Hard refresh clears stale state.
+
+8.11 USER LOGIN / ACCOUNT / PERMISSION
+  - Can't log in -> verify email exists; password reset (needs MAIL_* set;
+    default mailer is "log" so resets may not email on some installs). T2 can
+    reset via tinker.
+  - Create first/admin user -> see DEPLOYMENT.md sec 7.
+  - Per-table AI access / permissions -> managed in admin UI; verify the
+    project's data-access settings.
+
+
+-------------------------------------------------------------------------------
+9. ESCALATION
+-------------------------------------------------------------------------------
+WHEN TO ESCALATE:
+  - Past (or about to pass) the SLA resolution target.
+  - Needs a config/.env/DB change in production (T2).
+  - Code bug, data corruption, schema fix (T3).
+  - Third-party outage: LLM provider, Meta, hosting, Let's Encrypt (T2 opens
+    the vendor ticket).
+
+HOW TO ESCALATE - hand over a complete package:
+  - Ticket ID, tenant/project_id, severity
+  - Symptom + verbatim errors, timestamps, affected URL
+  - What you checked (health checks, logs, articles tried) + results
+  - Any change you made
+
+ESCALATION CONTACTS (fill in):
+  Tier 2 - Platform/DevOps : ____
+  Tier 3 - Engineering     : ____
+  LLM provider             : Groq/Gemini/Anthropic console
+  Meta (WhatsApp/IG/FB)    : Meta Business support
+  Hosting / infra          : ____
+
+
+-------------------------------------------------------------------------------
+10. COMMUNICATION TEMPLATES
+-------------------------------------------------------------------------------
+ACKNOWLEDGE:
+  Hi <name>, thanks for reporting this. We've logged it as <ticket> (Sev <n>)
+  and are investigating. Next update by <time>.
+
+INVESTIGATING / KNOWN ISSUE:
+  We've identified the cause (<summary>) and are working on a fix. We'll
+  confirm once resolved. Current workaround: <if any>.
+
+RESOLVED:
+  This is now resolved. Root cause: <short>. What we did: <short>. Please
+  confirm it's working on your end. We'll keep monitoring.
+
+NEED INFO:
+  To dig in we need: <missing intake items>. Could you share those?
+
+S1 STATUS UPDATE (every 30-60 min until resolved):
+  Update on <ticket>: <what we know / what we're doing / ETA or next update>.
+
+
+-------------------------------------------------------------------------------
+11. CHANGE & MAINTENANCE PROCEDURES
+-------------------------------------------------------------------------------
+DEPLOY A NEW VERSION:
+  git pull
+  docker compose build
+  docker compose up -d
+  docker compose exec app php artisan tenant:migrate   # if tenant schema changed
+
+RESTART A SINGLE SERVICE:
+  docker compose restart <service>     # voice-engine, queue, app, ...
+
+SCALE TEXT THROUGHPUT (#1 lever):
+  docker compose up -d --scale queue=4
+
+APPLY AN .env / CONFIG CHANGE:
+  1) Get approval + note in ticket.
+  2) Edit .env, then docker compose up -d (recreates, re-caches config).
+  3) Verify with health checks (sec 12).
+
+STOP / START (data preserved):
+  docker compose down
+  docker compose up -d
+
+WARNING: NEVER run "docker compose down -v" in production - it DELETES VOLUMES
+(databases, RAG store, models, uploads). Tier 2+ + backup only.
+
+
+-------------------------------------------------------------------------------
+12. DIAGNOSTICS CHEAT SHEET
+-------------------------------------------------------------------------------
+  # Overall health
+  docker compose ps
+
+  # Public endpoints (through Caddy / TLS)
+  curl -I https://crm.<domain>
+  curl https://voice.<domain>/healthz        # -> {"status":"ok"}
+  curl https://voice.<domain>/metrics        # LLM provider + model readiness
+
+  # Logs (add --tail=N or -f to follow)
+  docker compose logs --tail=100 app
+  docker compose logs --tail=100 queue
+  docker compose logs --tail=100 voice-engine
+  docker compose logs --tail=100 caddy
+
+  # Tenant management
+  docker compose exec app php artisan tenant:provision <project_id>
+  docker compose exec app php artisan tenant:migrate <project_id>
+
+  # Any artisan command
+  docker compose exec app php artisan <command>
+
+  # Resource pressure (RAM is the usual voice culprit)
+  docker stats --no-stream
+
+CONDENSED SYMPTOM TABLE:
+  app exits "APP_KEY is empty"        -> generate key, set in .env     (8.4)
+  Caddy can't get a cert             -> DNS/ports not ready            (8.2)
+  voice-engine unhealthy ~10 min     -> normal, downloading models     (8.6)
+  /stt or /tts -> 503                -> models failed / low RAM        (8.6)
+  502 right after up                 -> upstream still booting         (8.3)
+  Queued work never runs             -> queue down/crashed             (8.5)
+  "Unknown database ai-crm-client-N" -> tenant not provisioned         (8.9)
+  LLM 429 / rate limits              -> add fallback / raise tier      (8.5)
+  .env change ignored                -> recreate container (up -d)     (8.4)
+
+
+-------------------------------------------------------------------------------
+13. BACKUPS & DISASTER RECOVERY (Tier 2)
+-------------------------------------------------------------------------------
+Persistent state = named volumes: mysql_data, qdrant_storage, app_storage
+(uploaded docs + voice samples), redis_data, voice_models (re-downloadable).
+
+MySQL dump (central + all tenants):
+  docker compose exec mysql sh -c \
+    'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --all-databases' > backup-$(date +%F).sql
+
+Restore:
+  cat backup-YYYY-MM-DD.sql | docker compose exec -T mysql sh -c \
+    'mysql -uroot -p"$MYSQL_ROOT_PASSWORD"'
+
+Automate the nightly dump + ship off-box. Volume backups + full DR in
+DEPLOYMENT.md sec 11. Verify restores periodically - an untested backup is not
+a backup.
+
+
+-------------------------------------------------------------------------------
+14. SECURITY & DATA HANDLING
+-------------------------------------------------------------------------------
+  - Treat all tenant/customer conversation data as confidential.
+  - Secrets live only in .env; never commit or paste in tickets. Rotate leaks.
+  - Only 80/443 open; MySQL/Redis/Qdrant stay internal.
+  - PYTHON_INTERNAL_SECRET / PYTHON_JWT_SECRET must be IDENTICAL on app and
+    voice-engine.
+  - Suspected breach / data exposure = S1. Don't investigate alone: page T2/T3
+    + security owner, preserve logs, follow incident process. Hardening
+    checklist: DEPLOYMENT.md sec 12.
+
+
+-------------------------------------------------------------------------------
+15. GLOSSARY
+-------------------------------------------------------------------------------
+  Tenant / Project   A customer; has its own chat DB ai-crm-client-<id>
+  Bot Agent          AI persona (or a human agent for handoff)
+  Skill/DataSource/Flow  What the AI can do / knows / scripted flows
+  RAG                Retrieval from the tenant's KB (via Qdrant) to ground answers
+  STT / TTS          Speech-to-text (Whisper) / text-to-speech (XTTS or ElevenLabs)
+  Handoff            AI transferring a conversation to a human agent
+  24h window         Meta rule: free-form replies only within 24h of customer's
+                     last message; otherwise approved templates only
+  Compute Mesh       Live scaling dashboard (desired worker/voice fleet vs load)
+  Queue worker       Background process: inbound messages, lead extraction,
+                     RAG sync
+
+
+-------------------------------------------------------------------------------
+16. KEEPING THIS KB ALIVE
+-------------------------------------------------------------------------------
+  - Resolved something not in sec 8? Add a short article (Symptom -> Cause ->
+    Fix -> Escalate when).
+  - A fix changed? Update it here and note the date.
+  - Recurring tickets, same root cause -> flag for a permanent fix (T3); don't
+    just keep applying the workaround.
+
+  Owner: ____   Last reviewed: ____   Review cadence: quarterly
+===============================================================================

@@ -34,9 +34,15 @@
 
     /* ─────────────────────────── bubble renderers ───────────────────────── */
 
+    function textToHtml(text) {
+        return (typeof root.tvaibwc_textToHtml === 'function')
+            ? root.tvaibwc_textToHtml(text)
+            : $('<div>').text(text || '').html();
+    }
+
     function renderTextBubble(text, audioUrl) {
         var dark = isDark();
-        var safe = $('<div>').text(text || '').html();
+        var safe = textToHtml(text);
         var $bubble = $(
             '<div class="tvaibwc-message tvaibwc-bot' + (dark ? ' dark' : '') + '">' +
                 '<div class="tvaibwc-message-text">' + safe + '</div>' +
@@ -61,7 +67,7 @@
         var dark = isDark();
         var $bubble = $(
             '<div class="tvaibwc-message tvaibwc-bot tvaibwc-flow-menu' + (dark ? ' dark' : '') + '">' +
-                '<div class="tvaibwc-message-text">' + $('<div>').text(prompt || '').html() + '</div>' +
+                '<div class="tvaibwc-message-text">' + textToHtml(prompt) + '</div>' +
                 '<div class="tvaibwc-flow-options"></div>' +
                 '<div class="tvaibwc-message-time">' + nowTime() + '</div>' +
             '</div>'
@@ -94,6 +100,74 @@
         return $bubble;
     }
 
+    /* Renders a collect_input field as a styled inline input card: the
+       question + a typed field (right keyboard for phone/email/number) +
+       a send button, with light client-side validation. On submit it
+       shows the answer as the user's bubble and routes through flowStep
+       (the runner validates server-side + asks the next field). */
+    function inputTypeAttr(t) {
+        if (t === 'phone')  return 'tel';
+        if (t === 'email')  return 'email';
+        if (t === 'number') return 'number';
+        return 'text';
+    }
+    function inputPlaceholder(t) {
+        if (t === 'phone')  return 'e.g. +92 300 1234567';
+        if (t === 'email')  return 'e.g. you@example.com';
+        if (t === 'number') return 'Enter a number';
+        return 'Type your answer…';
+    }
+    function validateInputClient(t, v) {
+        v = (v || '').trim();
+        if (!v) return 'Please enter a value.';
+        if (t === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Please enter a valid email address.';
+        if (t === 'phone' && v.replace(/[^0-9]/g, '').length < 7)   return 'Please enter a valid phone number.';
+        return null;
+    }
+
+    function renderInputBubble(m) {
+        var dark = isDark();
+        var type = inputTypeAttr(m.input_type);
+        var ph   = inputPlaceholder(m.input_type).replace(/"/g, '&quot;');
+        var $bubble = $(
+            '<div class="tvaibwc-message tvaibwc-bot tvaibwc-flow-inputcard' + (dark ? ' dark' : '') + '">' +
+                '<div class="tvaibwc-message-text">' + textToHtml(m.prompt) + '</div>' +
+                '<form class="tvaibwc-flow-input-row">' +
+                    '<input class="tvaibwc-flow-input" type="' + type + '" placeholder="' + ph + '" ' +
+                        'inputmode="' + (type === 'tel' ? 'tel' : (type === 'email' ? 'email' : (type === 'number' ? 'numeric' : 'text'))) + '" />' +
+                    '<button type="submit" class="tvaibwc-flow-input-send" aria-label="Send">' +
+                        '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>' +
+                    '</button>' +
+                '</form>' +
+                '<div class="tvaibwc-flow-input-err" style="display:none;"></div>' +
+                '<div class="tvaibwc-message-time">' + nowTime() + '</div>' +
+            '</div>'
+        );
+
+        var $form  = $bubble.find('form');
+        var $input = $bubble.find('.tvaibwc-flow-input');
+        var $err   = $bubble.find('.tvaibwc-flow-input-err');
+
+        $form.on('submit', function (e) {
+            e.preventDefault();
+            var val = ($input.val() || '');
+            var problem = validateInputClient(m.input_type, val);
+            if (problem) { $err.text(problem).show(); $input.trigger('focus'); return; }
+            $err.hide();
+            // Lock the card once answered.
+            $input.prop('disabled', true);
+            $form.find('button').prop('disabled', true);
+            $bubble.addClass('is-submitted');
+            renderUserBubble(val.trim());
+            submitFreeText(val.trim());
+        });
+
+        $('#tvaibwc-chatMessages').append($bubble);
+        try { $input.trigger('focus'); } catch (_) {}
+        scrollToBottom();
+        return $bubble;
+    }
+
     function renderUserBubble(text) {
         var dark = isDark();
         var $bubble = $(
@@ -121,6 +195,8 @@
             if (!m) return;
             if (m.kind === 'menu') {
                 renderMenuBubble(m.prompt, m.audio_url, m.options);
+            } else if (m.kind === 'input') {
+                renderInputBubble(m);
             } else {
                 renderTextBubble(m.text, m.audio_url);
             }
@@ -215,9 +291,9 @@
 
     function renderRetryBubble(message) {
         var dark = isDark();
-        var safe = $('<div>').text(
+        var safe = textToHtml(
             message || 'Sorry, that didn\'t go through. Please try again.'
-        ).html();
+        );
         var $bubble = $(
             '<div class="tvaibwc-message tvaibwc-bot tvaibwc-flow-retry' + (dark ? ' dark' : '') + '">' +
                 '<div class="tvaibwc-message-text">' + safe + '</div>' +

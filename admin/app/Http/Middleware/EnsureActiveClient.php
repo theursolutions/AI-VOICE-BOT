@@ -34,6 +34,19 @@ class EnsureActiveClient
             return $next($request);
         }
 
+        // Super-admins belong in the /admin ops console, not a customer
+        // workspace. Funnel them there on the generic dashboard / picker
+        // (i.e. when the URL isn't an explicit /c/{slug} workspace link, so
+        // they can still open a specific workspace by URL when they need to).
+        // During impersonation the authenticated user is the CUSTOMER, so
+        // is_super_admin is false here — impersonation is unaffected.
+        if ($user->is_super_admin
+            && !$request->route('client')
+            && !$request->routeIs('ops.*')
+            && !$request->is('logout')) {
+            return redirect()->route('ops.overview');
+        }
+
         $memberships = $user->clients()->orderBy('clients.name')->get();
         $memberIds = $memberships->pluck('id')->all();
 

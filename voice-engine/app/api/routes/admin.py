@@ -61,6 +61,7 @@ async def admin_reload(request: Request) -> dict:
     old_model  = old.whisper_model
     old_compute = old.whisper_compute_type
     old_coqui_gpu = old.coqui_use_gpu
+    old_xtts_ckpt = old.xtts_checkpoint_dir
 
     # Clear the lru_cache so a fresh Settings() reads from os.environ.
     get_settings.cache_clear()
@@ -110,13 +111,18 @@ async def admin_reload(request: Request) -> dict:
             logger.exception("admin/reload: STT rebuild failed")
             raise HTTPException(status_code=500, detail=f"STT rebuild failed: {exc}")
 
-    # --- TTS (rebuild only when GPU setting changed) ---
-    tts_changed = old_coqui_gpu != new.coqui_use_gpu
+    # --- TTS (rebuild when GPU setting or checkpoint dir changed) ---
+    tts_changed = (
+        old_coqui_gpu != new.coqui_use_gpu
+        or old_xtts_ckpt != new.xtts_checkpoint_dir
+    )
     if tts_changed:
         try:
             from app.services.tts_service import TTSService
             app.state.tts_service = TTSService(
-                model_name=new.coqui_model, gpu=new.coqui_use_gpu
+                model_name=new.coqui_model,
+                gpu=new.coqui_use_gpu,
+                checkpoint_dir=new.xtts_checkpoint_dir,
             )
             try:
                 app.state.tts_service.load()

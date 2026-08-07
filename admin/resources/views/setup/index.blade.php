@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Initialize your workspace — NueraBot</title>
+    <title>Initialize your workspace — Serve AI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
@@ -216,7 +216,7 @@
 <header class="topbar">
     <div class="topbar__brand">
         <div class="topbar__mark"></div>
-        NueraBot
+        Serve AI
     </div>
     <div class="topbar__right">
         <span class="mono">{{ auth()->user()?->email }}</span>
@@ -230,7 +230,7 @@
 <main class="stage">
     <div class="panel">
         <div class="eyebrow">Workspace · Initialize</div>
-        <h1>Boot your <span class="accent">NueraBot mission.</span></h1>
+        <h1>Boot your <span class="accent">Serve AI mission.</span></h1>
         <p class="sub">
             We're spinning up an isolated database just for you — your data never mixes with anyone else's.
             One quick form, ~5 seconds to provision, and you'll be on the dashboard.
@@ -286,7 +286,7 @@
                     </svg>
                 </button>
                 <span class="secondary-link">
-                    Hit a wall? <a href="mailto:support@nuerabot.io">support@nuerabot.io</a>
+                    Hit a wall? <a href="mailto:support@serveai.io">support@serveai.io</a>
                 </span>
             </div>
         </form>

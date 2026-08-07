@@ -3,8 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="NueraBot — AI receptionist + CRM that never sleeps.">
-    <title>NueraBot — AI receptionist that never sleeps</title>
+
+    {{-- SEO meta, social cards, analytics, structured data — managed in /admin/seo --}}
+    @include('partials.seo-head')
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -812,7 +814,7 @@
 <nav class="nav">
     <div class="nav__brand">
         <div class="nav__brand-mark">N</div>
-        <span class="grotesk">NueraBot</span>
+        <span class="grotesk">Serve AI</span>
     </div>
     <div class="nav__links">
         <a href="#features">Features</a>
@@ -861,7 +863,7 @@
                 <span class="accent">Never. Sleeps.</span>
             </h1>
             <p class="sub">
-                NueraBot answers calls + chats around the clock in your own cloned voice,
+                Serve AI answers calls + chats around the clock in your own cloned voice,
                 qualifies leads on the spot, and drops them straight into your CRM. Built
                 for businesses that miss too many calls.
             </p>
@@ -1298,7 +1300,7 @@
     <div class="wrap">
         <div class="section-head reveal">
             <div class="section-eyebrow">Why teams switch</div>
-            <h2>The old way vs <span style="color: var(--primary-2);">the NueraBot way</span></h2>
+            <h2>The old way vs <span style="color: var(--primary-2);">the Serve AI way</span></h2>
             <p class="lead">$3K/mo call centers, missed evening leads, and inconsistent scripts — vs an AI that never sleeps.</p>
         </div>
 
@@ -1319,7 +1321,7 @@
             </div>
             <div class="compare-card is-good reveal">
                 <div class="compare-head">
-                    NueraBot
+                    Serve AI
                     <span class="badge" style="margin-left:auto;">AI receptionist + CRM</span>
                 </div>
                 <ul class="compare-list">
@@ -1341,7 +1343,7 @@
         <div class="section-head reveal">
             <div class="section-eyebrow">Loved by teams</div>
             <h2>From the field.</h2>
-            <p class="lead">Customers using NueraBot to never miss a lead.</p>
+            <p class="lead">Customers using Serve AI to never miss a lead.</p>
         </div>
 
         <div class="testimonials">
@@ -1366,7 +1368,7 @@
                 </div>
             </div>
             <div class="testimonial-card reveal" data-tilt>
-                <p class="testimonial-text">We replaced a $3K/mo call center with NueraBot Pro. Three months in, no regrets. Conversion rate on after-hours leads actually went up.</p>
+                <p class="testimonial-text">We replaced a $3K/mo call center with Serve AI Pro. Three months in, no regrets. Conversion rate on after-hours leads actually went up.</p>
                 <div class="testimonial-author">
                     <div class="testimonial-avatar" style="background: linear-gradient(135deg, #10b981, #047857);">MP</div>
                     <div>
@@ -1439,7 +1441,7 @@
 <section class="section" id="contact">
     <div class="wrap">
         <div class="cta-card reveal">
-            <h2 class="grotesk">Talk to NueraBot today.</h2>
+            <h2 class="grotesk">Talk to Serve AI today.</h2>
             <p>Drop your email — we'll send you a working demo number + the embed snippet within 60 seconds.</p>
             <form class="cta-form" id="ctaForm" onsubmit="return false;">
                 <input type="email" name="email" placeholder="you@company.com" required>
@@ -1457,7 +1459,7 @@
             <div>
                 <div class="foot-brand-line">
                     <div class="nav__brand-mark">N</div>
-                    NueraBot
+                    Serve AI
                 </div>
                 <p style="margin-top: 12px; max-width: 280px; color: var(--text-dim);">
                     AI receptionist + CRM for businesses that don't want to miss another lead.
@@ -1492,7 +1494,7 @@
             </div>
         </div>
         <div class="foot-bottom">
-            <div>&copy; {{ date('Y') }} NueraBot. All rights reserved.</div>
+            <div>&copy; {{ date('Y') }} Serve AI. All rights reserved.</div>
             <div class="mono">Made with motion + ❤️</div>
         </div>
     </div>

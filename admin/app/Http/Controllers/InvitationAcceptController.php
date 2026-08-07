@@ -64,7 +64,7 @@ class InvitationAcceptController extends Controller
             $user = Auth::user();
             DB::beginTransaction();
             try {
-                $user->attachMembership($invitation->client_id, null, $invitation->invited_by);
+                $user->attachMembership($invitation->client_id, null, $invitation->invited_by, $invitation->role_id);
                 $this->markAccepted($invitation, $user);
                 $user->forceFill([
                     'active_client_id' => $invitation->client_id,

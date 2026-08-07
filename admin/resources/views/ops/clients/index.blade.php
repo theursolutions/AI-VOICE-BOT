@@ -78,13 +78,13 @@
                                     </form>
                                 @else
                                     <form method="POST" action="{{ route('ops.clients.suspend', ['id' => $c->id]) }}" style="display:inline;"
-                                          onsubmit="return confirm('Suspend {{ $c->name }}? Users lose access until restored.');">
+                                          data-confirm="Suspend {{ $c->name }}? Users lose access until restored.">
                                         @csrf
                                         <button type="submit" class="btn btn-warning btn-sm">Suspend</button>
                                     </form>
                                 @endif
                                 <form method="POST" action="{{ route('ops.clients.delete', ['id' => $c->id]) }}" style="display:inline;"
-                                      onsubmit="return confirm('Soft-delete {{ $c->name }}? Workspace + all its projects disappear from every page. Recoverable.');">
+                                      data-confirm="Soft-delete {{ $c->name }}? Workspace + all its projects disappear from every page. Recoverable.">
                                     @csrf
                                     <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                                 </form>

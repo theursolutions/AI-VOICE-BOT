@@ -273,6 +273,20 @@
     transition: border-color .15s, box-shadow .15s;
     width: 100%;
 }
+/* Checkboxes/radios must NOT inherit the full-width text-input styling
+   above (it turned the data-source pickers into big bars + clipped the
+   labels). Render them as compact, non-growing controls. */
+.fb-field input[type="checkbox"],
+.fb-field input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    min-width: 16px;
+    flex: 0 0 auto;
+    padding: 0;
+    border-radius: 4px;
+    accent-color: #22c55e;
+    cursor: pointer;
+}
 .fb-field input:focus,
 .fb-field textarea:focus,
 .fb-field select:focus {
@@ -289,6 +303,45 @@
     color: #93c5fd;
     line-height: 1.5;
 }
+
+/* Capture-DTMF unlimited option rows — [ key ][ label ][ ✕ ] per option. */
+.fb-dtmf-opts { display: flex; flex-direction: column; gap: 7px; }
+.fb-dtmf-opt { display: flex; align-items: center; gap: 7px; }
+.fb-field .fb-dtmf-opt__key {
+    width: 52px;
+    flex: 0 0 52px;
+    text-align: center;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 600;
+}
+.fb-field .fb-dtmf-opt__label { flex: 1 1 auto; width: auto; min-width: 0; }
+.fb-dtmf-opt__del {
+    flex: 0 0 auto;
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(239, 68, 68, .12);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, .25);
+    border-radius: 7px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: background .15s;
+}
+.fb-dtmf-opt__del:hover { background: rgba(239, 68, 68, .28); }
+.fb-dtmf-add {
+    align-self: flex-start;
+    margin-top: 2px;
+    background: rgba(245, 158, 11, .12);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, .35);
+    border-radius: 7px;
+    padding: 7px 12px;
+    font-size: 12.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .15s;
+}
+.fb-dtmf-add:hover { background: rgba(245, 158, 11, .22); }
 
 /* React Flow's default controls/minimap — dark-mode tweaks. */
 .react-flow__controls {

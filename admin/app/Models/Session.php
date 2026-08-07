@@ -16,6 +16,11 @@ class Session extends Model
         'project_id',
         'channel',
         'external_id',
+        // Business account the customer messaged (WhatsApp phone_number_id /
+        // FB page id / IG id). With `channel` this identifies the inbound
+        // connection, so a reply routes back out the same number/page and
+        // multi-number conversations stay separate threads.
+        'channel_account',
         'customer_name',
         'customer_phone',
         'customer_email',
@@ -24,7 +29,11 @@ class Session extends Model
         'started_at',
         'ended_at',
         'last_activity_at',
+        // Last time the CUSTOMER messaged (distinct from last_activity_at,
+        // which includes our replies). Drives Meta's 24h service window.
+        'last_inbound_at',
         'metadata',
+        'created_at',
     ];
 
     protected $casts = [
@@ -32,6 +41,7 @@ class Session extends Model
         'started_at' => 'integer',
         'ended_at' => 'integer',
         'last_activity_at' => 'integer',
+        'last_inbound_at' => 'integer',
         'created_at' => 'integer',
         'updated_at' => 'integer',
         'deleted_at' => 'integer',
@@ -67,5 +77,19 @@ class Session extends Model
     public function isActive(): bool
     {
         return $this->status === 'active';
+    }
+
+    /**
+     * Is this conversation with a CUSTOMER (public web chat / voice /
+     * messaging) rather than an internal team member?
+     *
+     * The internal "Ask AI" assistant creates sessions with
+     * channel = 'internal'; everything else is a customer-facing channel.
+     * Drives the data-source audience gate (DataSource::customer_visible):
+     * customer turns only see sources the owner has opted in.
+     */
+    public function isCustomerFacing(): bool
+    {
+        return $this->channel !== 'internal';
     }
 }

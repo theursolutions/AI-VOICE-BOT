@@ -21,11 +21,12 @@ class DocumentResolver implements ResolverInterface
     {
         try {
             $topK = (int) ($context['top_k'] ?? 5);
-            $resp = $this->python->ragQuery(
+            // KB retrieval is now DuckDB BM25 full-text (no vector DB).
+            $resp = $this->python->duckSearch(
                 $source->project_id,
+                [$source->id],
                 $userQuery,
-                $topK,
-                [$source->id]
+                $topK
             );
 
             $passages  = $resp['passages']  ?? [];

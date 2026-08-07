@@ -5,8 +5,8 @@
 <div class="mobile-menu md:hidden">
     <div class="mobile-menu-bar">
         <a href="{{ route('ops.overview') }}" class="flex mr-auto items-center gap-2">
-            <img alt="NueraBot Ops" class="w-6" src="{{ url('/assets/dist/images/logo.svg') }}">
-            <span class="text-white text-sm font-semibold">NueraBot</span>
+            <img alt="Serve AI Ops" class="w-6" src="{{ serveai_icon() }}">
+            <span class="text-white text-sm font-semibold">Serve AI</span>
             <span class="ops-internal-badge">Internal</span>
         </a>
         <a href="javascript:;" class="mobile-menu-toggler">
@@ -56,6 +56,23 @@
             <li><a href="{{ route('ops.users.index') }}" class="menu {{ $is('ops.users.*') ? 'menu--active' : '' }}">
                 <div class="menu__icon"><i data-lucide="users"></i></div>
                 <div class="menu__title">Users</div>
+            </a></li>
+            <li><a href="{{ route('ops.modules.index') }}" class="menu {{ $is('ops.modules.*') ? 'menu--active' : '' }}">
+                <div class="menu__icon"><i data-lucide="toggle-right"></i></div>
+                <div class="menu__title">Modules</div>
+            </a></li>
+            <li class="menu__devider my-4"></li>
+            <li><a href="{{ route('ops.contacts.index') }}" class="menu {{ $is('ops.contacts.*') ? 'menu--active' : '' }}">
+                <div class="menu__icon"><i data-lucide="phone-incoming"></i></div>
+                <div class="menu__title">Website Contacts</div>
+            </a></li>
+            <li><a href="{{ route('ops.seo.index') }}" class="menu {{ $is('ops.seo.*') ? 'menu--active' : '' }}">
+                <div class="menu__icon"><i data-lucide="search"></i></div>
+                <div class="menu__title">SEO</div>
+            </a></li>
+            <li><a href="{{ route('ops.content.index') }}" class="menu {{ $is('ops.content.*') ? 'menu--active' : '' }}">
+                <div class="menu__icon"><i data-lucide="layout-template"></i></div>
+                <div class="menu__title">Page Content</div>
             </a></li>
             <li class="menu__devider my-4"></li>
             <li><a href="{{ route('ops.audit.index') }}" class="menu {{ $is('ops.audit.*') ? 'menu--active' : '' }}">

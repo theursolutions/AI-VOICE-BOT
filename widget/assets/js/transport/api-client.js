@@ -73,6 +73,8 @@
         customer_phone: p.customer_phone || '',
         customer_email: p.customer_email || '',
         voice_id:       p.voice_id || '',
+        // Visitor's header language pick (fallback/default reply language).
+        language:       p.language || root.tvaibwcSelectedLang || 'en',
         metadata:       p.metadata || {}
       });
     },

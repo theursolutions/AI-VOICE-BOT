@@ -101,7 +101,7 @@ class DataSourceWebController extends Controller
             'name'       => 'required|string|max:255',
             'kind'       => 'nullable|in:document,data_snapshot',
             'files'      => 'required|array|min:1',
-            'files.*'    => 'file|mimes:pdf,csv,txt,docx,json|max:20480',
+            'files.*'    => 'file|mimes:pdf,csv,txt,docx,json,xlsx,xls|max:20480',
         ]);
 
         $project = $this->guardProject((int) $data['project_id'], $client);
@@ -463,18 +463,93 @@ class DataSourceWebController extends Controller
     {
         $source = $this->guardSource($id, $client);
 
+        // Authoritative "is it searchable" signal — the live row count in the
+        // project's DuckDB store. Unlike /rag/status (an in-memory job
+        // registry the engine wipes on every restart), this reflects what's
+        // actually indexed on disk. Null = not a DuckDB-backed type / engine
+        // unreachable.
+        $indexed = $this->indexedDocsCount($source);
+
         $remote = null;
+        $jobMissing = false;
         $jobId = $source->config['last_job_id'] ?? null;
         if ($jobId) {
             try {
                 $remote = $this->python->ragStatus($jobId);
+            } catch (\GuzzleHttp\Exception\RequestException $e) {
+                // 404 "unknown job_id" just means the engine restarted since
+                // ingestion and forgot this job. It is NOT a failure — the
+                // indexed-rows readout above is the real state. Flag it so the
+                // view shows a calm note instead of a red error banner.
+                if ($e->getResponse() && $e->getResponse()->getStatusCode() === 404) {
+                    $jobMissing = true;
+                } else {
+                    $remote = ['error' => $e->getMessage()];
+                }
             } catch (\Throwable $e) {
                 // best-effort — RAG service may be down
                 $remote = ['error' => $e->getMessage()];
             }
         }
 
-        return view('data-sources.show', compact('client', 'source', 'remote'));
+        return view('data-sources.show', compact('client', 'source', 'remote', 'indexed', 'jobMissing'));
+    }
+
+    /**
+     * Live count of indexed rows for a DuckDB-backed source, queried straight
+     * from the engine so it survives engine restarts (the /rag/status job
+     * registry does not). KB documents + crawled sites live in a BM25 table
+     * ``docs_<id>``; tabular snapshots in ``snap_<id>``.
+     *
+     * @return array{label:string, count:int}|null  null = N/A or unreachable
+     */
+    private function indexedDocsCount(DataSource $source): ?array
+    {
+        $table = match ($source->type) {
+            DataSource::TYPE_DOCUMENT, DataSource::TYPE_WEBSITE => 'docs_' . (int) $source->id,
+            DataSource::TYPE_DATA_SNAPSHOT                      => 'snap_' . (int) $source->id,
+            default                                             => null,
+        };
+        if ($table === null) {
+            return null;
+        }
+
+        $label = $source->type === DataSource::TYPE_DATA_SNAPSHOT ? 'rows' : 'chunks';
+        try {
+            $resp = $this->python->duckQuery($source->project_id, "SELECT COUNT(*) AS n FROM {$table}");
+            return ['label' => $label, 'count' => (int) ($resp['rows'][0]['n'] ?? 0)];
+        } catch (\Throwable $e) {
+            // Table missing (never successfully ingested) or engine down.
+            return null;
+        }
+    }
+
+    /**
+     * POST /c/{slug}/data-sources/{id}/visibility
+     *
+     * Owner control: opt a source in or out of CUSTOMER access. When off,
+     * only the internal "Ask AI" assistant may use this source; the public
+     * web chat + voice widget never see it. Deny-by-default — sources start
+     * hidden until explicitly allowed here.
+     *
+     * The data-sources module is already gated by the role-based
+     * `module.access` middleware, so reaching this action means the user is
+     * a permitted manager (or the owner).
+     */
+    public function setVisibility(Request $request, Client $client, int $id): RedirectResponse
+    {
+        $source = $this->guardSource($id, $client);
+
+        // Unchecked checkboxes are simply absent from the request.
+        $visible = $request->boolean('customer_visible');
+        $source->customer_visible = $visible;
+        $source->save();
+
+        return redirect()
+            ->route('data-sources.show', ['id' => $source->id])
+            ->with('success', $visible
+                ? "“{$source->name}” is now visible to customers in the chat & voice widget."
+                : "“{$source->name}” is now hidden from customers — internal Ask AI only.");
     }
 
     public function resync(Request $request, Client $client, int $id): RedirectResponse
@@ -490,16 +565,16 @@ class DataSourceWebController extends Controller
     public function destroy(Request $request, Client $client, int $id): RedirectResponse
     {
         $source = $this->guardSource($id, $client);
+        $name = $source->name;
 
-        $source->update([
-            'status'    => DataSource::STATUS_DISABLED,
-            'is_active' => 'No',
-            'update_at' => time(),
-        ]);
+        // True removal: drop owned storage (snapshot table / vectors / files),
+        // then delete the row. Never touches an external `database` source.
+        app(\App\Services\DataSource\SourceCleaner::class)->purge($source);
+        $source->delete();
 
         return redirect()
             ->route('data-sources.index')
-            ->with('success', "Data source “{$source->name}” disabled.");
+            ->with('success', "Data source “{$name}” deleted.");
     }
 
     /**

@@ -18,7 +18,7 @@
         <form method="POST" action="{{ route('invitations.store') }}">
             @csrf
             <div class="grid grid-cols-12 gap-4">
-                <div class="col-span-12 sm:col-span-5">
+                <div class="col-span-12 sm:col-span-4">
                     <label class="form-label">Email <span class="text-danger">*</span></label>
                     <input type="email" name="email" required
                            value="{{ old('email') }}"
@@ -28,14 +28,20 @@
                         <div class="text-danger mt-1 text-xs">{{ $message }}</div>
                     @enderror
                 </div>
-                <div class="col-span-12 sm:col-span-5">
+                <div class="col-span-12 sm:col-span-3">
                     <label class="form-label">Name (optional)</label>
                     <input type="text" name="name" value="{{ old('name') }}"
                            class="form-control @error('name') border-danger @enderror"
                            placeholder="Jane Doe">
-                    @error('name')
-                        <div class="text-danger mt-1 text-xs">{{ $message }}</div>
-                    @enderror
+                </div>
+                <div class="col-span-12 sm:col-span-3">
+                    <label class="form-label">Role</label>
+                    <select name="role_id" class="form-select">
+                        <option value="">— assign later —</option>
+                        @foreach (($roles ?? []) as $r)
+                            <option value="{{ $r->id }}" @selected((int) old('role_id') === (int) $r->id)>{{ $r->name }}</option>
+                        @endforeach
+                    </select>
                 </div>
                 <div class="col-span-12 sm:col-span-2 flex items-end">
                     <button type="submit" class="btn btn-primary w-full">Send invite</button>
@@ -87,7 +93,7 @@
                         <td class="text-center">
                             @if ($inv->isPending())
                                 <form method="POST" action="{{ route('invitations.destroy', $inv->id) }}"
-                                      onsubmit="return confirm('Revoke this invitation?');">
+                                      data-confirm="Revoke this invitation?">
                                     @csrf
                                     <button type="submit" class="text-danger">Revoke</button>
                                 </form>

@@ -56,15 +56,33 @@ class InternalTurnController extends Controller
             ->map(fn ($m) => ['role' => $m->role, 'content' => (string) ($m->content ?? '')])
             ->all();
 
+        // Capability gate: restrict tool use to the actions granted by the
+        // session agent's skills, so voice calls honor the same per-agent
+        // capabilities as web chat (see Skill::toolGatingForAgent).
+        $toolGate = \App\Models\Skill::toolGatingForAgent($session->agent_id);
+
+        // Audience gate: voice calls are customer-facing, so only sources /
+        // tools the owner opted in are consulted (see customer_visible).
+        $customerFacing = $session->isCustomerFacing();
+
         $webhookDecision = $toolPicker->pick(
             $session->project_id,
             $history,
             $data['user_text'],
+            $toolGate,
+            $customerFacing,
         );
 
-        $resolverContext = [];
+        $resolverContext = ['tool_gate' => $toolGate, 'customer_facing' => $customerFacing];
         if ($webhookDecision) {
             $resolverContext['webhook_decision'] = $webhookDecision;
+        }
+
+        // Flow "Data Source" node may have pinned this conversation to
+        // specific source(s) (stored on the session). Honor that scope.
+        $scope = (array) data_get($session->metadata, 'ds_scope', []);
+        if (!empty($scope)) {
+            $resolverContext['source_ids'] = array_values($scope);
         }
 
         $results = $router->onlyUsable(
@@ -94,7 +112,7 @@ class InternalTurnController extends Controller
     {
         if (empty($results)) return '';
 
-        $lines = ['### Reference data'];
+        $lines = ['### Reference data (the ONLY facts you may use — copy values exactly, never invent)'];
         foreach ($results as $r) {
             if (!$r->isUsable()) continue;
 
@@ -107,9 +125,9 @@ class InternalTurnController extends Controller
                     $lines[] = '- ('.$cite.') '.trim($text);
                 }
             } elseif ($r->kind === \App\Services\DataSource\ResolverResult::KIND_RECORDS) {
-                $lines[] = 'Query results from '.$r->sourceType.':';
+                $lines[] = 'Results from the '.$r->sourceType.':';
                 foreach (array_slice($r->items, 0, 20) as $row) {
-                    $lines[] = '- '.json_encode($row, JSON_UNESCAPED_SLASHES);
+                    $lines[] = '- '.\App\Services\Conversation\MemoryBuilder::renderRow(\App\Support\Sensitive::redactRow((array) $row));
                 }
             }
         }

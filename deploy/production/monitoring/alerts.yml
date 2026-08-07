@@ -1,0 +1,96 @@
+groups:
+  - name: availability
+    rules:
+      - alert: TargetDown
+        expr: up == 0
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Scrape target down: {{ $labels.job }} / {{ $labels.instance }}"
+          description: "Prometheus cannot reach {{ $labels.instance }} (job {{ $labels.job }}) for 2m."
+
+      - alert: EndpointDown
+        expr: probe_success == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Endpoint failing health probe: {{ $labels.instance }}"
+          description: "Black-box probe to {{ $labels.instance }} has failed for 1m."
+
+      - alert: HAProxyNoHealthyBackends
+        expr: haproxy_backend_active_servers == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "HAProxy backend {{ $labels.proxy }} has zero healthy servers"
+          description: "All replicas behind {{ $labels.proxy }} failed their health checks — that tier is down."
+
+      - alert: HAProxyServerDown
+        expr: haproxy_server_up == 0
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: "HAProxy ejected a server in {{ $labels.proxy }}"
+          description: "{{ $labels.server }} in {{ $labels.proxy }} is unhealthy (still have others)."
+
+  - name: tls
+    rules:
+      - alert: TLSCertExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 14 * 24 * 3600
+        for: 1h
+        labels: { severity: warning }
+        annotations:
+          summary: "TLS cert for {{ $labels.instance }} expires in <14 days"
+          description: "Caddy should auto-renew. If this fires, check Caddy logs / ACME."
+
+  - name: saturation
+    rules:
+      - alert: HostHighCPU
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: "Host CPU > 90% for 10m"
+          description: "Sustained CPU saturation on {{ $labels.instance }} — scale out or up."
+
+      - alert: HostLowMemory
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 10
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Host available memory < 10%"
+          description: "OOM risk on {{ $labels.instance }} — voice-engine (XTTS) is memory-heavy."
+
+      - alert: HostDiskWillFill
+        expr: predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 24*3600) < 0
+        for: 30m
+        labels: { severity: warning }
+        annotations:
+          summary: "Disk on {{ $labels.instance }} ({{ $labels.mountpoint }}) will fill within 24h"
+          description: "Projected to run out of space — prune images/logs or grow the volume."
+
+      - alert: ContainerRestartLoop
+        expr: rate(container_last_seen{name=~".+"}[5m]) and changes(container_start_time_seconds{name=~".+"}[15m]) > 3
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Container {{ $labels.name }} is restarting repeatedly"
+          description: "{{ $labels.name }} restarted >3 times in 15m — check its logs."
+
+  - name: data
+    rules:
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Redis is down"
+          description: "Cache/sessions/queue backend unreachable — the app will degrade fast."
+
+      - alert: MySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "MySQL is down"
+          description: "Primary database unreachable."

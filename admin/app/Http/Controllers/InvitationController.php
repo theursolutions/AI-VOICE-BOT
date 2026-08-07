@@ -31,7 +31,13 @@ class InvitationController extends Controller
 
         $client = Client::find($clientId);
 
-        return view('invitations.index', compact('invitations', 'client'));
+        // Roles the inviter can assign (exclude the all-access Owner role).
+        $roles = \App\Models\Role::where('client_id', $clientId)
+            ->where('is_owner', false)
+            ->orderBy('name')
+            ->get();
+
+        return view('invitations.index', compact('invitations', 'client', 'roles'));
     }
 
     /**
@@ -40,18 +46,28 @@ class InvitationController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'email' => ['required', 'string', 'email', 'max:255'],
-            'name'  => ['nullable', 'string', 'max:255'],
+            'email'   => ['required', 'string', 'email', 'max:255'],
+            'name'    => ['nullable', 'string', 'max:255'],
+            'role_id' => ['nullable', 'integer'],
         ]);
 
         $user     = Auth::user();
         $clientId = (int) $user->active_client_id;
         $client   = Client::findOrFail($clientId);
 
+        // Validate the chosen role belongs to this workspace (never Owner).
+        $roleId = null;
+        if (!empty($data['role_id'])) {
+            $roleId = optional(\App\Models\Role::where('client_id', $clientId)
+                ->where('is_owner', false)
+                ->find((int) $data['role_id']))->id;
+        }
+
         $invitation = Invitation::create([
             'client_id'   => $clientId,
             'invited_by'  => $user->id,
             'email'       => $data['email'],
+            'role_id'     => $roleId,
             'token'       => Invitation::mintToken(),
             'expires_at'  => time() + (7 * 24 * 60 * 60),
             'is_active'   => 'Yes',

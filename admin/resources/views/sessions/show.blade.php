@@ -90,6 +90,20 @@
     }
     .tva-msg--user .tva-msg__bubble  { background:#eff6ff; border-color:#bfdbfe; }
     .tva-msg--bot  .tva-msg__bubble  { background:#fafaff; border-color:#e0e7ff; }
+    .tva-json-block { margin-top:10px; border:1px solid #e2e8f0; border-radius:8px; background:#fff; overflow:hidden; }
+    .tva-json-block > summary { cursor:pointer; padding:7px 11px; font-size:12px; font-weight:600; color:#4338ca; background:#f8fafc; list-style:none; user-select:none; }
+    .tva-json-block > summary::-webkit-details-marker { display:none; }
+    .tva-json-block[open] > summary { border-bottom:1px solid #e2e8f0; }
+    .tva-mini-table { width:100%; border-collapse:collapse; font-size:11.5px; }
+    .tva-mini-table th, .tva-mini-table td { border:1px solid #eef2f7; padding:5px 9px; text-align:left; white-space:nowrap; }
+    .tva-mini-table th { background:#f1f5f9; color:#334155; font-weight:600; }
+    .tva-json-pre { margin:0; padding:11px; font-size:11px; line-height:1.5; color:#0f172a; background:#0b11200a; overflow-x:auto; max-height:340px; }
+    .tva-json-note { padding:6px 11px; font-size:11px; color:#94a3b8; }
+    html.dark .tva-json-block { background:#0f172a; border-color:#1e293b; }
+    html.dark .tva-json-block > summary { background:#111827; color:#a5b4fc; }
+    html.dark .tva-mini-table th { background:#1e293b; color:#cbd5e1; }
+    html.dark .tva-mini-table th, html.dark .tva-mini-table td { border-color:#1e293b; }
+    html.dark .tva-json-pre { color:#e2e8f0; background:#0b1120; }
     .tva-msg__head {
         display:flex; align-items:center; flex-wrap: wrap; gap:10px;
         font-size:12px; color:#64748b; margin-bottom:8px;
@@ -179,7 +193,7 @@
     {{-- ── Top bar ──────────────────────────────────────────────────── --}}
     <div class="intro-y flex items-center mt-6 mb-4">
         <h2 class="text-lg font-medium mr-auto">
-            <a href="{{ route('sessions.index', ['client' => $client->slug]) }}?project_id={{ $projectId }}"
+            <a href="{{ route('sessions.index', ['client' => $client->slug]) }}?project_id={{ hashid($projectId) }}"
                class="text-slate-400 hover:text-primary">
                 <i data-lucide="chevron-left" class="w-4 h-4 inline -mt-1"></i> Conversations
             </a>
@@ -187,6 +201,13 @@
             <span>Session #{{ $session->id }}</span>
         </h2>
     </div>
+
+    @if ($session->channel === 'internal')
+        <div class="intro-y" style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;border-radius:10px;background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;font-size:13px;">
+            <i data-lucide="bot" class="w-4 h-4"></i>
+            <span><strong>Internal “Ask AI” chat.</strong> This is a team member ({{ $session->customer_name ?: 'staff' }}@if(!empty($session->metadata['user_email'])) · {{ $session->metadata['user_email'] }}@endif) talking to the AI assistant — not a customer conversation.</span>
+        </div>
+    @endif
 
     {{-- ── Hero card ────────────────────────────────────────────────── --}}
     <div class="tva-session-hero mb-6">
@@ -296,7 +317,7 @@
                         <div class="tva-lead-card__title flex items-center">
                             <i data-lucide="user-check" class="w-4 h-4 mr-2"></i> Lead extracted
                         </div>
-                        <a href="{{ route('leads.show', ['client' => $client->slug, 'id' => $lead->id]) }}?project_id={{ $projectId }}"
+                        <a href="{{ route('leads.show', ['client' => $client->slug, 'id' => $lead->id]) }}?project_id={{ hashid($projectId) }}"
                            class="text-xs text-primary font-semibold">Open →</a>
                     </div>
                     @php $lf = $lead->fields ?? []; @endphp
@@ -365,6 +386,40 @@
                             </div>
                             @if ($msg->content)
                                 <div class="tva-msg__body">{{ $msg->content }}</div>
+                            @endif
+
+                            {{-- Structured response payload (internal Ask AI turns store
+                                 the tables + sources the bot returned, as JSON). --}}
+                            @php
+                                $mTables  = $msg->metadata['tables']  ?? null;
+                                $mSources = $msg->metadata['sources'] ?? null;
+                            @endphp
+                            @if (!empty($mTables) && is_array($mTables))
+                                @foreach ($mTables as $tbl)
+                                    @php $cols = $tbl['columns'] ?? []; $rows = $tbl['rows'] ?? []; @endphp
+                                    <details class="tva-json-block">
+                                        <summary><i data-lucide="table-2" class="w-3 h-3 inline mr-1"></i> {{ $tbl['title'] ?? 'Data' }} · {{ count($rows) }} {{ \Illuminate\Support\Str::plural('row', count($rows)) }}</summary>
+                                        @if ($cols)
+                                            <div style="overflow-x:auto;">
+                                                <table class="tva-mini-table">
+                                                    <thead><tr>@foreach ($cols as $c)<th>{{ $c }}</th>@endforeach</tr></thead>
+                                                    <tbody>
+                                                    @foreach (array_slice($rows, 0, 50) as $r)
+                                                        <tr>@foreach ($cols as $c)<td>{{ is_array($r[$c] ?? null) ? json_encode($r[$c]) : ($r[$c] ?? '') }}</td>@endforeach</tr>
+                                                    @endforeach
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            @if (count($rows) > 50)<div class="tva-json-note">Showing first 50 of {{ count($rows) }} rows.</div>@endif
+                                        @endif
+                                    </details>
+                                @endforeach
+                            @endif
+                            @if (!empty($mTables) || !empty($mSources))
+                                <details class="tva-json-block">
+                                    <summary><i data-lucide="braces" class="w-3 h-3 inline mr-1"></i> Response JSON</summary>
+                                    <pre class="tva-json-pre">{{ json_encode(['tables' => $mTables ?: [], 'sources' => $mSources ?: []], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) }}</pre>
+                                </details>
                             @endif
                             @if ($msg->audio_url)
                                 <audio controls preload="none" class="mt-3 w-full max-w-md rounded">

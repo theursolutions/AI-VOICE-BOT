@@ -2,10 +2,19 @@
 .env
 .env.local
 .env.*.local
+.env.habak
 !.env.example
 *.pem
 *.key
 !storage/oauth-*.key
+
+# ─── Tenant data + backups — NEVER commit these ──────────────────────
+# Per-project DuckDB stores: customer snapshots, knowledge base, crawled pages.
+voice-engine/duckdb_data/
+*.duckdb
+*.duckdb.wal
+# Local output of `deploy.sh backup` (DB dumps + volume tarballs).
+backups/
 
 # ─── OS / IDE ────────────────────────────────────────────────────────
 .DS_Store

@@ -82,12 +82,13 @@ const NODE_TYPES = {
         label: 'Capture DTMF / Menu',
         icon: '☎',
         color: '#f59e0b',
+        // Outputs are DYNAMIC for this node — the handle set is computed
+        // per-node from data.options via dtmfOutputs() (see FlowNode). The
+        // customer can define as many keypad options as they want. This
+        // static list is only a fallback for tooling that reads the
+        // registry directly; the canvas never uses it.
         outputs: [
             { id: '1', label: '1' },
-            { id: '2', label: '2' },
-            { id: '3', label: '3' },
-            { id: '4', label: '4' },
-            { id: '0', label: '0' },
             { id: 'timeout', label: 'timeout' },
         ],
         defaultData: {
@@ -97,16 +98,27 @@ const NODE_TYPES = {
             language: '',
             timeout_secs: 8,
             max_digits: 1,
-            // Per-output button labels — used in webchat to render quick-reply
-            // buttons. Phone ignores these (uses the digit handle id).
-            // Map: { "1": "Billing", "2": "Sales", "0": "Agent" }
-            button_labels: {},
+            // Menu options — UNLIMITED. Single source of truth for the
+            // node's branches: each row is one keypad key (the branch
+            // handle id, what phone callers press) + an optional web
+            // button label. We also mirror these into `button_labels`
+            // (below) so the webchat runner keeps working unchanged.
+            //   options: [{ digit: '1', label: 'Billing' }, …]
+            options: [
+                { digit: '1', label: 'Billing' },
+                { digit: '2', label: 'Sales' },
+                { digit: '0', label: 'Agent' },
+            ],
+            // Derived from `options` on every edit (digit → label). Kept
+            // for backward-compat with the backend web runner + old flows.
+            button_labels: { '1': 'Billing', '2': 'Sales', '0': 'Agent' },
         },
         summary: (data) => {
             const src = data.prompt_source === 'audio'
                 ? `▶ audio #${data.prompt_audio_asset_id ?? '—'}`
                 : `“${(data.prompt || '').slice(0, 30)}${(data.prompt || '').length > 30 ? '…' : ''}”`;
-            return `${src} · ${data.timeout_secs ?? 8}s`;
+            const n = dtmfOptions(data).filter((o) => String(o.digit || '').trim() !== '').length;
+            return `${src} · ${n} option${n === 1 ? '' : 's'} · ${data.timeout_secs ?? 8}s`;
         },
     },
     capture_speech: {
@@ -135,6 +147,57 @@ const NODE_TYPES = {
         outputs: [],
         defaultData: { agent_id: null, persona_override: '' },
         summary: (data) => data.agent_id ? `→ agent #${data.agent_id}` : 'free-form AI (default agent)',
+    },
+    datasource: {
+        label: 'Data Source',
+        icon: '📚',
+        color: '#22c55e',
+        outputs: [{ id: 'out', label: '' }],
+        // source_ids: which data sources the AI should reference from here on.
+        // Empty = clear the scope (back to automatic routing across all sources).
+        defaultData: { label: 'Use knowledge', source_ids: [] },
+        summary: (data) => (data.source_ids && data.source_ids.length)
+            ? `scoped to ${data.source_ids.length} source(s)`
+            : 'all sources (auto)',
+    },
+    collect_input: {
+        label: 'Collect Input',
+        icon: '📝',
+        color: '#0ea5e9',
+        outputs: [
+            { id: 'collected', label: 'collected' },
+            { id: 'timeout',   label: 'timeout' },
+        ],
+        // Asks one or more questions in sequence, validating + storing each
+        // reply as {{ key }} on the session (reusable by later nodes / AI).
+        defaultData: {
+            fields: [
+                { key: 'name',            prompt: 'What is your name?',            input_type: 'text'  },
+                { key: 'whatsapp_number', prompt: 'What is your WhatsApp number?', input_type: 'phone' },
+            ],
+            language: '',
+        },
+        summary: (d) => {
+            const n = (Array.isArray(d.fields) && d.fields.length) || (d.field_key ? 1 : 0);
+            return n === 1 ? '1 question' : `${n} questions`;
+        },
+    },
+    send_channel: {
+        label: 'Send to Channel',
+        icon: '📤',
+        color: '#16a34a',
+        outputs: [
+            { id: 'sent',  label: 'sent' },
+            { id: 'error', label: 'error' },
+        ],
+        // Sends to WhatsApp/Messenger/IG via the project's onboarded account.
+        defaultData: {
+            provider: 'whatsapp', recipient_field: 'whatsapp_number',
+            payload_type: 'text', text: 'Here is our catalogue! 📚',
+            media_type: 'document', media_url: '', caption: '',
+            template_name: '', template_lang: 'en_US',
+        },
+        summary: (d) => `${d.provider || 'whatsapp'} · ${d.payload_type || 'text'} → {{ ${d.recipient_field || 'contact'} }}`,
     },
     end: {
         label: 'End call',
@@ -203,6 +266,50 @@ const NODE_TYPES = {
 };
 
 // ────────────────────────────────────────────────────────────────────
+// DTMF helpers — the Capture DTMF node supports an UNLIMITED number of
+// keypad options. They live as `data.options` ([{digit,label}, …]) which
+// is the single source of truth for the node's branch handles. Older
+// flows (saved before this feature) only have `data.button_labels`
+// ({digit: label}) plus the legacy fixed digit set, so we normalize both
+// shapes here. The handle id MUST equal the digit — both runtimes route a
+// keypress to the edge whose sourceHandle == the pressed digit.
+// ────────────────────────────────────────────────────────────────────
+function dtmfOptions(data) {
+    const d = data || {};
+    if (Array.isArray(d.options)) {
+        // Stored verbatim (may include a blank digit while the user is
+        // mid-typing a new row — the panel needs to keep showing it).
+        return d.options.map((o) => ({
+            digit: String(o.digit ?? o.id ?? ''),
+            label: String(o.label ?? ''),
+        }));
+    }
+    // Legacy fallback (no options[] yet): reconstruct from button_labels.
+    // Always keep the original static digit set so handles that were wired
+    // without a web label (phone-only paths) don't vanish + orphan their
+    // edges; then append any extra labeled digits beyond that set.
+    const labels = (d.button_labels && typeof d.button_labels === 'object') ? d.button_labels : {};
+    const merged = ['1', '2', '3', '4', '0'];
+    Object.keys(labels).forEach((dg) => { if (!merged.includes(String(dg))) merged.push(String(dg)); });
+    return merged.map((dg) => ({ digit: String(dg), label: String(labels[dg] || '') }));
+}
+
+// The branch handles shown on the canvas card: one per non-blank, unique
+// option digit, plus an always-present timeout branch.
+function dtmfOutputs(data) {
+    const seen = new Set();
+    const outs = [];
+    dtmfOptions(data).forEach((o) => {
+        const digit = String(o.digit || '').trim();
+        if (digit === '' || seen.has(digit)) return;   // skip blanks + dupes
+        seen.add(digit);
+        outs.push({ id: digit, label: o.label ? `${digit} · ${o.label}` : digit });
+    });
+    outs.push({ id: 'timeout', label: 'timeout' });
+    return outs;
+}
+
+// ────────────────────────────────────────────────────────────────────
 // Custom node card component — used for ALL node types. The header /
 // color / outputs come from the registry; the body just renders
 // summary text.
@@ -210,6 +317,9 @@ const NODE_TYPES = {
 function FlowNode({ id, data, selected, type }) {
     const cfg = NODE_TYPES[type] || NODE_TYPES.say;
     const hasInput = type !== 'start';
+    // capture_dtmf computes its handle set per-node from data.options;
+    // every other node uses the static registry list.
+    const outputs = type === 'capture_dtmf' ? dtmfOutputs(data) : cfg.outputs;
 
     return (
         <div className={`fb-node ${selected ? 'is-selected' : ''}`} style={{ borderTopColor: cfg.color }}>
@@ -223,12 +333,12 @@ function FlowNode({ id, data, selected, type }) {
             <div className="fb-node__summary">{cfg.summary(data || {})}</div>
 
             {/* Output handles. Multiple outputs → labelled (DTMF, speech). */}
-            {cfg.outputs.length === 1 && (
-                <Handle type="source" position={Position.Bottom} id={cfg.outputs[0].id} className="fb-handle" />
+            {outputs.length === 1 && (
+                <Handle type="source" position={Position.Bottom} id={outputs[0].id} className="fb-handle" />
             )}
-            {cfg.outputs.length > 1 && (
+            {outputs.length > 1 && (
                 <div className="fb-node__outputs">
-                    {cfg.outputs.map((o) => (
+                    {outputs.map((o) => (
                         <div key={o.id} className="fb-node__out-row">
                             <span className="fb-node__out-label">{o.label}</span>
                             {/* Anchored absolute to the row's right edge via CSS
@@ -291,7 +401,7 @@ function Toolbox() {
 // All fields are bound via onChange → update the node's data via the
 // `updateNode` prop. Closes when nothing is selected.
 // ────────────────────────────────────────────────────────────────────
-function PropertiesPanel({ node, updateNode, deleteNode, onClose }) {
+function PropertiesPanel({ node, updateNode, deleteNode, onClose, dataSources = [], renameHandle, removeHandle }) {
     if (!node) {
         return (
             <aside className="fb-props">
@@ -309,6 +419,47 @@ function PropertiesPanel({ node, updateNode, deleteNode, onClose }) {
 
     const cfg = NODE_TYPES[node.type];
     const set = (key, value) => updateNode(node.id, { ...node.data, [key]: value });
+
+    // ── Capture DTMF: unlimited option rows ──────────────────────────
+    // options[] is the source of truth; we mirror it into button_labels
+    // (digit → label) so the backend web runner stays unchanged. Edge
+    // wiring follows the digit (handle id), so renaming/removing a digit
+    // remaps/drops the matching edges to keep the graph consistent.
+    const writeDtmfOptions = (opts) => {
+        const button_labels = {};
+        opts.forEach((o) => {
+            const digit = String(o.digit || '').trim();
+            if (digit) button_labels[digit] = String(o.label || '');
+        });
+        updateNode(node.id, { ...node.data, options: opts, button_labels });
+    };
+    const setDtmfOption = (i, patch) => {
+        const opts = dtmfOptions(node.data);
+        if (!opts[i]) return;
+        // A digit change is a handle rename — move any wired edges with it.
+        if (Object.prototype.hasOwnProperty.call(patch, 'digit')) {
+            const oldDigit = String(opts[i].digit || '').trim();
+            const newDigit = String(patch.digit || '').trim();
+            if (oldDigit !== newDigit) renameHandle?.(node.id, oldDigit, newDigit);
+        }
+        opts[i] = { ...opts[i], ...patch };
+        writeDtmfOptions(opts);
+    };
+    const addDtmfOption = () => {
+        const opts = dtmfOptions(node.data);
+        // Suggest the next unused single digit (1-9, then 0).
+        const used = new Set(opts.map((o) => String(o.digit || '').trim()));
+        const next = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'].find((d) => !used.has(d)) || '';
+        writeDtmfOptions([...opts, { digit: next, label: '' }]);
+    };
+    const removeDtmfOption = (i) => {
+        const opts = dtmfOptions(node.data);
+        if (!opts[i]) return;
+        const digit = String(opts[i].digit || '').trim();
+        if (digit) removeHandle?.(node.id, digit);
+        opts.splice(i, 1);
+        writeDtmfOptions(opts);
+    };
 
     return (
         <aside className="fb-props">
@@ -395,30 +546,51 @@ function PropertiesPanel({ node, updateNode, deleteNode, onClose }) {
                         <input type="number" min="1" max="20" value={node.data?.max_digits ?? 1} onChange={(e) => set('max_digits', parseInt(e.target.value, 10) || 1)}/>
                     </Field>
 
-                    {/* Per-output button labels — only shown on outputs that
-                        are actually wired up (have an outgoing edge). Phone
-                        ignores these; webchat shows them as quick-reply
-                        button text instead of bare "1"/"2"/"0". */}
-                    <Field label="Web button labels (optional)">
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            {NODE_TYPES.capture_dtmf.outputs
-                                .filter((o) => o.id !== 'timeout')
-                                .map((o) => (
-                                    <div key={o.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                        <code style={{ background: '#1e293b', padding: '2px 7px', borderRadius: 4, minWidth: 26, textAlign: 'center' }}>{o.id}</code>
-                                        <input
-                                            type="text"
-                                            placeholder={`e.g. "Billing" for ${o.id}`}
-                                            value={(node.data?.button_labels && node.data.button_labels[o.id]) || ''}
-                                            onChange={(e) => set('button_labels', { ...(node.data?.button_labels || {}), [o.id]: e.target.value })}
-                                            style={{ flex: 1 }}
-                                        />
-                                    </div>
-                                ))}
+                    {/* Menu options — UNLIMITED. Each row = a keypad key
+                        (the branch handle id on the node card, what phone
+                        callers press) + an optional web button label.
+                        Add/remove as many as you like. */}
+                    <Field label="Menu options">
+                        <div className="fb-dtmf-opts">
+                            {dtmfOptions(node.data).map((o, i) => (
+                                <div key={i} className="fb-dtmf-opt">
+                                    <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        className="fb-dtmf-opt__key"
+                                        value={o.digit}
+                                        maxLength={2}
+                                        placeholder="#"
+                                        title="Keypad key the caller presses (0-9, * or #)"
+                                        onChange={(e) => setDtmfOption(i, { digit: e.target.value.replace(/[^0-9*#]/g, '') })}
+                                    />
+                                    <input
+                                        type="text"
+                                        className="fb-dtmf-opt__label"
+                                        value={o.label}
+                                        placeholder={`Web label, e.g. "Billing"`}
+                                        onChange={(e) => setDtmfOption(i, { label: e.target.value })}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="fb-dtmf-opt__del"
+                                        title="Remove this option"
+                                        onClick={() => removeDtmfOption(i)}
+                                    >✕</button>
+                                </div>
+                            ))}
                         </div>
-                        <Help>Used as button text in the webchat widget. Phone uses the digit ("press 1") regardless. Leave blank to skip rendering that branch on web.</Help>
+                        <button type="button" className="fb-dtmf-add" onClick={addDtmfOption}>
+                            ＋ Add option
+                        </button>
+                        <Help>
+                            Add as many options as you need — no limit. The <b>key</b> is what
+                            phone callers press and becomes a branch handle on the node card
+                            (drag from it to wire the next step). The <b>label</b> is the button
+                            text shown in webchat; leave it blank to hide that branch on web
+                            (phone still works). A <code>timeout</code> branch is always available.
+                        </Help>
                     </Field>
-                    <Help>One output per digit + a timeout output. Drag from each handle on the right side of the node card.</Help>
                 </div>
             )}
 
@@ -473,6 +645,140 @@ function PropertiesPanel({ node, updateNode, deleteNode, onClose }) {
                         />
                     </Field>
                     <Help>Hands the call to the AI agent system. From here the existing /ws/turn loop handles the conversation.</Help>
+                </div>
+            )}
+
+            {node.type === 'datasource' && (
+                <div className="fb-props__body">
+                    <Field label="Scope to these data sources">
+                        {(!dataSources || dataSources.length === 0) ? (
+                            <Help>No data sources found for this project. Add them under “Data Sources” first, then they’ll appear here.</Help>
+                        ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                {dataSources.map((ds) => {
+                                    const ids = node.data?.source_ids || [];
+                                    const checked = ids.includes(ds.id);
+                                    return (
+                                        <label key={ds.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                                            <input
+                                                type="checkbox"
+                                                checked={checked}
+                                                onChange={(e) => {
+                                                    const cur = new Set(node.data?.source_ids || []);
+                                                    if (e.target.checked) cur.add(ds.id); else cur.delete(ds.id);
+                                                    set('source_ids', Array.from(cur));
+                                                }}
+                                            />
+                                            <span>{ds.name} <span style={{ color: '#64748b' }}>({ds.type})</span></span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </Field>
+                    <Help>When the conversation passes through this node, the AI references ONLY the checked source(s) from here on. Check none to use automatic routing (all sources) — the default behavior.</Help>
+                </div>
+            )}
+
+            {node.type === 'collect_input' && (() => {
+                // Normalize to a fields[] list (supports the legacy single field).
+                const fields = (Array.isArray(node.data?.fields) && node.data.fields.length)
+                    ? node.data.fields
+                    : [{ key: node.data?.field_key || 'value', prompt: node.data?.prompt || '', input_type: node.data?.input_type || 'text' }];
+                const setFields = (next) => updateNode(node.id, { ...node.data, fields: next, field_key: undefined, prompt: undefined, input_type: undefined });
+                const updField = (i, patch) => setFields(fields.map((f, j) => (j === i ? { ...f, ...patch } : f)));
+                const addField = () => setFields([...fields, { key: '', prompt: '', input_type: 'text' }]);
+                const delField = (i) => setFields(fields.filter((_, j) => j !== i));
+                return (
+                    <div className="fb-props__body">
+                        {fields.map((f, i) => (
+                            <div key={i} style={{ border: '1px solid #1e293b', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                                    <strong style={{ fontSize: 12, color: '#94a3b8' }}>Question {i + 1}</strong>
+                                    {fields.length > 1 && (
+                                        <button onClick={() => delField(i)} title="Remove this question"
+                                            style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 14 }}>✕</button>
+                                    )}
+                                </div>
+                                <Field label="Ask">
+                                    <input value={f.prompt || ''} onChange={(e) => updField(i, { prompt: e.target.value })} placeholder="What is your name?"/>
+                                </Field>
+                                <Field label="Type (validation)">
+                                    <select value={f.input_type || 'text'} onChange={(e) => updField(i, { input_type: e.target.value })}>
+                                        <option value="text">Text (any)</option>
+                                        <option value="phone">Phone / WhatsApp number</option>
+                                        <option value="email">Email</option>
+                                        <option value="number">Number</option>
+                                    </select>
+                                </Field>
+                                <Field label="Save as (key)">
+                                    <input value={f.key || ''} onChange={(e) => updField(i, { key: e.target.value.replace(/[^a-zA-Z0-9_]/g, '_') })} placeholder="name"/>
+                                </Field>
+                            </div>
+                        ))}
+                        <button onClick={addField}
+                            style={{ width: '100%', padding: '8px', background: '#0ea5e9', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, marginBottom: 10 }}>
+                            + Add another question
+                        </button>
+                        <LanguageField value={node.data?.language || ''} onChange={(v) => set('language', v)} />
+                        <Help>Asks each question in order, validates + stores each reply as <code>&#123;&#123; key &#125;&#125;</code> (e.g. <code>&#123;&#123; name &#125;&#125;</code>, <code>&#123;&#123; whatsapp_number &#125;&#125;</code>). Reuse those in a Send node. Outputs: <b>collected</b> (all done) · <b>timeout</b> (no reply). Invalid answers re-ask the same question.</Help>
+                    </div>
+                );
+            })()}
+
+            {node.type === 'send_channel' && (
+                <div className="fb-props__body">
+                    <Field label="Channel">
+                        <select value={node.data?.provider || 'whatsapp'} onChange={(e) => set('provider', e.target.value)}>
+                            <option value="whatsapp">WhatsApp</option>
+                            <option value="messenger">Messenger</option>
+                            <option value="instagram">Instagram</option>
+                        </select>
+                    </Field>
+                    <Field label="Send to (field key)">
+                        <input value={node.data?.recipient_field || ''} onChange={(e) => set('recipient_field', e.target.value.replace(/[^a-zA-Z0-9_]/g, '_'))} placeholder="whatsapp_number"/>
+                        <Help>A field captured earlier (e.g. by a Collect Input node). Leave blank to use the current contact.</Help>
+                    </Field>
+                    <Field label="Message type">
+                        <select value={node.data?.payload_type || 'text'} onChange={(e) => set('payload_type', e.target.value)}>
+                            <option value="text">Text</option>
+                            <option value="media">Media (catalogue PDF / image link)</option>
+                            <option value="template">Template (required for cold WhatsApp sends)</option>
+                        </select>
+                    </Field>
+                    {(node.data?.payload_type || 'text') === 'text' && (
+                        <Field label="Text">
+                            <textarea rows={3} value={node.data?.text || ''} onChange={(e) => set('text', e.target.value)} placeholder="Here is our catalogue! Supports {{ field }} placeholders."/>
+                        </Field>
+                    )}
+                    {node.data?.payload_type === 'media' && (
+                        <>
+                            <Field label="Media type">
+                                <select value={node.data?.media_type || 'document'} onChange={(e) => set('media_type', e.target.value)}>
+                                    <option value="document">Document (PDF…)</option>
+                                    <option value="image">Image</option>
+                                    <option value="video">Video</option>
+                                </select>
+                            </Field>
+                            <Field label="Media URL (public link)">
+                                <input type="url" value={node.data?.media_url || ''} onChange={(e) => set('media_url', e.target.value)} placeholder="https://…/catalogue.pdf"/>
+                            </Field>
+                            <Field label="Caption (optional)">
+                                <input value={node.data?.caption || ''} onChange={(e) => set('caption', e.target.value)}/>
+                            </Field>
+                        </>
+                    )}
+                    {node.data?.payload_type === 'template' && (
+                        <>
+                            <Field label="Template name (approved in Meta)">
+                                <input value={node.data?.template_name || ''} onChange={(e) => set('template_name', e.target.value)} placeholder="catalogue_intro"/>
+                            </Field>
+                            <Field label="Template language">
+                                <input value={node.data?.template_lang || 'en_US'} onChange={(e) => set('template_lang', e.target.value)} placeholder="en_US"/>
+                            </Field>
+                        </>
+                    )}
+                    <Help>Uses the project's onboarded {node.data?.provider || 'whatsapp'} account. ⚠️ WhatsApp: a business-initiated message to a number that hasn't messaged you in 24h must use an <b>approved template</b> — plain text/media will be rejected by Meta. Inside an active chat (within 24h), all types work. Outputs: <b>sent</b> / <b>error</b>.</Help>
                 </div>
             )}
 
@@ -745,7 +1051,7 @@ function TestPanel({ messages, expecting, running, sessionId, onStart, onChoice,
     );
 }
 
-function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '' }) {
+function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSources = [] }) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [settings, setSettings] = useState({ language: 'en', timeout_secs: 8, max_retries: 2 });
@@ -758,6 +1064,10 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '' }) {
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
+    // Data sources for the "Data Source" + "Send to Channel" nodes. Seeded
+    // from the page attribute, then refreshed from the API on load (robust
+    // against stale HTML / attribute-escaping issues).
+    const [dsList, setDsList] = useState(Array.isArray(dataSources) ? dataSources : []);
 
     // Test mode — small chat preview docked to the canvas, executes the
     // flow against a sandboxed (channel='test') session in the tenant DB
@@ -791,6 +1101,7 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '' }) {
                 setNodes(def.nodes || []);
                 setEdges(def.edges || []);
                 if (def.settings) setSettings({ ...settings, ...def.settings });
+                if (Array.isArray(body.data_sources)) setDsList(body.data_sources);
                 setLoading(false);
                 requestAnimationFrame(() => { initialLoadDone.current = true; });
             })
@@ -998,6 +1309,23 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '' }) {
         setSelectedId(null);
     }, [setNodes, setEdges]);
 
+    // A DTMF option's digit is its branch handle id. When the user renames
+    // a digit, follow any wired edges to the new handle so the connection
+    // survives; when they delete an option, drop its edges.
+    const renameHandle = useCallback((nodeId, oldHandle, newHandle) => {
+        // Remap even through a blank intermediate (clear-then-retype) so the
+        // wired edge follows the digit instead of being orphaned.
+        if (oldHandle === newHandle) return;
+        setEdges((eds) => eds.map((e) => (
+            e.source === nodeId && e.sourceHandle === oldHandle
+                ? { ...e, sourceHandle: newHandle }
+                : e
+        )));
+    }, [setEdges]);
+    const removeHandle = useCallback((nodeId, handle) => {
+        setEdges((eds) => eds.filter((e) => !(e.source === nodeId && e.sourceHandle === handle)));
+    }, [setEdges]);
+
     const selectedNode = useMemo(() => nodes.find((n) => n.id === selectedId) || null, [nodes, selectedId]);
 
     if (loading) {
@@ -1091,6 +1419,9 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '' }) {
                     updateNode={updateNode}
                     deleteNode={deleteNode}
                     onClose={() => setPropsOpen(false)}
+                    dataSources={dsList}
+                    renameHandle={renameHandle}
+                    removeHandle={removeHandle}
                 />
             )}
         </div>
@@ -1111,6 +1442,9 @@ function bootstrap() {
     // Without this, absolute fetch('/c/...') resolves against the docroot
     // and 404s when the app is served from a sub-directory.
     const baseUrl     = root.dataset.baseUrl || '';
+    // Project data sources for the "Data Source" node's scope picker.
+    let dataSources = [];
+    try { dataSources = JSON.parse(root.dataset.dataSources || '[]'); } catch (_) { dataSources = []; }
     // Empty the placeholder before mounting.
     root.innerHTML = '';
     createRoot(root).render(
@@ -1122,6 +1456,7 @@ function bootstrap() {
                     csrf={csrf}
                     clientSlug={clientSlug}
                     baseUrl={baseUrl}
+                    dataSources={dataSources}
                 />
             </ReactFlowProvider>
         </React.StrictMode>

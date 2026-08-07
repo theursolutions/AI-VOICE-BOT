@@ -1,0 +1,27 @@
+{
+    "name": "msd/meta-channels",
+    "description": "Meta channels communication engine — WhatsApp/Instagram/Facebook onboarding, messaging webhooks, message sending, and WhatsApp Business Calling signaling. Provider-agnostic of the host app via small handler contracts, so it can be reused or sold standalone.",
+    "type": "library",
+    "license": "proprietary",
+    "keywords": ["whatsapp", "meta", "instagram", "facebook", "webhook", "calling", "laravel"],
+    "require": {
+        "php": "^8.1",
+        "guzzlehttp/guzzle": "^7.0",
+        "illuminate/support": "^10.0|^11.0",
+        "illuminate/http": "^10.0|^11.0",
+        "illuminate/bus": "^10.0|^11.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Msd\\MetaChannels\\": "src/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Msd\\MetaChannels\\MetaChannelsServiceProvider"
+            ]
+        }
+    },
+    "minimum-stability": "stable"
+}
