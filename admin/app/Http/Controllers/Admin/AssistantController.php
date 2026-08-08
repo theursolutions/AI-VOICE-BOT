@@ -11,6 +11,7 @@ use App\Services\DataSource\DataSourceRouter;
 use App\Services\DataSource\ResolverResult;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -102,7 +103,7 @@ class AssistantController extends Controller
         return $items;
     }
 
-    public function ask(Request $request, Client $client): JsonResponse
+    public function ask(Request $request, Client $client): JsonResponse|StreamedResponse
     {
         $data = $request->validate([
             'project_id'      => 'required|integer',
@@ -115,6 +116,9 @@ class AssistantController extends Controller
             'language'        => 'nullable|string|max:12',
             // Conversation mode: 'qa' (concise answers) or 'discussion'.
             'mode'            => 'nullable|string|max:20',
+            // When true the reply is delivered as Server-Sent Events
+            // instead of one buffered JSON response.
+            'stream'          => 'nullable|boolean',
         ]);
 
         $user = $request->user();
@@ -250,6 +254,31 @@ class AssistantController extends Controller
                 . 'stop. Only quote a specific value inline if the user asked for one single fact (e.g. '
                 . '"what is PRD-1002\'s price"). Plain text only — no markdown.';
         }
+        // ── Say the ABSENCE of data out loud ────────────────────────────────
+        // referenceBlock() returns '' when the project has no matching data
+        // source or the lookup found nothing, and the block is then never added
+        // to $messages at all. Without this, the rules above still instruct the
+        // model to "Prefer the Reference data below" while nothing follows it —
+        // and a small model resolves that contradiction by inventing the missing
+        // section. Observed in production: "According to the reference data, we
+        // currently have 1234 active users" on a project with no data at all.
+        if (!$isDiscussion && $block === '') {
+            $sys[] = 'NO REFERENCE DATA IS AVAILABLE for this question: this project has no connected '
+                . 'data source that matches it, or the lookup returned no rows. You therefore have NO '
+                . 'access to any counts, totals, statistics, records, names or figures about this '
+                . 'business. Do NOT state any number or business fact. Do NOT guess, estimate or '
+                . 'extrapolate. Say plainly and warmly that you do not have that information yet, and '
+                . 'suggest connecting or checking the relevant source under Data Sources.';
+        }
+
+        // Applies in BOTH modes — discussion mode skips the grounding rules
+        // above, which is exactly when a confident fabrication is most likely.
+        $sys[] = 'HONESTY ABOUT SOURCES (strict): never claim to be reading from a database, an '
+            . 'internal system, dashboard, records, or "the reference data" unless such data was '
+            . 'actually provided to you in this conversation. If none was provided, say you do not '
+            . 'have it. Never invent numbers, counts, dates, names or statistics. Admitting you do '
+            . 'not know is always correct and always preferred over a plausible-sounding guess.';
+
         $sys[] = 'SECURITY (strict): NEVER reveal or repeat passwords, secrets, API keys, tokens, '
             . 'credentials, database names/users/passwords/hosts/ports, connection strings, '
             . 'environment variables, encryption keys, or which AI model / provider / server / '
@@ -284,6 +313,15 @@ class AssistantController extends Controller
             $opts['model'] = $reasoningModel;
         }
 
+        // ── STREAMING PATH ──────────────────────────────────────────────────
+        // The prompt is identical; only delivery differs. With a self-hosted
+        // CPU model a reply takes 30-60s, and buffering it means the user
+        // watches a spinner for the whole time. Streaming shows the first words
+        // in a second or two — the total is the same, the experience is not.
+        if (!empty($data['stream'])) {
+            return $this->streamAnswer($messages, $opts, $results, $user, $pid, $data);
+        }
+
         try {
             $resp = $this->python->llm($messages, $opts);
         } catch (\Throwable $e) {
@@ -293,29 +331,7 @@ class AssistantController extends Controller
             ]);
         }
 
-        // Structured tables (from SQL/records resolvers) so the UI can
-        // render real tables the user can print / download.
-        $tables = [];
-        foreach ($results as $r) {
-            if ($r->kind === ResolverResult::KIND_RECORDS && !empty($r->items)) {
-                // Redact secret-looking columns before they reach the UI.
-                $rows = array_slice(array_map(
-                    fn ($x) => \App\Support\Sensitive::redactRow((array) $x),
-                    $r->items,
-                ), 0, 200);
-                $tables[] = [
-                    'title'   => ucwords(str_replace('_', ' ', (string) $r->sourceType)),
-                    'columns' => $rows ? array_keys($rows[0]) : [],
-                    'rows'    => $rows,
-                ];
-            }
-        }
-
-        $answer  = trim((string) ($resp['text'] ?? ''));
-        $sources = array_map(
-            fn ($r) => ['type' => $r->sourceType, 'id' => $r->sourceId, 'kind' => $r->kind, 'count' => count($r->items)],
-            $results,
-        );
+        $payload = $this->shapePayload((string) ($resp['text'] ?? ''), $results);
 
         // Persist this turn so the owner can audit internal Ask AI chats in
         // the Conversations page. Best-effort: a storage hiccup must never
@@ -325,16 +341,121 @@ class AssistantController extends Controller
             $pid,
             (string) ($data['conversation_id'] ?? ''),
             (string) $data['question'],
-            $answer,
-            $tables,
-            $sources,
+            $payload['answer'],
+            $payload['tables'],
+            $payload['sources'],
         );
 
-        return response()->json([
-            'answer'  => $answer,
-            'tables'  => $tables,
-            'sources' => $sources,
-        ]);
+        return response()->json($payload);
+    }
+
+    /**
+     * Forward the voice-engine's SSE stream to the browser, then close with a
+     * `final` frame carrying the same envelope the blocking path returns, so
+     * the page can render tables and sources exactly as before.
+     *
+     * One LLM call total — the deltas and the final answer come from the same
+     * generation, not a second request.
+     */
+    private function streamAnswer(
+        array $messages,
+        array $opts,
+        array $results,
+        $user,
+        int $pid,
+        array $data
+    ): StreamedResponse {
+        $response = new StreamedResponse(function () use ($messages, $opts, $results, $user, $pid, $data) {
+            $emit = function (array $frame): void {
+                echo 'data: ' . json_encode($frame, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n\n";
+                // Two flushes: PHP's own buffer, then the SGI/FPM layer. Without
+                // both, frames sit in a buffer and arrive as one lump at the end.
+                if (ob_get_level() > 0) {
+                    @ob_flush();
+                }
+                flush();
+            };
+
+            $answer = '';
+
+            try {
+                $body = $this->python->llmStream($messages, $opts + ['stream' => true]);
+
+                // SSE frames are newline-delimited but a single read can split
+                // one frame or contain several, so buffer until we see a blank
+                // line (the SSE record separator).
+                $buffer = '';
+                while (!$body->eof()) {
+                    $chunk = $body->read(8192);
+                    if ($chunk === '') {
+                        continue;
+                    }
+                    $buffer .= $chunk;
+
+                    while (($pos = strpos($buffer, "\n\n")) !== false) {
+                        $record = substr($buffer, 0, $pos);
+                        $buffer = substr($buffer, $pos + 2);
+
+                        foreach (explode("\n", $record) as $line) {
+                            if (strncmp($line, 'data:', 5) !== 0) {
+                                continue;
+                            }
+                            $frame = json_decode(trim(substr($line, 5)), true);
+                            if (!is_array($frame)) {
+                                continue;
+                            }
+                            $type = (string) ($frame['type'] ?? '');
+                            if ($type === 'delta' && ($frame['text'] ?? '') !== '') {
+                                $answer .= $frame['text'];
+                                $emit(['type' => 'delta', 'text' => $frame['text']]);
+                            } elseif ($type === 'final') {
+                                // Trust the aggregate the engine computed.
+                                if (($frame['text'] ?? '') !== '') {
+                                    $answer = (string) $frame['text'];
+                                }
+                            } elseif ($type === 'error') {
+                                $emit(['type' => 'error', 'message' => (string) ($frame['message'] ?? 'generation failed')]);
+                            }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {
+                report($e);
+                $emit([
+                    'type'    => 'error',
+                    'message' => 'Sorry — I couldn’t reach the assistant just now. Please try again.',
+                ]);
+                $emit(['type' => 'done']);
+
+                return;
+            }
+
+            $payload = $this->shapePayload($answer, $results);
+
+            $this->persistInternalTurn(
+                $user,
+                $pid,
+                (string) ($data['conversation_id'] ?? ''),
+                (string) $data['question'],
+                $payload['answer'],
+                $payload['tables'],
+                $payload['sources'],
+            );
+
+            // Authoritative envelope — the page replaces the streamed text with
+            // this and renders tables/sources from it.
+            $emit(['type' => 'final'] + $payload);
+            $emit(['type' => 'done']);
+        });
+
+        $response->headers->set('Content-Type', 'text/event-stream');
+        $response->headers->set('Cache-Control', 'no-cache, no-transform');
+        // nginx honours this and disables FastCGI response buffering for the
+        // request. Without it the proxy holds the whole reply and streaming
+        // silently degrades back to one lump at the end.
+        $response->headers->set('X-Accel-Buffering', 'no');
+
+        return $response;
     }
 
     /**
@@ -608,11 +729,19 @@ class AssistantController extends Controller
             return $question;
         }
 
-        // Only spend an extra LLM call when the question looks like a
-        // follow-up (short, or contains a back-reference). Standalone
-        // questions retrieve fine on their own.
-        $looksFollowUp = (str_word_count($question) <= 6)
-            || preg_match('/\b(it|its|it\'?s|they|them|their|that|those|these|this|same|previous|above|former|latter|one|ones|next|another|more|also|what about|how about)\b/i', $question);
+        // Only spend an extra LLM call when the question genuinely carries a
+        // back-reference that retrieval cannot resolve on its own.
+        //
+        // The old heuristic also treated ANY question of <=6 words as a
+        // follow-up, which fires on every greeting and social turn ("how are
+        // you", "thanks", "what's next"). On a self-hosted CPU model that
+        // doubled the wait for the shortest, most conversational messages —
+        // ~35s became ~70s — for a rewrite that changes nothing. A question
+        // with no pronoun or back-reference retrieves fine as-is.
+        $looksFollowUp = (bool) preg_match(
+            '/\b(it|its|it\'?s|they|them|their|that|those|these|this|same|previous|above|former|latter|one|ones|next|another|more|also|what about|how about)\b/i',
+            $question
+        );
         if (!$looksFollowUp) {
             return $question;
         }
@@ -663,6 +792,43 @@ class AssistantController extends Controller
         }
 
         return $question;
+    }
+
+    /**
+     * Shape resolver results + the model's answer into the JSON envelope the
+     * Ask AI page consumes. Shared by the blocking (ask) and streaming
+     * (askStream) paths so both produce byte-identical payloads.
+     *
+     * @return array{answer:string,tables:array,sources:array}
+     */
+    private function shapePayload(string $answer, array $results): array
+    {
+        // Structured tables (from SQL/records resolvers) so the UI can
+        // render real tables the user can print / download.
+        $tables = [];
+        foreach ($results as $r) {
+            if ($r->kind === ResolverResult::KIND_RECORDS && !empty($r->items)) {
+                // Redact secret-looking columns before they reach the UI.
+                $rows = array_slice(array_map(
+                    fn ($x) => \App\Support\Sensitive::redactRow((array) $x),
+                    $r->items,
+                ), 0, 200);
+                $tables[] = [
+                    'title'   => ucwords(str_replace('_', ' ', (string) $r->sourceType)),
+                    'columns' => $rows ? array_keys($rows[0]) : [],
+                    'rows'    => $rows,
+                ];
+            }
+        }
+
+        return [
+            'answer'  => trim($answer),
+            'tables'  => $tables,
+            'sources' => array_map(
+                fn ($r) => ['type' => $r->sourceType, 'id' => $r->sourceId, 'kind' => $r->kind, 'count' => count($r->items)],
+                $results,
+            ),
+        ];
     }
 
     /** Format resolver results into a plain-text "Reference data" block. */

@@ -16,9 +16,32 @@
         box-shadow: 0 2px 6px rgba(99,102,241,.25);
     }
     .tva-tb-logo img { width:100%; height:100%; object-fit:cover; }
-    .tva-tb-brand__name  { font-size:14px; font-weight:600; line-height:1.2; color:#0f172a; }
-    .tva-tb-brand__sub   { font-size:11px; color:#64748b; }
-    html.dark .tva-tb-brand__name { color:#f1f5f9; }
+    /* Company/project name as a pill rather than loose text, so it reads as a
+       distinct badge next to the logo instead of floating in the bar. */
+    .tva-tb-brand__name {
+        display:inline-flex; align-items:center;
+        font-size:13px; font-weight:600; line-height:1;
+        color:#0f172a;
+        padding:5px 11px; border-radius:999px;
+        background: rgba(15,23,42,.05);
+        border:1px solid rgba(15,23,42,.08);
+        max-width:220px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+        transition: background .15s, border-color .15s;
+    }
+    .tva-tb-brand:hover .tva-tb-brand__name {
+        background: rgba(15,23,42,.08);
+        border-color: rgba(15,23,42,.14);
+    }
+    .tva-tb-brand__sub   { font-size:11px; color:#64748b; margin-top:3px; padding-left:11px; }
+    html.dark .tva-tb-brand__name {
+        color:#f1f5f9;
+        background: rgba(255,255,255,.07);
+        border-color: rgba(255,255,255,.12);
+    }
+    html.dark .tva-tb-brand:hover .tva-tb-brand__name {
+        background: rgba(255,255,255,.11);
+        border-color: rgba(255,255,255,.18);
+    }
     @media (max-width: 640px) {
         .tva-tb-brand__text { display: none; }
     }
@@ -208,83 +231,44 @@
     
     <!-- BEGIN: Notifications -->
     <div class="intro-x dropdown mr-auto sm:mr-6">
-        <div class="dropdown-toggle notification notification--bullet cursor-pointer" role="button" aria-expanded="false" data-tw-toggle="dropdown"> <i data-lucide="bell" class="notification__icon dark:text-slate-500"></i> </div>
+        {{-- Bell kept for layout continuity, but WITHOUT the template's demo
+             notifications. There is no notification backend yet, so showing
+             fabricated entries (stock avatars, lorem text, fake timestamps)
+             would read as real activity on a live install. The dropdown opens
+             and states plainly that there is nothing to show.
+             `notification--bullet` is dropped too: the unread dot implied
+             pending items that never existed. --}}
+        <div class="dropdown-toggle notification cursor-pointer" role="button" aria-expanded="false" data-tw-toggle="dropdown" title="Notifications">
+            <i data-lucide="bell" class="notification__icon dark:text-slate-500"></i>
+        </div>
         <div class="notification-content pt-2 dropdown-menu">
             <div class="notification-content__box dropdown-content">
                 <div class="notification-content__title">Notifications</div>
-                <div class="cursor-pointer relative flex items-center ">
-                    <div class="w-12 h-12 flex-none image-fit mr-1">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-6.jpg')}}">
-                        <div class="w-3 h-3 bg-success absolute right-0 bottom-0 rounded-full border-2 border-white dark:border-darkmode-600"></div>
-                    </div>
-                    <div class="ml-2 overflow-hidden">
-                        <div class="flex items-center">
-                            <a href="javascript:;" class="font-medium truncate mr-5">Robert De Niro</a> 
-                            <div class="text-xs text-slate-400 ml-auto whitespace-nowrap">05:09 AM</div>
-                        </div>
-                        <div class="w-full truncate text-slate-500 mt-0.5">Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry&#039;s standard dummy text ever since the 1500</div>
-                    </div>
-                </div>
-                <div class="cursor-pointer relative flex items-center mt-5">
-                    <div class="w-12 h-12 flex-none image-fit mr-1">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-12.jpg')}}">
-                        <div class="w-3 h-3 bg-success absolute right-0 bottom-0 rounded-full border-2 border-white dark:border-darkmode-600"></div>
-                    </div>
-                    <div class="ml-2 overflow-hidden">
-                        <div class="flex items-center">
-                            <a href="javascript:;" class="font-medium truncate mr-5">Robert De Niro</a> 
-                            <div class="text-xs text-slate-400 ml-auto whitespace-nowrap">01:10 PM</div>
-                        </div>
-                        <div class="w-full truncate text-slate-500 mt-0.5">Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry&#039;s standard dummy text ever since the 1500</div>
-                    </div>
-                </div>
-                <div class="cursor-pointer relative flex items-center mt-5">
-                    <div class="w-12 h-12 flex-none image-fit mr-1">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-10.jpg')}}">
-                        <div class="w-3 h-3 bg-success absolute right-0 bottom-0 rounded-full border-2 border-white dark:border-darkmode-600"></div>
-                    </div>
-                    <div class="ml-2 overflow-hidden">
-                        <div class="flex items-center">
-                            <a href="javascript:;" class="font-medium truncate mr-5">John Travolta</a> 
-                            <div class="text-xs text-slate-400 ml-auto whitespace-nowrap">06:05 AM</div>
-                        </div>
-                        <div class="w-full truncate text-slate-500 mt-0.5">Contrary to popular belief, Lorem Ipsum is not simply random text. It has roots in a piece of classical Latin literature from 45 BC, making it over 20</div>
-                    </div>
-                </div>
-                <div class="cursor-pointer relative flex items-center mt-5">
-                    <div class="w-12 h-12 flex-none image-fit mr-1">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-10.jpg')}}">
-                        <div class="w-3 h-3 bg-success absolute right-0 bottom-0 rounded-full border-2 border-white dark:border-darkmode-600"></div>
-                    </div>
-                    <div class="ml-2 overflow-hidden">
-                        <div class="flex items-center">
-                            <a href="javascript:;" class="font-medium truncate mr-5">Kevin Spacey</a> 
-                            <div class="text-xs text-slate-400 ml-auto whitespace-nowrap">05:09 AM</div>
-                        </div>
-                        <div class="w-full truncate text-slate-500 mt-0.5">There are many variations of passages of Lorem Ipsum available, but the majority have suffered alteration in some form, by injected humour, or randomi</div>
-                    </div>
-                </div>
-                <div class="cursor-pointer relative flex items-center mt-5">
-                    <div class="w-12 h-12 flex-none image-fit mr-1">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-11.jpg')}}">
-                        <div class="w-3 h-3 bg-success absolute right-0 bottom-0 rounded-full border-2 border-white dark:border-darkmode-600"></div>
-                    </div>
-                    <div class="ml-2 overflow-hidden">
-                        <div class="flex items-center">
-                            <a href="javascript:;" class="font-medium truncate mr-5">Brad Pitt</a> 
-                            <div class="text-xs text-slate-400 ml-auto whitespace-nowrap">01:10 PM</div>
-                        </div>
-                        <div class="w-full truncate text-slate-500 mt-0.5">It is a long established fact that a reader will be distracted by the readable content of a page when looking at its layout. The point of using Lorem </div>
-                    </div>
+                <div class="flex flex-col items-center justify-center py-6 text-center">
+                    <i data-lucide="bell-off" class="w-6 h-6 text-slate-400 mb-2"></i>
+                    <div class="text-slate-500 text-xs">You're all caught up</div>
                 </div>
             </div>
         </div>
     </div>
     <!-- END: Notifications -->
     <!-- BEGIN: Account Menu -->
+    @php
+        // Initials from the user's own name — first + last word, so "Umer Malik"
+        // becomes "UM" and a single-word name falls back to its first letter.
+        // Replaces the template's stock stock-photo avatar.
+        $tvaUserName  = trim((string) (Auth::user()->name ?? ''));
+        $tvaNameParts = preg_split('/\s+/', $tvaUserName, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $tvaUserInit  = count($tvaNameParts) > 1
+            ? mb_strtoupper(mb_substr($tvaNameParts[0], 0, 1) . mb_substr(end($tvaNameParts), 0, 1))
+            : mb_strtoupper(mb_substr($tvaUserName !== '' ? $tvaUserName : 'U', 0, 1));
+    @endphp
     <div class="intro-x dropdown w-8 h-8">
-        <div class="dropdown-toggle w-8 h-8 rounded-full overflow-hidden shadow-lg image-fit zoom-in" role="button" aria-expanded="false" data-tw-toggle="dropdown">
-            <img alt="Midone - HTML Admin Template" src="{{url('/assets/dist/images/profile-15.jpg')}}">
+        <div class="dropdown-toggle w-8 h-8 rounded-full overflow-hidden shadow-lg zoom-in cursor-pointer flex items-center justify-center font-medium text-xs text-white select-none"
+             style="background-image: var(--tva-gradient, linear-gradient(135deg,#3b82f6,#2563eb));"
+             role="button" aria-expanded="false" data-tw-toggle="dropdown"
+             title="{{ $tvaUserName }}">
+            {{ $tvaUserInit }}
         </div>
         <div class="dropdown-menu w-56">
             <ul class="dropdown-content bg-primary text-white">

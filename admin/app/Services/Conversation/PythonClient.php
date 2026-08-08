@@ -29,6 +29,30 @@ class PythonClient
         ]);
     }
 
+    /**
+     * Streaming counterpart of llm(). Returns the raw SSE body so the caller
+     * can forward frames to the browser as they arrive.
+     *
+     * Each SSE line is `data: {json}` where json is one of:
+     *   {"type":"delta","text":"…"} | {"type":"final","text":"…",…} | {"type":"error",…}
+     *
+     * timeout is disabled and read_timeout used instead: with `stream => true`
+     * Guzzle returns as soon as headers arrive, and a total timeout would abort
+     * a perfectly healthy long generation mid-flight.
+     */
+    public function llmStream(array $messages, array $options = []): \Psr\Http\Message\StreamInterface
+    {
+        $res = $this->http->post('llm/stream', [
+            'json'         => ['messages' => $messages] + $options,
+            'stream'       => true,
+            'timeout'      => 0,
+            'read_timeout' => 300,
+            'headers'      => ['Accept' => 'text/event-stream'],
+        ]);
+
+        return $res->getBody();
+    }
+
     public function llm(array $messages, array $options = []): array
     {
         $res = $this->http->post('llm/respond', [
