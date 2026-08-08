@@ -2,7 +2,7 @@ name: voice-engine (Python)
 
 on:
   push:
-    branches: [main]
+    branches: [development, production]
     paths:
       - 'voice-engine/**'
       - '.github/workflows/voice-engine.yml'

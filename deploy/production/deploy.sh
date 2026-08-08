@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Helper for the production HA stack. Run from anywhere in the repo.
 #
+#   ./deploy/production/deploy.sh update       ONE-STEP DEPLOY: pull, build only
+#                                              what changed, validate, roll out
 #   ./deploy/production/deploy.sh up          build + (re)deploy with the overlay
 #   ./deploy/production/deploy.sh deploy       memory-safe ROLLING redeploy (app: zero-downtime)
 #   ./deploy/production/deploy.sh ps           status of all services
@@ -97,6 +99,116 @@ case "$cmd" in
     "${DC[@]}" up -d --remove-orphans
     "${DC[@]}" ps
     echo ">> watch the roll live: ssh -L 8404:127.0.0.1:8404 user@server → http://localhost:8404"
+    ;;
+
+  update)
+    #==========================================================================
+    # ONE-COMMAND DEPLOY.  ./deploy.sh update
+    #
+    # Pulls, works out what ACTUALLY changed, rebuilds only what needs it,
+    # validates every config BEFORE touching anything that is serving, then
+    # applies with a zero-downtime roll of the app tier.
+    #
+    # Safety properties, in order of importance:
+    #   1. Refuses to run on a dirty working tree (no silent local drift).
+    #   2. Validates compose + haproxy config before mutating anything.
+    #   3. Builds BEFORE swapping, so a failed build leaves production running.
+    #   4. Only restarts services whose inputs changed.
+    #==========================================================================
+    if [ -n "$(git status --porcelain)" ]; then
+      echo "!! working tree is dirty on the server. Commit, stash or discard first:" >&2
+      git status --short >&2
+      exit 1
+    fi
+
+    before=$(git rev-parse HEAD)
+    echo ">> fetching…"
+    git pull --ff-only
+    after=$(git rev-parse HEAD)
+
+    forced=0
+    if [ "$before" = "$after" ]; then
+      if [ "${1:-}" = "--force" ]; then
+        forced=1
+        changed=$(git ls-files)
+        echo ">> --force: rebuilding and redeploying everything"
+      else
+        echo ">> already up to date at $(git log --oneline -1)"
+        echo "   (use '$0 update --force' to rebuild and redeploy anyway)"
+        exit 0
+      fi
+    else
+      changed=$(git diff --name-only "$before" "$after")
+      echo ">> incoming commits:"
+      git log --oneline "$before".."$after" | sed 's/^/     /'
+    fi
+
+    has() { printf '%s\n' "$changed" | grep -qE "$1"; }
+
+    build_app=0; build_voice=0; recreate=""; reconcile=0
+
+    has '^admin/'                        && build_app=1
+    has '^voice-engine/'                 && build_voice=1
+    has '^deploy/production/haproxy/'    && recreate="$recreate haproxy"
+    has '^deploy/(production/)?Caddyfile' && recreate="$recreate caddy"
+    has '^deploy/production/monitoring/' && recreate="$recreate prometheus alertmanager grafana"
+    has '^docker-compose\.yml$|^deploy/production/docker-compose\.prod\.yml$|^deploy/production/ollama\.override\.yml$' && reconcile=1
+
+    echo ">> planned: app_build=$build_app voice_build=$build_voice recreate='${recreate:-none}' reconcile=$reconcile"
+
+    # --- Validate BEFORE mutating anything that is currently serving ---------
+    echo ">> validating configs…"
+    "${DC[@]}" config -q \
+      || { echo "!! compose config invalid — ABORTED, nothing changed" >&2; exit 1; }
+    docker run --rm \
+      -e APP_DOMAIN=x -e VOICE_DOMAIN=y -e HAPROXY_STATS_USER=u -e HAPROXY_STATS_PASSWORD=p \
+      -v "$PWD/deploy/production/haproxy/haproxy.cfg:/c.cfg:ro" \
+      haproxy:2.9-alpine haproxy -c -f /c.cfg >/dev/null 2>&1 \
+      || { echo "!! haproxy config invalid — ABORTED, nothing changed" >&2; exit 1; }
+    echo "   configs OK"
+
+    # --- Build BEFORE swapping. A failed build must not break production. ----
+    if [ "$build_app" = 1 ]; then
+      echo ">> building app…"
+      "${DC[@]}" build app || { echo "!! app build FAILED — ABORTED, production untouched" >&2; exit 1; }
+    fi
+    if [ "$build_voice" = 1 ]; then
+      echo ">> building voice-engine… (slow if requirements.lock.txt changed)"
+      "${DC[@]}" build voice-engine || { echo "!! voice-engine build FAILED — ABORTED, production untouched" >&2; exit 1; }
+    fi
+
+    # --- Warn about new env vars instead of failing at runtime ---------------
+    newvars=$(grep -hoE '^[A-Z_]+=' .env.example deploy/production/.env.prod.example 2>/dev/null \
+              | tr -d '=' | sort -u \
+              | while read -r k; do grep -qE "^$k=" .env || echo "     $k"; done)
+    if [ -n "$newvars" ]; then
+      echo ">> NOTE: variables present in the templates but MISSING from .env:"
+      printf '%s\n' "$newvars"
+      echo "   Add them if the new code needs them."
+    fi
+
+    # --- Apply --------------------------------------------------------------
+    acted=0
+    if [ "$build_app" = 1 ]; then rolling_app; acted=1; fi
+    for svc in $recreate; do
+      echo ">> recreating $svc…"
+      "${DC[@]}" up -d --no-deps --force-recreate "$svc"
+      acted=1
+    done
+    if [ "$build_voice" = 1 ]; then
+      echo ">> recreating voice-engine… (brief voice blip — single replica)"
+      "${DC[@]}" up -d --no-deps --force-recreate voice-engine
+      acted=1
+    fi
+    if [ "$reconcile" = 1 ] || [ "$acted" = 0 ] || [ "$forced" = 1 ]; then
+      echo ">> reconciling the stack…"
+      "${DC[@]}" up -d --remove-orphans
+    fi
+
+    echo
+    "${DC[@]}" ps --format "table {{.Name}}\t{{.Status}}"
+    echo
+    echo ">> deployed $(git log --oneline -1)"
     ;;
 
   ps)      "${DC[@]}" ps ;;

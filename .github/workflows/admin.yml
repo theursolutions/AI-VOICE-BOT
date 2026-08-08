@@ -2,7 +2,7 @@ name: admin (Laravel)
 
 on:
   push:
-    branches: [main]
+    branches: [development, production]
     paths:
       - 'admin/**'
       - '.github/workflows/admin.yml'

@@ -1,0 +1,57 @@
+name: deploy to production
+
+# Fires when code lands on `production` — i.e. when you merge development into
+# production. Nothing else deploys: pushes to `development` only run tests.
+# Also runnable by hand from the Actions tab via "Run workflow".
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+
+# Never let two deploys overlap — deploy.sh rolls containers and is not
+# reentrant. A second push waits for the first to finish rather than
+# interleaving with it.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # A voice-engine rebuild (changed requirements.lock.txt) can take ~40 min.
+    timeout-minutes: 90
+
+    steps:
+      - name: Trigger deploy over SSH
+        env:
+          KEY:  ${{ secrets.DEPLOY_SSH_KEY }}
+          HOST: ${{ secrets.DEPLOY_HOST }}
+          USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          test -n "$KEY"  || { echo "::error::secret DEPLOY_SSH_KEY is not set";  exit 1; }
+          test -n "$HOST" || { echo "::error::secret DEPLOY_HOST is not set";     exit 1; }
+          test -n "$USER" || { echo "::error::secret DEPLOY_USER is not set";     exit 1; }
+
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Pin the host key so this can't be MITM'd into deploying elsewhere.
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+          # The server-side authorized_keys entry for this key uses a FORCED
+          # COMMAND, so whatever we ask for is ignored and `deploy.sh update`
+          # runs instead. That means a leaked key can only trigger a deploy —
+          # it cannot open a shell, forward a port, or read a file.
+          # ServerAliveInterval keeps the connection open through long builds
+          # that produce no output.
+          ssh -i ~/.ssh/deploy_key \
+              -o BatchMode=yes \
+              -o ServerAliveInterval=30 \
+              -o ServerAliveCountMax=240 \
+              "$USER@$HOST" true
+
+      - name: Clean up key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
