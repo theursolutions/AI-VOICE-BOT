@@ -353,6 +353,27 @@ class _OllamaBackend(_GroqBackend):
 # Backend factory
 # ---------------------------------------------------------------------------
 
+class _OpenAICompatBackend(_GroqBackend):
+    """Any provider that speaks the OpenAI chat-completions wire format.
+
+    Covers Google Gemini (via its ``/v1beta/openai/`` endpoint), Cerebras,
+    OpenRouter, Together and friends. The whole Groq implementation is reused —
+    chat / stream_chat / extract are identical on the wire — so only the
+    ``base_url`` and key differ. Adding another provider is one entry in
+    ``_build_backend`` plus its settings.
+    """
+
+    def __init__(self, base_url: str, api_key: str, model: str, max_tokens: int, timeout: float):
+        from openai import AsyncOpenAI
+        self.model = model
+        self.max_tokens = max_tokens
+        self._client = AsyncOpenAI(
+            api_key=api_key or "none",   # SDK requires a non-empty string
+            base_url=base_url,
+            timeout=timeout,
+        )
+
+
 def _build_backend(provider: str, settings, timeout: float):
     provider = (provider or "groq").lower()
     if provider == "anthropic":
@@ -364,7 +385,15 @@ def _build_backend(provider: str, settings, timeout: float):
     if provider == "ollama":
         return _OllamaBackend(settings.ollama_base_url, settings.ollama_model,
                               settings.ollama_max_tokens, timeout)
-    raise RuntimeError(f"Unknown LLM provider '{provider}'. Use 'groq', 'ollama' or 'anthropic'.")
+    if provider == "gemini":
+        return _OpenAICompatBackend(settings.gemini_base_url, settings.gemini_api_key,
+                                    settings.gemini_model, settings.gemini_max_tokens, timeout)
+    if provider == "cerebras":
+        return _OpenAICompatBackend(settings.cerebras_base_url, settings.cerebras_api_key,
+                                    settings.cerebras_model, settings.cerebras_max_tokens, timeout)
+    raise RuntimeError(
+        f"Unknown LLM provider '{provider}'. "
+        "Use 'groq', 'gemini', 'cerebras', 'anthropic' or 'ollama'.")
 
 
 # ---------------------------------------------------------------------------
@@ -398,19 +427,33 @@ class LLMService:
                 settings.ollama_base_url, model or settings.ollama_model,
                 max_tokens or settings.ollama_max_tokens, timeout)
         else:
-            raise RuntimeError(
-                f"Unknown LLM_PROVIDER '{provider}'. Use 'groq', 'ollama' or 'anthropic'.")
+            # gemini / cerebras / any other OpenAI-compatible provider. Delegated
+            # so the primary and fallback paths accept exactly the same names —
+            # otherwise a provider usable as a fallback would be rejected here.
+            self._backend = _build_backend(provider, settings, timeout)
 
-        # Optional fallback backend for when the primary rate-limits / fails.
-        self._fallback = None
-        fb = (settings.llm_fallback_provider or "").lower()
-        if fb and fb != provider:
+        # Fallback CHAIN for when the primary rate-limits / fails.
+        #
+        # LLM_FALLBACK_PROVIDER accepts a comma-separated list, tried left to
+        # right: e.g. "gemini,ollama" means a Groq daily-quota exhaustion moves
+        # to Gemini's free tier first and only reaches the slow local model if
+        # every cloud tier is also unavailable.
+        #
+        # A single value still works exactly as before.
+        self._fallbacks: List[Any] = []
+        for fb in [p.strip().lower() for p in (settings.llm_fallback_provider or "").split(",")]:
+            if not fb or fb == provider:
+                continue
             try:
-                self._fallback = _build_backend(fb, settings, timeout)
+                self._fallbacks.append(_build_backend(fb, settings, timeout))
                 logger.info("LLM fallback provider enabled: %s", fb)
             except Exception as exc:  # noqa: BLE001
+                # A missing key or unknown name must not stop the app booting —
+                # the remaining tiers still work.
                 logger.warning("LLM fallback '%s' unavailable: %s", fb, exc)
-                self._fallback = None
+
+        # Back-compat: some call sites still read `_fallback` (singular).
+        self._fallback = self._fallbacks[0] if self._fallbacks else None
 
         self._max_retries = max(0, int(settings.llm_max_retries))
         self.model = self._backend.model
@@ -435,9 +478,11 @@ class LLMService:
 
     async def aclose(self) -> None:
         await self._backend.close()
-        if self._fallback:
+        # Every tier in the chain owns an HTTP client — close them all, not just
+        # the first, or shutdown leaks a connection pool per configured fallback.
+        for b in self._fallbacks:
             try:
-                await self._fallback.close()
+                await b.close()
             except Exception:  # noqa: BLE001
                 pass
         for b in self._overrides.values():
@@ -470,13 +515,24 @@ class LLMService:
         # failed call used a per-request override (e.g. provider=groq), fall
         # back to the default configured backend (e.g. local Ollama) so a
         # rate-limit degrades gracefully instead of erroring the whole turn.
-        alt = self._fallback
-        if alt is None and primary is not self._backend:
-            alt = self._backend
-        if alt is not None and alt is not primary:
-            logger.warning("LLM %s: primary exhausted (%s); failing over to %s",
-                           label, type(last).__name__, type(alt).__name__)
-            return await fn(alt)
+        chain: List[Any] = list(self._fallbacks)
+        # When the failed call used a per-request override (e.g. provider=groq),
+        # the configured default (e.g. local Ollama) is also a valid last resort.
+        if primary is not self._backend and self._backend not in chain:
+            chain.append(self._backend)
+
+        for alt in chain:
+            if alt is primary:
+                continue
+            logger.warning("LLM %s: %s failed (%s); trying %s",
+                           label, type(primary).__name__, type(last).__name__, type(alt).__name__)
+            try:
+                return await fn(alt)
+            except Exception as exc:  # noqa: BLE001
+                last = exc
+                if not _is_retryable(exc):
+                    raise
+                # Retryable on this tier too — keep walking the chain.
         raise last  # type: ignore[misc]
 
     async def chat(self, messages: List[ChatMessage], generation_config=None, provider: Optional[str] = None,
@@ -498,6 +554,7 @@ class LLMService:
         # Retry / fail over only BEFORE the first token is emitted — once we've
         # streamed text we can't safely restart without duplicating output.
         backend = self._backend
+        tried: List[Any] = [backend]
         attempt = 0
         delay = 0.8
         while True:
@@ -517,9 +574,13 @@ class LLMService:
                     await asyncio.sleep(delay)
                     delay *= 2
                     continue
-                if self._fallback is not None and backend is self._backend:
-                    logger.warning("LLM stream: failing over to fallback provider")
-                    backend = self._fallback
+                # Walk the fallback chain, skipping tiers already tried.
+                nxt = next((b for b in self._fallbacks if b not in tried), None)
+                if nxt is not None:
+                    logger.warning("LLM stream: %s exhausted; failing over to %s",
+                                   type(backend).__name__, type(nxt).__name__)
+                    backend = nxt
+                    tried.append(nxt)
                     attempt = 0
                     delay = 0.8
                     continue

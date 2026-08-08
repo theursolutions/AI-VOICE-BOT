@@ -70,6 +70,7 @@
                         <a class="text-primary dark:text-slate-200 ml-1" href="">Privacy Policy</a>. 
                     </div>
                     <div class="intro-x mt-5 xl:mt-8 text-center xl:text-left">
+@include('partials.turnstile')
                         <button type="submit" class="btn btn-primary py-3 px-4 w-full xl:w-32 xl:mr-3 align-top">Register</button>
                         <a href="{{url('/login')}}" class="btn btn-outline-secondary py-3 px-4 w-full xl:w-32 mt-3 xl:mt-0 align-top">Sign in</a>
                     </div>

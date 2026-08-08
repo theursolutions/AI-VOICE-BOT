@@ -24,6 +24,24 @@ class Settings(BaseSettings):
         alias="GEMINI_API_URL",
     )
     gemini_model: str = Field(default="gemini-2.5-flash", alias="GEMINI_MODEL")
+    gemini_max_tokens: int = Field(default=4096, alias="GEMINI_MAX_TOKENS")
+    # Gemini's OpenAI-compatible endpoint. Lets it be driven by the same client
+    # as Groq/Ollama instead of needing a bespoke backend.
+    gemini_base_url: str = Field(
+        default="https://generativelanguage.googleapis.com/v1beta/openai/",
+        alias="GEMINI_BASE_URL",
+    )
+
+    # Cerebras — another free-tier, OpenAI-compatible inference provider. Useful
+    # as a third tier so a daily quota on one provider doesn't end up on the slow
+    # local model.
+    cerebras_api_key: str = Field(default="", alias="CEREBRAS_API_KEY")
+    cerebras_model: str = Field(default="llama-3.3-70b", alias="CEREBRAS_MODEL")
+    cerebras_max_tokens: int = Field(default=4096, alias="CEREBRAS_MAX_TOKENS")
+    cerebras_base_url: str = Field(
+        default="https://api.cerebras.ai/v1",
+        alias="CEREBRAS_BASE_URL",
+    )
 
     # --- Anthropic (Claude) ----------------------------------------------
     # Set LLM_PROVIDER=anthropic (default) to use Claude. Set =gemini to

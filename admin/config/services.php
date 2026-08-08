@@ -91,6 +91,20 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    // Cloudflare Turnstile — CAPTCHA on the public forms (login, register,
+    // forgot-password, landing-page contact). Verified server-side by
+    // App\Rules\Turnstile; the widget alone stops nothing.
+    //
+    // Keys: Cloudflare dashboard -> Turnstile -> your site.
+    // The SITE key is public (rendered in HTML). The SECRET key must only ever
+    // live in .env. When both are blank, verification is SKIPPED so local dev
+    // and existing deployments keep working until they're configured.
+    'turnstile' => [
+        'site_key'   => env('TURNSTILE_SITE_KEY', ''),
+        'secret_key' => env('TURNSTILE_SECRET_KEY', ''),
+        'verify_url' => 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    ],
+
     'twilio' => [
         'account_sid'  => env('TWILIO_ACCOUNT_SID'),
         'auth_token'   => env('TWILIO_AUTH_TOKEN'),

@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Requests\Auth;
+use App\Rules\Turnstile as TurnstileRule;
 
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
@@ -29,6 +30,8 @@ class LoginRequest extends FormRequest
         return [
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
+            // CAPTCHA. Passes automatically when Turnstile isn't configured.
+            'cf-turnstile-response' => ['required', new TurnstileRule()],
         ];
     }
 
