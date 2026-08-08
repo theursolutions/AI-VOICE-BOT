@@ -31,7 +31,7 @@ class LoginRequest extends FormRequest
             'email' => ['required', 'string', 'email'],
             'password' => ['required', 'string'],
             // CAPTCHA. Passes automatically when Turnstile isn't configured.
-            'cf-turnstile-response' => ['required', new TurnstileRule()],
+            'cf-turnstile-response' => TurnstileRule::rules(),
         ];
     }
 

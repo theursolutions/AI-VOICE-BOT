@@ -5,7 +5,6 @@ use App\Http\Controllers\BotChatController;
 use App\Http\Controllers\ConfigureAgentVoicesController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\WorkspacePickerController;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 // ── Public / pre-workspace ───────────────────────────────────────────────
@@ -41,11 +40,14 @@ Route::middleware('auth')->group(function () {
     Route::post('/workspace/select', [WorkspacePickerController::class, 'select'])->name('workspace.select');
 });
 
+// Breeze auth (login / register / password reset / verification). This is the
+// ONLY auth scaffolding — the laravel/ui `Auth::routes()` call that used to sit
+// below it was removed: it re-declared password.request, password.email,
+// password.reset, password.update and password.confirm, which made
+// `php artisan route:cache` throw and left the app running on uncached routes.
 require __DIR__.'/auth.php';
 require __DIR__.'/oauth.php';
 require __DIR__.'/invitations.php';
-
-Auth::routes();
 
 // ── Super-admin Ops Console (internal staff only) ────────────────────────
 Route::middleware(['auth', 'super-admin'])

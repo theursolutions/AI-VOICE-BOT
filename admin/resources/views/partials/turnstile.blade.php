@@ -14,10 +14,14 @@
     (defer + explicit guard), and `cf-turnstile` auto-renders any matching div.
 --}}
 @php
+    // Same predicate the validation uses (App\Rules\Turnstile::rules()), so the
+    // widget and the rule can never disagree about whether a token is expected.
+    // Keyed on BOTH keys: site key renders the widget, secret key verifies it.
+    $tvaTurnstileOn  = \App\Rules\Turnstile::enabled();
     $tvaTurnstileKey = (string) config('services.turnstile.site_key', '');
 @endphp
 
-@if ($tvaTurnstileKey !== '')
+@if ($tvaTurnstileOn)
     <div class="intro-x mt-4">
         <div class="cf-turnstile"
              data-sitekey="{{ $tvaTurnstileKey }}"

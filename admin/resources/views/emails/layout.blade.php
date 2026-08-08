@@ -44,22 +44,37 @@
 
                 <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%; max-width:600px;">
 
-                    {{-- Logo + app name --}}
+                    {{-- Branded header band. Gradient is a literal hex pair, not
+                         var(--tva-gradient): email clients strip CSS custom
+                         properties, so theme colours must be inlined. --}}
                     <tr>
-                        <td align="center" style="padding-bottom:24px;">
+                        <td align="center"
+                            style="background-color:#2563eb; background-image:linear-gradient(135deg,#3b82f6 0%,#2563eb 55%,#1d4ed8 100%); border-radius:14px 14px 0 0; padding:34px 24px 30px 24px;">
                             <a href="{{ $base }}" style="text-decoration:none;">
-                                <img src="{{ $logo }}" alt="{{ $brand }}" width="44" height="44"
-                                     style="display:inline-block; vertical-align:middle; border:0; width:44px; height:44px;">
-                                <span style="display:inline-block; vertical-align:middle; margin-left:12px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:22px; font-weight:700; color:#0f172a; letter-spacing:-0.3px;">
+                                {{-- White rounded tile so a dark/transparent logo
+                                     stays legible on the coloured band. --}}
+                                <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                                    <tr>
+                                        <td align="center" valign="middle"
+                                            style="width:72px; height:72px; background-color:#ffffff; border-radius:18px; text-align:center;">
+                                            <img src="{{ $logo }}" alt="{{ $brand }}" width="48" height="48"
+                                                 style="display:block; margin:0 auto; border:0; width:48px; height:48px;">
+                                        </td>
+                                    </tr>
+                                </table>
+                                <div style="margin-top:16px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:30px; line-height:1.2; font-weight:700; color:#ffffff; letter-spacing:-0.5px;">
                                     {{ $brand }}
-                                </span>
+                                </div>
+                                <div style="margin-top:6px; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13px; color:#dbeafe;">
+                                    AI voice &amp; chat for every customer conversation
+                                </div>
                             </a>
                         </td>
                     </tr>
 
                     {{-- Card --}}
                     <tr>
-                        <td style="background-color:#ffffff; border-radius:14px; border:1px solid #e2e8f0; padding:40px 36px;">
+                        <td style="background-color:#ffffff; border-radius:0 0 14px 14px; border:1px solid #e2e8f0; border-top:0; padding:40px 36px;">
                             <h1 style="margin:0 0 20px 0; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:22px; line-height:1.3; font-weight:700; color:#0f172a;">
                                 {{ $heading ?? '' }}
                             </h1>
@@ -70,12 +85,14 @@
                     {{-- CTA buttons --}}
                     <tr>
                         <td align="center" style="padding:28px 0 8px 0;">
+                            {{-- Filled primary + tinted secondary, both in the theme
+                                 blue. White buttons read as disabled. --}}
                             <a href="{{ route('contact') }}"
-                               style="display:inline-block; margin:0 6px 8px 6px; padding:10px 20px; border-radius:8px; border:1px solid #cbd5e1; background-color:#ffffff; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13px; font-weight:600; color:#334155; text-decoration:none;">
+                               style="display:inline-block; margin:0 5px 10px 5px; padding:12px 26px; border-radius:9px; background-color:#2563eb; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13.5px; font-weight:700; color:#ffffff; text-decoration:none;">
                                 Contact Support
                             </a>
                             <a href="{{ route('terms') }}"
-                               style="display:inline-block; margin:0 6px 8px 6px; padding:10px 20px; border-radius:8px; border:1px solid #cbd5e1; background-color:#ffffff; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13px; font-weight:600; color:#334155; text-decoration:none;">
+                               style="display:inline-block; margin:0 5px 10px 5px; padding:12px 26px; border-radius:9px; background-color:#eff6ff; border:1px solid #bfdbfe; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:13.5px; font-weight:700; color:#1d4ed8; text-decoration:none;">
                                 Terms &amp; Conditions
                             </a>
                         </td>
