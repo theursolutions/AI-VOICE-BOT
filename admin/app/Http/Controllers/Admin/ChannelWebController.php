@@ -36,7 +36,11 @@ class ChannelWebController extends Controller
                 ->orderBy('provider')
                 ->orderBy('name')
                 ->get();
-            $onboardingLogs = ChannelOnboardingLog::where('project_id', $project->id)
+            // Eager-load the payload: the view asks every failed attempt
+            // whether it can be replayed from stored credentials, and doing
+            // that lazily would be a query per row.
+            $onboardingLogs = ChannelOnboardingLog::with('payload')
+                ->where('project_id', $project->id)
                 ->orderByDesc('id')
                 ->limit(10)
                 ->get();
@@ -57,7 +61,9 @@ class ChannelWebController extends Controller
             'name'         => 'nullable|string|max:191',
             'external_id'  => 'nullable|string|max:191',
             'access_token' => 'nullable|string|max:4096',
-            'waba_id'      => 'nullable|string|max:191',
+            // Not `waba_id`: DecodeHashids rewrites every *_id request key to
+            // an integer, so a numeric WABA id would fail this string rule.
+            'waba'         => 'nullable|string|max:191',
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
@@ -69,7 +75,7 @@ class ChannelWebController extends Controller
             'external_id'  => $data['external_id'] ?: null,
             'access_token' => $data['access_token'] ?: null,
             'status'       => ChannelConnection::STATUS_ENABLED,
-            'metadata'     => array_filter(['waba_id' => $data['waba_id'] ?? null]),
+            'metadata'     => array_filter(['waba_id' => $data['waba'] ?? null]),
         ]);
 
         $label = ChannelConnection::PROVIDERS[$data['provider']] ?? $data['provider'];

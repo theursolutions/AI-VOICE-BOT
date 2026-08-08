@@ -31,6 +31,7 @@ class NoIndexPrivateAreas
         'workspace',
         'api',
         'invitations',
+        'connect',      // signed QR channel-handoff pages
         'auth',         // social-login redirects
         'oauth',
         'meta',         // Meta channel OAuth callbacks

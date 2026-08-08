@@ -34,6 +34,18 @@ Route::view('/refund-policy',  'pages.refund')->name('refund-policy');
 Route::view('/cookies',        'pages.cookies')->name('cookies');
 Route::view('/security',       'pages.security')->name('security.page');
 
+// ── QR channel handoff (public, but signed + short-lived) ───────────────
+// Scanned from the Channels page on desktop and finished on the phone, which
+// is where the customer's WhatsApp actually lives. No session is available
+// there, so authorisation rides entirely on Laravel's signed URL: 15-minute
+// expiry, tamper-proof, and dead once the attempt completes.
+Route::middleware('signed')->group(function () {
+    Route::get('/connect/{log}',     [App\Http\Controllers\Admin\ChannelOnboardController::class, 'handoffOpen'])
+        ->where('log', '[0-9]+')->name('channels.handoff.open');
+    Route::get('/connect/{log}/go',  [App\Http\Controllers\Admin\ChannelOnboardController::class, 'handoffGo'])
+        ->where('log', '[0-9]+')->name('channels.handoff.go');
+});
+
 // ── User-scoped (cross-workspace) ────────────────────────────────────────
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -111,6 +123,15 @@ Route::middleware(['auth', 'super-admin'])
         Route::get ('/content',          [App\Http\Controllers\SuperAdmin\SiteContentController::class, 'index'])->name('content.index');
         Route::post('/content',          [App\Http\Controllers\SuperAdmin\SiteContentController::class, 'update'])->name('content.update');
         Route::post('/content/reset',    [App\Http\Controllers\SuperAdmin\SiteContentController::class, 'reset'])->name('content.reset');
+
+        // Homepage testimonial carousel — rows, so a CRUD screen of its own
+        // rather than more content.* keys. The section heading/lead still
+        // live in /admin/content.
+        Route::get ('/testimonials',              [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'index'])->name('testimonials.index');
+        Route::post('/testimonials',              [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'store'])->name('testimonials.store');
+        Route::post('/testimonials/{id}',         [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'update'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('testimonials.update');
+        Route::post('/testimonials/{id}/toggle',  [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('testimonials.toggle');
+        Route::post('/testimonials/{id}/delete',  [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('testimonials.delete');
 
         // Impersonation (starts here; ending lives outside super-admin
         // middleware because by the time the operator hits /admin/exit
@@ -247,6 +268,13 @@ Route::middleware(['auth', 'active.client'])
         Route::get   ('/channels',             [App\Http\Controllers\Admin\ChannelWebController::class, 'index'])->name('channels.index');
         // Facebook Login onboarding — start (button) redirects to Meta.
         Route::get   ('/channels/connect/{provider}', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'start'])->name('channels.connect');
+        // WhatsApp Embedded Signup — Meta's popup posts its code back here.
+        Route::post  ('/channels/embedded-signup',    [App\Http\Controllers\Admin\ChannelOnboardController::class, 'embeddedSignup'])->name('channels.embedded-signup');
+        // QR handoff: desktop mints the code, then polls while the phone finishes.
+        Route::get   ('/channels/handoff/{provider}', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'handoff'])->name('channels.handoff');
+        Route::get   ('/channels/handoff/{log}/status', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'handoffStatus'])->where('log', '[0-9]+')->name('channels.handoff.status');
+        // Replay a failed attempt from the stored Meta payload — no consent screen.
+        Route::post  ('/channels/onboarding/{log}/retry', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'retry'])->where('log', '[0-9]+')->name('channels.onboarding.retry');
         Route::post  ('/channels',             [App\Http\Controllers\Admin\ChannelWebController::class, 'store'])->name('channels.store');
         Route::post  ('/channels/{id}/toggle', [App\Http\Controllers\Admin\ChannelWebController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.toggle');
         Route::delete('/channels/{id}',        [App\Http\Controllers\Admin\ChannelWebController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.destroy');

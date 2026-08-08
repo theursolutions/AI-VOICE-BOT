@@ -175,13 +175,18 @@
     }
 
     // Postal address — only when a real one is configured and shown in the
-    // footer / on the contact page.
-    $addr = trim((string) tva_setting('content.contact_address', ''));
+    // footer / on the contact page. Prefers the split fields; falls back to
+    // the single display string so an install that hasn't set them still
+    // emits something valid.
+    $street = trim((string) tva_setting('content.contact_street', ''));
+    $addr   = $street !== '' ? $street : trim((string) tva_setting('content.contact_address', ''));
     if ($addr !== '') {
         $org['address'] = array_filter([
             '@type'           => 'PostalAddress',
             'streetAddress'   => $addr,
-            'addressLocality' => (string) tva_setting('content.contact_city', 'Lahore'),
+            'addressLocality' => (string) tva_setting('content.contact_city', ''),
+            'addressRegion'   => (string) tva_setting('content.contact_region', ''),
+            'postalCode'      => (string) tva_setting('content.contact_postal_code', ''),
             'addressCountry'  => (string) tva_setting('content.contact_country', 'PK'),
         ]);
     }
