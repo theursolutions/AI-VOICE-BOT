@@ -82,6 +82,37 @@
 .fb-save-btn:disabled { opacity: .6; cursor: progress; }
 .fb-toolbar__hint { font-size: 11px; color: #64748b; }
 
+/* ─── Publish control ───────────────────────────────────────────
+   Green = "make this live", not "success". Deliberately distinct from
+   the blue Save so publishing can't be muscle-memory'd. */
+.fb-publish-btn {
+    background: #14532d; border: 1px solid #166534;
+    color: #bbf7d0; padding: 7px 14px; border-radius: 8px;
+    font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: inherit;
+    transition: background .15s, border-color .15s, opacity .15s;
+}
+.fb-publish-btn:hover:not(:disabled) { background: #166534; }
+/* Already live → the button now *removes* it from traffic. */
+.fb-publish-btn.is-live {
+    background: #1e293b; border-color: #334155; color: #cbd5e1;
+}
+.fb-publish-btn.is-live:hover:not(:disabled) { background: #283449; }
+.fb-publish-btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.fb-status-pill {
+    font-size: 10px; text-transform: uppercase; letter-spacing: .06em;
+    font-weight: 700; padding: 3px 9px; border-radius: 999px;
+    background: #334155; color: #cbd5e1;
+}
+.fb-status-pill.is-active   { background: #14532d; color: #86efac; }
+.fb-status-pill.is-draft    { background: #78350f; color: #fcd34d; }
+.fb-status-pill.is-archived { background: #334155; color: #94a3b8; }
+
+.fb-toolbar__warn {
+    font-size: 11px; color: #fbbf24; max-width: 340px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
 .fb-settings { position: relative; margin-left: auto; }
 .fb-settings__btn {
     background: #1e293b; border: 1px solid #334155;

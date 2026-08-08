@@ -78,14 +78,23 @@ class FlowWebController extends Controller
             'update_at'   => $now,
         ]);
 
+        // project_id is NOT optional here. Flows live in the project's own
+        // tenant DB, so the editor cannot look one up without knowing which
+        // project to connect to. Omitting it (as this redirect used to) sent
+        // the user straight from "create" into a 404, while the same flow
+        // opened fine from the index — whose link appends project_id.
         return redirect()
-            ->route('flows.editor', ['client' => $client->slug, 'id' => $flow->id])
+            ->route('flows.editor', [
+                'client'     => $client->slug,
+                'id'         => $flow->id,
+                'project_id' => $project->id,
+            ])
             ->with('success', "Flow \"{$flow->name}\" created.");
     }
 
     public function editor(Request $request, Client $client, int $id): View
     {
-        $projectId = (int) $request->query('project_id');
+        $projectId = $this->resolveProjectId($request, $client);
         $flow = $this->loadFlow($client, $id, $projectId);
 
         // Feed the project's data sources to the React editor (also served
@@ -100,7 +109,7 @@ class FlowWebController extends Controller
     /** Editor fetches this on mount to populate the React Flow canvas. */
     public function definition(Request $request, Client $client, int $id): JsonResponse
     {
-        $projectId = (int) $request->query('project_id');
+        $projectId = $this->resolveProjectId($request, $client);
         $flow = $this->loadFlow($client, $id, $projectId);
         return response()->json([
             'id'           => $flow->id,
@@ -150,7 +159,8 @@ class FlowWebController extends Controller
     }
 
     /** Rename, change language, flip status (draft/active/archived). */
-    public function update(Request $request, Client $client, int $id): RedirectResponse
+    /** Returns JSON for the in-editor Activate button, a redirect for the list form. */
+    public function update(Request $request, Client $client, int $id): RedirectResponse|JsonResponse
     {
         $data = $request->validate([
             'project_id' => 'required|integer',
@@ -160,11 +170,31 @@ class FlowWebController extends Controller
         ]);
         $flow = $this->loadFlow($client, $id, (int) $data['project_id']);
 
+        // Going live is the one transition that can hurt: an active flow
+        // intercepts real conversations, so a broken graph silently swallows
+        // customer traffic instead of failing visibly. Refuse, and say why.
+        if (($data['status'] ?? null) === Flow::STATUS_ACTIVE && $flow->status !== Flow::STATUS_ACTIVE) {
+            $errors = $flow->activationErrors();
+            if ($errors !== []) {
+                $message = "Can't activate \"{$flow->name}\": " . implode(' ', $errors);
+
+                if ($request->expectsJson()) {
+                    return response()->json(['ok' => false, 'errors' => $errors, 'message' => $message], 422);
+                }
+
+                return back()->withErrors(['status' => $message]);
+            }
+        }
+
         if (!empty($data['name']))     $flow->name = $data['name'];
         if (!empty($data['language'])) $flow->language = $data['language'];
         if (!empty($data['status']))   $flow->status = $data['status'];
         $flow->update_at = time();
         $flow->save();
+
+        if ($request->expectsJson()) {
+            return response()->json(['ok' => true, 'status' => $flow->status, 'message' => "Flow \"{$flow->name}\" updated."]);
+        }
 
         return back()->with('success', "Flow \"{$flow->name}\" updated.");
     }
@@ -178,6 +208,31 @@ class FlowWebController extends Controller
     }
 
     // ── helpers ───────────────────────────────────────────────────────
+    /**
+     * Which project's tenant DB should we open for this request?
+     *
+     * The GET screens take project_id from the query string. A bare
+     * `(int) $request->query('project_id')` turns a missing param into 0,
+     * which then fails the ownership lookup as an opaque 404 — the symptom
+     * when a link is bookmarked, shared, or built without it.
+     *
+     * When the client owns exactly one project the answer isn't ambiguous, so
+     * fall back to it (the same thing index() already does). With none or
+     * several we genuinely cannot guess: flows are stored per-project, so
+     * picking one at random would show the wrong data or 404 anyway.
+     */
+    private function resolveProjectId(Request $request, Client $client): int
+    {
+        $projectId = (int) $request->query('project_id');
+        if ($projectId > 0) {
+            return $projectId;
+        }
+
+        $projects = Project::where('client_id', $client->id)->pluck('id');
+
+        return $projects->count() === 1 ? (int) $projects->first() : 0;
+    }
+
     private function guard(Client $client, int $projectId): Project
     {
         $project = Project::where('client_id', $client->id)

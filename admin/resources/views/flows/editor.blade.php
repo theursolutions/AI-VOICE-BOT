@@ -52,6 +52,7 @@
 
     <div id="flow-editor-root"
          data-flow-id="{{ $flow->id }}"
+         data-flow-status="{{ $flow->status }}"
          data-project-id="{{ $flow->project_id }}"
          data-client-slug="{{ $client->slug }}"
          data-csrf="{{ csrf_token() }}"

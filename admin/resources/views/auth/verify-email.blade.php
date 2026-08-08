@@ -27,7 +27,10 @@
             <div class="px-5 py-6 border-b border-slate-200/60 dark:border-darkmode-400 flex items-center">
                 <div class="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 text-white"
                      style="background-image: var(--tva-gradient, linear-gradient(135deg,#3b82f6,#2563eb));">
-                    <i data-lucide="mail-check" class="w-6 h-6"></i>
+                    {{-- `mail-check` / `audio-lines` don't exist in the lucide
+                         build bundled with the theme (assets/dist/js/app.js) and
+                         render as empty boxes -- stick to icons it actually ships. --}}
+                    <i data-lucide="mail" class="w-6 h-6"></i>
                 </div>
                 <div class="ml-4">
                     <div class="font-medium text-base">Check your inbox</div>
@@ -66,13 +69,36 @@
                     </button>
                 </form>
 
+                {{-- Resend, rate limited: 3 tries, then 1 hour, then 3 more,
+                     then 24 hours. $resend comes from EmailOtpResendLimiter. --}}
+                @php $resend = $resend ?? ['locked' => false, 'remaining' => null, 'message' => null]; @endphp
+
+                @if ($errors->has('resend') || $resend['locked'])
+                    <div class="alert alert-danger-soft show flex items-center mt-5" role="alert">
+                        <i data-lucide="alert-triangle" class="w-5 h-5 mr-2 flex-shrink-0"></i>
+                        <span>{{ $errors->first('resend') ?: $resend['message'] }}</span>
+                    </div>
+                @endif
+
                 <div class="flex flex-col sm:flex-row items-center gap-3 mt-5 pt-5 border-t border-slate-200/60 dark:border-darkmode-400">
-                    <form method="POST" action="{{ route('verification.send') }}" class="w-full sm:w-auto">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-secondary w-full sm:w-auto">
-                            <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i> Resend code
+                    @if ($resend['locked'])
+                        <button type="button" class="btn btn-outline-secondary w-full sm:w-auto cursor-not-allowed opacity-60" disabled>
+                            <i data-lucide="clock" class="w-4 h-4 mr-2"></i>
+                            Resend available in {{ $resend['wait'] }}
                         </button>
-                    </form>
+                    @else
+                        <form method="POST" action="{{ route('verification.send') }}" class="w-full sm:w-auto">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-secondary w-full sm:w-auto">
+                                <i data-lucide="refresh-cw" class="w-4 h-4 mr-2"></i> Resend code
+                            </button>
+                        </form>
+                        @if (!is_null($resend['remaining']))
+                            <div class="text-slate-500 text-xs">
+                                {{ $resend['remaining'] }} {{ \Illuminate\Support\Str::plural('resend', $resend['remaining']) }} left before a cooldown.
+                            </div>
+                        @endif
+                    @endif
                     <form method="POST" action="{{ route('logout') }}" class="w-full sm:w-auto sm:ml-auto">
                         @csrf
                         <button type="submit" class="btn btn-outline-danger w-full sm:w-auto">
@@ -98,7 +124,7 @@
                 @foreach ([
                     ['message-square', 'Messages &amp; Channels', 'WhatsApp, Instagram and Facebook in one inbox'],
                     ['database',       'Data Sources',            'Upload files or connect your database'],
-                    ['audio-lines',    'Voices &amp; Telephony',  'Pick a voice and connect a phone number'],
+                    ['mic',            'Voices &amp; Telephony',  'Pick a voice and connect a phone number'],
                     ['users',          'Leads &amp; Conversations','Every enquiry your agent captures'],
                 ] as [$icon, $title, $body])
                     <div class="flex items-start">

@@ -891,8 +891,13 @@ function LanguageField({ value, onChange }) {
 // ────────────────────────────────────────────────────────────────────
 // Top toolbar — Save button, status badge, dirty indicator.
 // ────────────────────────────────────────────────────────────────────
-function Toolbar({ onSave, saving, dirty, lastSavedAt, settings, onSettingsChange, onTestToggle, testOpen }) {
+function Toolbar({
+    onSave, saving, dirty, lastSavedAt, settings, onSettingsChange, onTestToggle, testOpen,
+    status, publishing, publishError, activationErrors, onSetStatus,
+}) {
     const [open, setOpen] = useState(false);
+    const isActive = status === 'active';
+    const blocked  = !isActive && activationErrors.length > 0;
     return (
         <div className="fb-toolbar">
             <button
@@ -905,6 +910,27 @@ function Toolbar({ onSave, saving, dirty, lastSavedAt, settings, onSettingsChang
             {lastSavedAt && !dirty && (
                 <span className="fb-toolbar__hint">last saved {lastSavedAt}</span>
             )}
+
+            {/* Publish control. Deactivating is always allowed — pulling a bad
+                flow out of live traffic must never be blocked. Only going live
+                is gated. */}
+            <button
+                className={`fb-publish-btn ${isActive ? 'is-live' : ''}`}
+                onClick={() => onSetStatus(isActive ? 'draft' : 'active')}
+                disabled={publishing || blocked}
+                title={blocked ? activationErrors.join(' ') : (isActive
+                    ? 'Take this flow out of live conversations'
+                    : 'Publish — this flow will start handling real conversations')}
+            >
+                {publishing ? '…' : (isActive ? '◼ Deactivate' : '▲ Activate')}
+            </button>
+            <span className={`fb-status-pill is-${status}`}>{status}</span>
+            {blocked && (
+                <span className="fb-toolbar__warn" title={activationErrors.join(' ')}>
+                    ⚠ {activationErrors[0]}
+                </span>
+            )}
+            {publishError && <span className="fb-toolbar__warn">⚠ {publishError}</span>}
             <button
                 className={`fb-test-btn ${testOpen ? 'is-active' : ''}`}
                 onClick={onTestToggle}
@@ -1051,7 +1077,7 @@ function TestPanel({ messages, expecting, running, sessionId, onStart, onChoice,
     );
 }
 
-function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSources = [] }) {
+function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSources = [], initialStatus = 'draft' }) {
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
     const [settings, setSettings] = useState({ language: 'en', timeout_secs: 8, max_retries: 2 });
@@ -1064,6 +1090,12 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
     const [saving, setSaving] = useState(false);
     const [dirty, setDirty] = useState(false);
     const [lastSavedAt, setLastSavedAt] = useState(null);
+    // Publish state. The server is the authority on whether a flow may go
+    // live (App\Models\Flow::activationErrors) — this mirrors it locally only
+    // to disable the button early and explain why, never to decide.
+    const [status, setStatus]           = useState(initialStatus);
+    const [publishing, setPublishing]   = useState(false);
+    const [publishError, setPublishError] = useState(null);
     // Data sources for the "Data Source" + "Send to Channel" nodes. Seeded
     // from the page attribute, then refreshed from the API on load (robust
     // against stale HTML / attribute-escaping issues).
@@ -1135,13 +1167,69 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
             setDirty(false);
             const now = new Date();
             setLastSavedAt(now.toLocaleTimeString());
+            return true;   // callers (Activate) need to know it actually landed
         } catch (err) {
             console.error('flow save failed', err);
             alert('Save failed — check console for details.');
+            return false;
         } finally {
             setSaving(false);
         }
     }, [clientSlug, flowId, projectId, csrf, nodes, edges, settings, saving]);
+
+    // Client-side mirror of Flow::activationErrors(). Kept in step with the
+    // PHP deliberately — same three rules, same order — so the button explains
+    // itself before the round-trip. The server still re-checks; this is UX.
+    const activationErrors = useMemo(() => {
+        if (!nodes.length) return ['The flow is empty — add at least a start node and one step.'];
+        const starts = nodes.filter((n) => n.type === 'start');
+        if (!starts.length) return ['The flow has no start node, so nothing would ever trigger it.'];
+        const errs = [];
+        if (starts.length > 1) errs.push(`The flow has ${starts.length} start nodes — keep exactly one.`);
+        const startIds = starts.map((n) => n.id);
+        if (!edges.some((e) => startIds.includes(e.source))) {
+            errs.push("The start node isn't connected to anything — the flow would answer and then stall.");
+        }
+        return errs;
+    }, [nodes, edges]);
+
+    // Publish / unpublish. Activating a stale definition is the trap here —
+    // you'd go live with whatever was last saved, not what's on screen — so
+    // unsaved work is flushed first and activation is aborted if that fails.
+    const setFlowStatus = useCallback(async (next) => {
+        if (publishing) return;
+        setPublishing(true);
+        setPublishError(null);
+        try {
+            if (next === 'active' && dirty) {
+                const saved = await save();
+                if (!saved) throw new Error("Couldn't save your changes, so the flow wasn't activated.");
+            }
+
+            const res = await fetch(`${baseUrl}/c/${clientSlug}/flows/${flowId}`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+                // Laravel reads PATCH from the _method override on a POST.
+                body: JSON.stringify({ _method: 'PATCH', project_id: projectId, status: next }),
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok || body.ok === false) {
+                throw new Error(body.message || `Couldn't change status (HTTP ${res.status}).`);
+            }
+            setStatus(body.status || next);
+        } catch (err) {
+            console.error('flow status change failed', err);
+            setPublishError(err.message || 'Status change failed.');
+        } finally {
+            setPublishing(false);
+        }
+    }, [baseUrl, clientSlug, flowId, projectId, csrf, dirty, save, publishing]);
 
     // ── Test mode helpers ─────────────────────────────────────────────
     // Animate node highlights through the execution_path returned by
@@ -1344,6 +1432,11 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
                     lastSavedAt={lastSavedAt}
                     settings={settings}
                     onSettingsChange={setSettings}
+                    status={status}
+                    publishing={publishing}
+                    publishError={publishError}
+                    activationErrors={activationErrors}
+                    onSetStatus={setFlowStatus}
                     testOpen={testOpen}
                     onTestToggle={() => {
                         setTestOpen((o) => {
@@ -1438,6 +1531,7 @@ function bootstrap() {
     const projectId   = parseInt(root.dataset.projectId, 10);
     const clientSlug  = root.dataset.clientSlug;
     const csrf        = root.dataset.csrf;
+    const flowStatus  = root.dataset.flowStatus || 'draft';
     // Honour Laragon's sub-path docroot (e.g. /AI-CRM-AGENT/admin/public).
     // Without this, absolute fetch('/c/...') resolves against the docroot
     // and 404s when the app is served from a sub-directory.
@@ -1457,6 +1551,7 @@ function bootstrap() {
                     clientSlug={clientSlug}
                     baseUrl={baseUrl}
                     dataSources={dataSources}
+                    initialStatus={flowStatus}
                 />
             </ReactFlowProvider>
         </React.StrictMode>

@@ -142,10 +142,20 @@ class AppServiceProvider extends ServiceProvider
                 \App\Support\Modules::enabledKeys(),
             ));
 
+            // Has this workspace been provisioned yet? Mirrors the check in
+            // Admin\SetupController::show. The sidebar needs it because every
+            // module link below is gated by `workspace.provisioned` — before
+            // setup they all bounce straight back to /setup, so they're shown
+            // veiled rather than as a menu full of dead ends.
+            $tvaWorkspaceReady = ! $client || Project::where('client_id', $client->id)
+                ->where('is_active', 'Yes')
+                ->exists();
+
             $view->with('tvaWidget',  $config);
             $view->with('tvaProject', $activeProject);
             $view->with('tvaProfile', $activeProfile);
             $view->with('tvaModules', $tvaModules);
+            $view->with('tvaWorkspaceReady', $tvaWorkspaceReady);
         });
     }
 }
