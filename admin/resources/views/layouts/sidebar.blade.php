@@ -27,6 +27,26 @@
     // (mirrors the EnsureEmailVerified route gate).
     $emailOk = !Auth::check() || Auth::user()->hasVerifiedEmail();
 
+    // Two things can lock the menu. Provisioning comes FIRST: before a project
+    // exists every link below is refused by `workspace.provisioned` and
+    // redirected to /setup, so pointing an unverified user at "verify your
+    // email" would send them to the second step of a two-step wall.
+    $workspaceReady = $tvaWorkspaceReady ?? true;
+    $lock = null;
+    if (!$workspaceReady && $clientSlug) {
+        $lock = [
+            'href' => route('setup', ['client' => $clientSlug]),
+            'text' => 'Initialize your workspace to unlock these features',
+            'title'=> 'Finish setting up your workspace first',
+        ];
+    } elseif (!$emailOk) {
+        $lock = [
+            'href' => route('verification.notice'),
+            'text' => 'Verify your email to unlock the amazing features',
+            'title'=> 'Verify your email to unlock these features',
+        ];
+    }
+
     // Role-based module visibility. $tvaModules is shared by the
     // layouts.master view composer (owner = all modules). Default to all
     // so non-client / edge contexts never hide everything.
@@ -101,7 +121,7 @@
              This is presentation only — the real enforcement is server-side
              (EnsureEmailVerified middleware). A blurred link is still a link,
              so pointer-events:none here is convenience, not security. --}}
-        @unless ($emailOk)
+        @if ($lock)
         <style>
             /* `display:block` + `position:relative` so the veil's inset:0 has a
                real box to resolve against. Without an explicit display the div
@@ -130,13 +150,12 @@
             .tva-lock__cta { color:#fecaca; font-size:11.5px; line-height:1.45; font-weight:500; max-width:170px; }
         </style>
         <div class="tva-lock">
-            <a class="tva-lock__veil" href="{{ route('verification.notice') }}"
-               title="Verify your email to unlock these features">
+            <a class="tva-lock__veil" href="{{ $lock['href'] }}" title="{{ $lock['title'] }}">
                 <span class="tva-lock__icon"><i data-lucide="lock" class="w-5 h-5"></i></span>
-                <span class="tva-lock__cta">Verify your email to unlock the amazing features</span>
+                <span class="tva-lock__cta">{{ $lock['text'] }}</span>
             </a>
             <div class="tva-lock__items">
-        @endunless
+        @endif
 
         {{-- Live Compute (was "Compute Mesh") — directly after Ask AI --}}
         @if($can('compute'))
@@ -392,9 +411,9 @@
         </li>
         @endif
 
-        @unless ($emailOk)
+        @if ($lock)
             </div>{{-- .tva-lock__items --}}
         </div>{{-- .tva-lock --}}
-        @endunless
+        @endif
     </ul>
 </nav>

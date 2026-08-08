@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Providers\RouteServiceProvider;
+use App\Services\Auth\EmailOtpResendLimiter;
 use App\Services\Auth\EmailOtpService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -13,7 +14,7 @@ class EmailOtpController extends Controller
     /**
      * Verify the 6-digit code the user typed on the verify-email screen.
      */
-    public function verify(Request $request, EmailOtpService $otp): RedirectResponse
+    public function verify(Request $request, EmailOtpService $otp, EmailOtpResendLimiter $limiter): RedirectResponse
     {
         $request->validate([
             'code' => ['required', 'string', 'max:12'],
@@ -28,6 +29,8 @@ class EmailOtpController extends Controller
         $code = preg_replace('/\D/', '', (string) $request->input('code'));
 
         if ($code !== '' && $otp->verify($user, $code)) {
+            $limiter->clear($user);
+
             return redirect()
                 ->intended(RouteServiceProvider::HOME)
                 ->with('status', 'email-verified');

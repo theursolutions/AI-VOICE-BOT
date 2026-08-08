@@ -32,6 +32,33 @@
     .tva-flow-row__chip.is-active   { background:#dcfce7; color:#15803d; }
     .tva-flow-row__chip.is-draft    { background:#fef3c7; color:#92400e; }
     .tva-flow-row__chip.is-archived { background:#f1f5f9; color:#94a3b8; }
+    /* The chip doubles as the status control: a real <select> wearing the
+       badge's styling, so the thing that shows state is the thing that
+       changes it. Native select keeps keyboard + screen-reader behaviour. */
+    /* Not Tailwind's `sr-only` — it isn't in this theme's purged build, so the
+       label rendered as visible text on top of the row. Defined locally. */
+    .tva-sr-only {
+        position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+        overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;
+    }
+    .tva-flow-status { position:relative; display:inline-flex; }
+    .tva-flow-status select.tva-flow-row__chip {
+        appearance:none; -webkit-appearance:none; border:none; cursor:pointer;
+        padding:2px 20px 2px 8px; line-height:1.6; font-family:inherit;
+    }
+    .tva-flow-status::after {
+        content:''; position:absolute; right:7px; top:50%; width:0; height:0;
+        margin-top:-1px; pointer-events:none;
+        border-left:3px solid transparent; border-right:3px solid transparent;
+        border-top:4px solid currentColor; opacity:.55;
+    }
+    .tva-flow-status.is-active   { color:#15803d; }
+    .tva-flow-status.is-draft    { color:#92400e; }
+    .tva-flow-status.is-archived { color:#94a3b8; }
+    .tva-flow-status select:focus-visible { outline:2px solid #3b82f6; outline-offset:1px; }
+    /* A flow that can't go live yet — the option is disabled and the row says why. */
+    .tva-flow-row__blocked { color:#b45309; font-size:11px; display:inline-flex; align-items:center; gap:4px; }
+    html.dark .tva-flow-row__blocked { color:#fbbf24; }
     html.dark .tva-flow-card { background:#1e293b; border-color:#334155; }
     html.dark .tva-flow-row  { background:#0f172a; border-color:#334155; }
     html.dark .tva-flow-row__name { color:#f1f5f9; }
@@ -51,6 +78,19 @@
     @if (session('success'))
         <div class="alert alert-success-soft show mb-4 flex items-center">
             <i data-lucide="check-circle" class="w-4 h-4 mr-2"></i> {{ session('success') }}
+        </div>
+    @endif
+
+    {{-- Refused activations land here. Without this the guard's explanation
+         was thrown away and the status just appeared not to change. --}}
+    @if ($errors->any())
+        <div class="alert alert-danger-soft show mb-4 flex items-start">
+            <i data-lucide="alert-triangle" class="w-4 h-4 mr-2 mt-0.5 flex-shrink-0"></i>
+            <div>
+                @foreach ($errors->all() as $error)
+                    <div>{{ $error }}</div>
+                @endforeach
+            </div>
         </div>
     @endif
 
@@ -79,13 +119,36 @@
         </div>
 
         @forelse ($flows as $flow)
-            @php $nodeCount = is_array($flow->definition) ? count($flow->definition['nodes'] ?? []) : 0; @endphp
+            @php
+                $nodeCount = is_array($flow->definition) ? count($flow->definition['nodes'] ?? []) : 0;
+                // Computed per row so the Active option can be disabled with a
+                // reason, rather than letting the click through to a 422.
+                $blockers = $flow->activationErrors();
+            @endphp
             <div class="tva-flow-row">
                 <div class="tva-flow-row__icon"><i data-lucide="git-branch" class="w-5 h-5"></i></div>
                 <div class="flex-1 min-w-0">
                     <div class="tva-flow-row__name">{{ $flow->name }}</div>
                     <div class="tva-flow-row__meta">
-                        <span class="tva-flow-row__chip is-{{ $flow->status }}">{{ $flow->status }}</span>
+                        <form method="POST" class="tva-flow-status is-{{ $flow->status }}"
+                              action="{{ route('flows.update', ['client' => $client->slug, 'id' => $flow->id]) }}">
+                            @csrf @method('PATCH')
+                            <input type="hidden" name="project_id" value="{{ $project->id }}">
+                            <label class="tva-sr-only" for="flow-status-{{ $flow->id }}">Status for {{ $flow->name }}</label>
+                            <select id="flow-status-{{ $flow->id }}" name="status"
+                                    class="tva-flow-row__chip is-{{ $flow->status }}"
+                                    onchange="this.form.submit()">
+                                <option value="draft"    @selected($flow->status === 'draft')>draft</option>
+                                <option value="active"   @selected($flow->status === 'active')
+                                        @disabled($blockers && $flow->status !== 'active')>active</option>
+                                <option value="archived" @selected($flow->status === 'archived')>archived</option>
+                            </select>
+                        </form>
+                        @if ($blockers && $flow->status !== 'active')
+                            <span class="tva-flow-row__blocked" title="{{ implode(' ', $blockers) }}">
+                                <i data-lucide="alert-triangle" class="w-3 h-3"></i> can't activate yet
+                            </span>
+                        @endif
                         <span>v{{ $flow->version }}</span>
                         <span>{{ $nodeCount }} node(s)</span>
                         <span>lang: {{ $flow->language }}</span>
