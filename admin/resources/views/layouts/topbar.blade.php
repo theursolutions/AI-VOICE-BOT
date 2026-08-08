@@ -75,9 +75,6 @@
             </div>
             <div class="tva-tb-brand__text">
                 <div class="tva-tb-brand__name">{{ $tvaProjectName }}</div>
-                @if (!empty($tvaProfile['industry']))
-                    <div class="tva-tb-brand__sub">{{ $tvaProfile['industry'] }}</div>
-                @endif
             </div>
         </a>
     @else

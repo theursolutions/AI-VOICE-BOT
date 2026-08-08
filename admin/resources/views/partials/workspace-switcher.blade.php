@@ -79,8 +79,9 @@
             </div>
         </div>
     </div>
-@elseif ($current)
-    <span class="tva-ws-pill" title="{{ $current->name }}">
-        <span>{{ $current->name }}</span>
-    </span>
+{{-- Deliberately NOTHING when there is only one workspace: the project /
+     company name is already shown by the brand block on the left of the
+     top bar, and repeating it beside the search box was redundant. The
+     switcher above still renders whenever there are 2+ workspaces, because
+     then it is a control rather than a label. --}}
 @endif
