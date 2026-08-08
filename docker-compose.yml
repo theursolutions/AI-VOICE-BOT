@@ -214,6 +214,14 @@ services:
       --slow-query-log=1
       --long-query-time=2
     security_opt: ["no-new-privileges:true"]
+    # Bound to LOOPBACK ONLY so GUI tools (Navicat, DBeaver, TablePlus) can reach
+    # it over an SSH tunnel. 127.0.0.1 means it is NOT reachable from the network
+    # — do not change this to "3306:3306", which would publish MySQL to the whole
+    # internet (Docker's iptables rules bypass UFW; only the DOCKER-USER
+    # allowlist in /etc/ufw/after.rules would stop it).
+    #   ssh -L 3306:127.0.0.1:3306 aicrm
+    ports:
+      - "127.0.0.1:3306:3306"
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
       MYSQL_DATABASE: ${DB_DATABASE}
@@ -253,6 +261,10 @@ services:
       - --maxmemory-policy
       - noeviction
     security_opt: ["no-new-privileges:true"]
+    # Loopback only — same reasoning as MySQL above. Reach it with:
+    #   ssh -L 6379:127.0.0.1:6379 aicrm
+    ports:
+      - "127.0.0.1:6379:6379"
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     volumes:

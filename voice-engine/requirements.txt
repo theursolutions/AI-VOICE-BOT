@@ -1,3 +1,13 @@
+# =============================================================================
+# HUMAN-READABLE INTENT ONLY — this file is NOT what the Docker image installs.
+#
+# The image installs requirements.lock.txt (exact pins for all 155 resolved
+# packages). Edit THIS file to change what the project depends on, then
+# regenerate the lock — see the instructions in voice-engine/Dockerfile.
+#
+# Editing this file alone changes NOTHING about the built image.
+# =============================================================================
+
 # --- Web framework ---
 fastapi>=0.110
 uvicorn[standard]>=0.27

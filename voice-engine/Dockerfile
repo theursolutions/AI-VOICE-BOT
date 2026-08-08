@@ -22,22 +22,30 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip install --upgrade pip setuptools wheel
 
-# CPU-only torch/torchaudio first; the rest resolve against it.
+# Install the EXACT resolved dependency set from the lock file.
 #
-# PINNED, and it must stay pinned. From torch 2.9 coqui-tts requires the extra
-# `torchcodec` package for audio I/O (torchaudio's own backends were removed),
-# so an unpinned install silently grabs the newest torch and XTTS then dies at
-# load time with:
-#   ImportError: From Pytorch 2.9, the torchcodec library is required
-# The container still reports healthy, so this surfaces only as "no voice".
-# coqui-tts 0.27.5 declares torch>=2.2 with no upper bound, so 2.8.0 is well
-# within its supported range. To move past 2.9 later, add torchcodec (matched to
-# the torch version) rather than just bumping this line.
-RUN pip install --index-url https://download.pytorch.org/whl/cpu \
-        "torch==2.8.0" "torchaudio==2.8.0"
-
-COPY requirements.txt .
-RUN pip install -r requirements.txt
+# WHY A LOCK FILE: requirements.txt pins direct dependencies with open floors
+# (`torch>=2.2`), so pip resolved whatever PyPI served that day. That produced
+# three separate production outages, each of which reported "healthy":
+#   • `openai`/`anthropic` absent entirely   -> every LLM provider crashed at boot
+#   • transformers resolved to 5.x           -> XTTS ImportError (isin_mps_friendly)
+#   • torch resolved to 2.13                 -> XTTS needs torchcodec, no voice
+# The lock file makes a rebuild reproducible instead of a fresh version-drift
+# hunt. requirements.txt remains the human-readable statement of intent.
+#
+# --extra-index-url is REQUIRED: the lock pins torch==2.8.0+cpu / torchaudio==
+# 2.8.0+cpu, and those `+cpu` local-version builds exist only on PyTorch's own
+# index. Without it pip either fails to find them or pulls the ~2GB CUDA build
+# from PyPI onto a machine with no GPU.
+#
+# TO REGENERATE after intentionally changing requirements.txt:
+#   docker compose build voice-engine            # builds from requirements.txt*
+#   docker compose exec -T voice-engine pip freeze > voice-engine/requirements.lock.txt
+#   # then commit the lock and rebuild to verify
+#   (*temporarily point the RUN below at requirements.txt to re-resolve)
+COPY requirements.lock.txt .
+RUN pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.lock.txt
 
 ###############################################################################
 # Stage 2 — Runtime
