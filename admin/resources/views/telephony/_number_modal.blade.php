@@ -35,7 +35,10 @@
                             <option value="{{ $k }}" @selected($wv === $k)>{{ $v }}</option>
                         @endforeach
                     </select>
-                    <small class="text-slate-500 text-xs">Used only if no cloned welcome audio is cached.</small>
+                    <small class="text-slate-500 text-xs">
+                        Fallback only. Calls normally speak in the routed agent's cloned
+                        voice — this stock voice is used just when that can't be synthesized.
+                    </small>
                 </div>
             </div>
 
@@ -73,11 +76,25 @@
                         @foreach ($agents as $a)
                             <label class="tva-num-modal-row">
                                 <input type="checkbox" name="agent_ids[]" value="{{ $a->id }}" @checked(in_array($a->id, $assigned))>
-                                <span class="text-sm">{{ $a->name }}</span>
+                                <span class="text-sm">
+                                    {{ $a->name }}
+                                    {{-- The call is answered in the agent's voice, so show it
+                                         here: this screen is where people come looking for
+                                         "the telephony voice setting". --}}
+                                    @if ($a->voice)
+                                        <span class="text-xs" style="color:#7c3aed;">· 🎤 {{ $a->voice->name }}</span>
+                                    @else
+                                        <span class="text-xs text-slate-400">· no voice — will use the fallback below</span>
+                                    @endif
+                                </span>
                             </label>
                         @endforeach
                     </div>
-                    <small class="text-slate-500 text-xs mt-1 block">Multiple agents share the load — one is picked per call.</small>
+                    <small class="text-slate-500 text-xs mt-1 block">
+                        Multiple agents share the load — one is picked per call.
+                        Calls are answered in that agent's cloned voice; change it under
+                        <a href="{{ route('bot-agents.index', ['client' => $client->slug]) }}?project_id={{ hashid($project->id) }}" class="text-primary">Agents</a>.
+                    </small>
                 @endif
             </div>
 

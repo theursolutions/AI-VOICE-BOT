@@ -1,26 +1,70 @@
 {{--
-    Public marketing-site <head> tags, driven entirely by the SEO console
-    (/admin/seo → site_settings, defaults in config/site.php). Include this
-    inside the <head> of any public page:  @include('partials.seo-head')
+    Public marketing-site <head> tags, driven by the SEO console
+    (/admin/seo → site_settings, defaults in config/site.php).
+
+    Include it inside the <head> of any public page:
+
+        @include('partials.seo-head')
+
+    Per-page overrides (all optional, passed as include data or set by the
+    parent view before the include):
+
+        metaTitle        string   full <title> — plain text, no HTML
+        metaDescription  string   meta description for this page
+        canonicalPath    string   canonical path if it differs from the URL
+        pageNoindex      bool     force noindex on this page
+        ogType           string   'website' (default) | 'article' | …
+        jsonLd           array    extra Schema.org nodes for this page
+                                  (e.g. FAQPage, SoftwareApplication)
+        breadcrumbs      array    [['name' => 'About', 'url' => '/about'], …]
 --}}
 @php
+    use App\Support\Seo;
+
     $seo = tva_seo_all();
 
-    $canonical    = rtrim((string) ($seo['canonical_url'] ?? config('app.url')), '/');
-    $allowIndex   = (bool) ($seo['allow_indexing'] ?? true);
-    $ogImage      = $seo['og_image'] ?? '';
-    $twImage      = $seo['twitter_image'] ?: $ogImage;
-    $social       = is_array($seo['social_links'] ?? null) ? $seo['social_links'] : [];
+    // ── Canonical ────────────────────────────────────────────────────
+    // Built from the configured origin + the normalised path, NEVER from
+    // request()->fullUrl(): that echoed back whatever spelling the visitor
+    // arrived on, so /about, /about/ and /about?utm_source=fb each declared
+    // themselves canonical and competed with each other in the index.
+    $canonicalUrl = Seo::canonical($canonicalPath ?? null);
 
-    $currentUrl = request()->fullUrl();
-@endphp
+    // ── Indexability ─────────────────────────────────────────────────
+    // Three ways a page becomes noindex: the global kill-switch (staging),
+    // the noindex_paths list (duplicates, thin pages, auth forms), or an
+    // explicit flag from the view.
+    $noindexPaths = array_map(fn ($p) => Seo::path($p), (array) config('site.seo.noindex_paths', []));
+    $isNoindex    = ! (bool) ($seo['allow_indexing'] ?? true)
+                    || ($pageNoindex ?? false)
+                    || in_array(Seo::path($canonicalPath ?? null), $noindexPaths, true);
 
-{{-- Per-page overrides: pass metaTitle / metaDescription to the include
-     (e.g. @include('partials.seo-head', ['metaTitle' => 'Privacy — Brand']).
-     Falls back to the global SEO defaults when not provided. --}}
-@php
-    $pageTitle = ($metaTitle ?? '') !== '' ? $metaTitle : ($seo['meta_title'] ?? '');
-    $pageDesc  = ($metaDescription ?? '') !== '' ? $metaDescription : ($seo['meta_description'] ?? '');
+    // ── Title / description ──────────────────────────────────────────
+    // strip_tags because page headings carry markup (<span class="accent">)
+    // and a title tag full of escaped HTML is what search results show.
+    $pageTitle = trim(strip_tags((string) ($metaTitle ?? '')));
+    $pageTitle = $pageTitle !== '' ? $pageTitle : (string) ($seo['meta_title'] ?? '');
+    $pageDesc  = trim(strip_tags((string) ($metaDescription ?? '')));
+    $pageDesc  = $pageDesc !== '' ? $pageDesc : (string) ($seo['meta_description'] ?? '');
+
+    // ── Images (absolute — relative URLs are invalid in OG and JSON-LD) ─
+    $ogImage = Seo::absolute($seo['og_image'] ?: serveai_icon());
+    $twImage = Seo::absolute($seo['twitter_image'] ?: ($seo['og_image'] ?: serveai_icon()));
+
+    // ── Social profiles: SEO console list + the footer links ─────────
+    $social = array_values(array_filter(array_unique(array_merge(
+        is_array($seo['social_links'] ?? null) ? $seo['social_links'] : [],
+        [
+            (string) tva_setting('content.social_twitter', ''),
+            (string) tva_setting('content.social_linkedin', ''),
+            (string) tva_setting('content.social_facebook', ''),
+            (string) tva_setting('content.social_instagram', ''),
+        ]
+    ))));
+
+    $faviconHref = !empty($seo['favicon_url']) ? $seo['favicon_url'] : serveai_icon();
+    $appleHref   = !empty($seo['apple_touch_icon']) ? $seo['apple_touch_icon'] : $faviconHref;
+    $siteName    = $seo['og_site_name'] ?: ($seo['org_name'] ?? 'Serve AI');
 @endphp
 <title>{{ $pageTitle }}</title>
 <meta name="description" content="{{ $pageDesc }}">
@@ -33,39 +77,49 @@
 @if (!empty($seo['theme_color']))
 <meta name="theme-color" content="{{ $seo['theme_color'] }}">
 @endif
-<link rel="canonical" href="{{ $currentUrl }}">
+<link rel="canonical" href="{{ $canonicalUrl }}">
 
-@if (! $allowIndex)
-<meta name="robots" content="noindex, nofollow">
+@if ($isNoindex)
+{{-- follow, not nofollow: Google still has to crawl the links (and re-read
+     this tag) for the page to actually leave the index. --}}
+<meta name="robots" content="noindex, follow">
 @else
-<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1">
 @endif
 
 {{-- ── Icons (auto-prefer uploaded brand logo, else built-in SVG) ─── --}}
-@php
-    $faviconHref = !empty($seo['favicon_url']) ? $seo['favicon_url'] : serveai_icon();
-    $appleHref   = !empty($seo['apple_touch_icon']) ? $seo['apple_touch_icon'] : $faviconHref;
-@endphp
 <link rel="icon" href="{{ $faviconHref }}">
 <link rel="shortcut icon" href="{{ $faviconHref }}">
 <link rel="apple-touch-icon" href="{{ $appleHref }}">
 
 {{-- ── Open Graph ────────────────────────────────────────────────── --}}
-<meta property="og:title" content="{{ ($metaTitle ?? '') !== '' ? $metaTitle : ($seo['og_title'] ?: ($seo['meta_title'] ?? '')) }}">
-<meta property="og:description" content="{{ ($metaDescription ?? '') !== '' ? $metaDescription : ($seo['og_description'] ?: ($seo['meta_description'] ?? '')) }}">
-<meta property="og:type" content="{{ $seo['og_type'] ?: 'website' }}">
-<meta property="og:url" content="{{ $currentUrl }}">
-@if (!empty($seo['og_site_name']))
-<meta property="og:site_name" content="{{ $seo['og_site_name'] }}">
+<meta property="og:title" content="{{ ($metaTitle ?? '') !== '' ? $pageTitle : ($seo['og_title'] ?: $pageTitle) }}">
+<meta property="og:description" content="{{ ($metaDescription ?? '') !== '' ? $pageDesc : ($seo['og_description'] ?: $pageDesc) }}">
+<meta property="og:type" content="{{ $ogType ?? ($seo['og_type'] ?: 'website') }}">
+<meta property="og:url" content="{{ $canonicalUrl }}">
+<meta property="og:locale" content="en_US">
+@if (!empty($siteName))
+<meta property="og:site_name" content="{{ $siteName }}">
 @endif
 @if (!empty($ogImage))
 <meta property="og:image" content="{{ $ogImage }}">
+<meta property="og:image:alt" content="{{ $siteName }}">
+@php
+    // Dimensions let Facebook/LinkedIn lay the card out on first scrape
+    // instead of showing a blank box until their crawler fetches the file.
+    $ogLocal = public_path(ltrim((string) parse_url($ogImage, PHP_URL_PATH), '/'));
+    $ogSize  = is_file($ogLocal) ? @getimagesize($ogLocal) : false;
+@endphp
+@if ($ogSize)
+<meta property="og:image:width" content="{{ $ogSize[0] }}">
+<meta property="og:image:height" content="{{ $ogSize[1] }}">
+@endif
 @endif
 
 {{-- ── Twitter / X ───────────────────────────────────────────────── --}}
 <meta name="twitter:card" content="{{ $seo['twitter_card'] ?: 'summary_large_image' }}">
-<meta name="twitter:title" content="{{ ($metaTitle ?? '') !== '' ? $metaTitle : ($seo['og_title'] ?: ($seo['meta_title'] ?? '')) }}">
-<meta name="twitter:description" content="{{ ($metaDescription ?? '') !== '' ? $metaDescription : ($seo['og_description'] ?: ($seo['meta_description'] ?? '')) }}">
+<meta name="twitter:title" content="{{ ($metaTitle ?? '') !== '' ? $pageTitle : ($seo['og_title'] ?: $pageTitle) }}">
+<meta name="twitter:description" content="{{ ($metaDescription ?? '') !== '' ? $pageDesc : ($seo['og_description'] ?: $pageDesc) }}">
 @if (!empty($seo['twitter_site']))
 <meta name="twitter:site" content="{{ $seo['twitter_site'] }}">
 @endif
@@ -81,33 +135,111 @@
 <meta name="msvalidate.01" content="{{ $seo['bing_site_verification'] }}">
 @endif
 
-{{-- ── Structured data (JSON-LD) ─────────────────────────────────── --}}
+{{-- ── Structured data (JSON-LD) ─────────────────────────────────────
+     One @graph per page: who we are (Organization), what the site is
+     (WebSite), what this page is (WebPage + BreadcrumbList), plus any
+     page-specific nodes the view passed in ($jsonLd) — FAQPage on the
+     homepage, ContactPage on /contact, and so on.
+
+     Everything marked up here is visible on the page. Nothing is invented.
+--}}
 @if (($seo['structured_data'] ?? true) && !empty($seo['org_name']))
 @php
-    $orgLd = array_filter([
-        '@context' => 'https://schema.org',
-        '@type'    => 'Organization',
-        'name'     => $seo['org_name'] ?? null,
-        'url'      => $canonical ?: null,
-        'logo'     => $seo['org_logo'] ?: null,
-        'email'    => $seo['org_email'] ?: null,
-        'sameAs'   => !empty($social) ? array_values($social) : null,
+    $orgId  = Seo::origin() . '/#organization';
+    $siteId = Seo::origin() . '/#website';
+
+    $org = array_filter([
+        '@type'  => 'Organization',
+        '@id'    => $orgId,
+        'name'   => $seo['org_name'] ?? null,
+        'url'    => Seo::origin() . '/',
+        'logo'   => Seo::absolute($seo['org_logo'] ?: serveai_icon()),
+        'image'  => $ogImage,
+        'email'  => $seo['org_email'] ?: null,
+        'sameAs' => !empty($social) ? $social : null,
     ]);
+
     if (!empty($seo['org_phone'])) {
-        $orgLd['contactPoint'] = [
+        $org['telephone']    = $seo['org_phone'];
+        $org['contactPoint'] = [[
             '@type'       => 'ContactPoint',
             'telephone'   => $seo['org_phone'],
+            'email'       => $seo['org_email'] ?: null,
             'contactType' => 'customer service',
-        ];
+            'areaServed'  => 'Worldwide',
+            'availableLanguage' => ['English', 'Urdu'],
+        ]];
+        $org['contactPoint'][0] = array_filter($org['contactPoint'][0]);
     }
-    $siteLd = array_filter([
-        '@context' => 'https://schema.org',
-        '@type'    => 'WebSite',
-        'name'     => $seo['og_site_name'] ?: ($seo['org_name'] ?? null),
-        'url'      => $canonical ?: null,
+
+    // Postal address — only when a real one is configured and shown in the
+    // footer / on the contact page.
+    $addr = trim((string) tva_setting('content.contact_address', ''));
+    if ($addr !== '') {
+        $org['address'] = array_filter([
+            '@type'           => 'PostalAddress',
+            'streetAddress'   => $addr,
+            'addressLocality' => (string) tva_setting('content.contact_city', 'Lahore'),
+            'addressCountry'  => (string) tva_setting('content.contact_country', 'PK'),
+        ]);
+    }
+
+    $website = array_filter([
+        '@type'     => 'WebSite',
+        '@id'       => $siteId,
+        'name'      => $siteName,
+        'url'       => Seo::origin() . '/',
+        'publisher' => ['@id' => $orgId],
+        'inLanguage' => 'en',
     ]);
+
+    $webPage = array_filter([
+        '@type'      => $pageSchemaType ?? 'WebPage',
+        '@id'        => $canonicalUrl . '#webpage',
+        'url'        => $canonicalUrl,
+        'name'       => $pageTitle,
+        'description' => $pageDesc !== '' ? $pageDesc : null,
+        'isPartOf'   => ['@id' => $siteId],
+        'about'      => ['@id' => $orgId],
+        'inLanguage' => 'en',
+    ]);
+
+    // Breadcrumbs — mirrors the visible trail rendered by layouts.public.
+    $breadcrumbNode = null;
+    if (!empty($breadcrumbs) && is_array($breadcrumbs)) {
+        $items = [];
+        $pos   = 1;
+        foreach (array_merge([['name' => 'Home', 'url' => '/']], $breadcrumbs) as $crumb) {
+            $items[] = array_filter([
+                '@type'    => 'ListItem',
+                'position' => $pos++,
+                'name'     => strip_tags((string) ($crumb['name'] ?? '')),
+                'item'     => !empty($crumb['url']) ? Seo::canonical($crumb['url']) : null,
+            ]);
+        }
+        $breadcrumbNode = [
+            '@type'           => 'BreadcrumbList',
+            '@id'             => $canonicalUrl . '#breadcrumb',
+            'itemListElement' => $items,
+        ];
+        $webPage['breadcrumb'] = ['@id' => $canonicalUrl . '#breadcrumb'];
+    }
+
+    $graph = [$org, $website, $webPage];
+    if ($breadcrumbNode) {
+        $graph[] = $breadcrumbNode;
+    }
+
+    // Page-specific nodes supplied by the view.
+    foreach ((array) ($jsonLd ?? []) as $node) {
+        if (is_array($node) && !empty($node)) {
+            $graph[] = $node;
+        }
+    }
+
+    $ld = ['@context' => 'https://schema.org', '@graph' => array_values($graph)];
 @endphp
-<script type="application/ld+json">{!! json_encode([$orgLd, $siteLd], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}</script>
+<script type="application/ld+json">{!! json_encode($ld, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) !!}</script>
 @endif
 
 {{-- ── Google Tag Manager ────────────────────────────────────────── --}}

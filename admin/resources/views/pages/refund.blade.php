@@ -8,7 +8,9 @@
     'pageTitle'       => 'Refund &amp; Return Policy',
     'pageSubtitle'    => 'When you can get your money back, and how to ask. No fine-print games.',
     'pageMeta'        => 'Last updated: ' . $effective,
-    'metaDescription' => 'Refund and cancellation policy for ' . $brand . ' subscriptions and usage charges.',
+    'seoTitle'        => 'Refund & Cancellation Policy — ' . $brand,
+    'metaDescription' => 'When you can get your money back from ' . $brand . ': the 14-day guarantee on new paid plans, how usage charges are treated, and how to cancel.',
+    'breadcrumbs'     => [['name' => 'Refund Policy', 'url' => '/refund-policy']],
 ])
 
 @section('content')

@@ -1,4 +1,4 @@
-@extends('layouts.auth')
+@extends('layouts.auth', ['authTitle' => 'Sign in'])
 @section('content')
      <div class="container sm:px-10">
         <div class="block xl:grid grid-cols-2 gap-4">

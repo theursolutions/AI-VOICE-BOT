@@ -6,7 +6,9 @@
     'pageEyebrow'     => 'Trust',
     'pageTitle'       => 'Security &amp; Trust',
     'pageSubtitle'    => 'You hand an AI the keys to your customers and your data. Here is how we keep both safe.',
-    'metaDescription' => 'How ' . $brand . ' protects your data — tenant isolation, access controls, encryption, and full audit trails.',
+    'seoTitle'        => 'Security & data protection — ' . $brand,
+    'metaDescription' => 'How ' . $brand . ' protects your business and customer data: per-tenant database isolation, column-level AI access controls, encryption in transit and a full audit trail.',
+    'breadcrumbs'     => [['name' => 'Security', 'url' => '/security']],
 ])
 
 @section('content')

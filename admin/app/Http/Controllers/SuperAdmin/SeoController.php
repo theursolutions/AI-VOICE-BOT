@@ -152,10 +152,11 @@ class SeoController extends Controller
         }
         SiteSetting::set('seo.robots_txt', $robotsBody);
 
-        // ── Apply to the real files crawlers fetch ───────────────────
-        $notices = [];
-        $r = $this->seo->writeRobots($robotsBody);                 $notices[] = $r;
-        $s = $this->seo->writeSitemap(tva_setting('seo.sitemap_urls', [])); $notices[] = $s;
+        // ── Apply ────────────────────────────────────────────────────
+        // /robots.txt and /sitemap.xml are generated live from the settings
+        // we just stored (SeoFilesController), so "applying" only has to
+        // clear any stale static file that would shadow those routes.
+        $notices = $this->seo->syncCrawlerFiles();
         $v = $this->seo->writeVerificationFile(
             $data['verification_file_name'] ?? null,
             $data['verification_file_body'] ?? null,
@@ -173,14 +174,15 @@ class SeoController extends Controller
                 ->with('error', $failed->pluck('message')->implode(' '));
         }
 
-        return back()->with('success', 'SEO settings saved and applied to robots.txt + sitemap.xml.');
+        return back()->with('success', 'SEO settings saved — live at /robots.txt and /sitemap.xml.');
     }
 
-    /** Regenerate + submit the sitemap to the search engines. */
+    /** Best-effort ping of the search engines with the sitemap URL. */
     public function ping(Request $request): RedirectResponse
     {
-        // Make sure the file on disk reflects current settings first.
-        $this->seo->writeSitemap(tva_setting('seo.sitemap_urls', []));
+        // Nothing to regenerate: /sitemap.xml is built per request. Just make
+        // sure no stale static file is shadowing the route, then ping.
+        $this->seo->syncCrawlerFiles();
         $results = $this->seo->pingSearchEngines();
 
         AuditLog::record('seo.sitemap_ping', ['payload' => ['results' => $results]]);
@@ -189,15 +191,24 @@ class SeoController extends Controller
             ->map(fn ($r) => "{$r['engine']}: " . ($r['ok'] ? 'ok' : "failed ({$r['status']})"))
             ->implode(' · ');
 
-        return back()->with('success', "Sitemap submitted — {$summary}");
+        // Google retired its sitemap ping endpoint in 2023 and Bing followed,
+        // so a failure here is expected and harmless — say so rather than
+        // showing an operator a scary red error they cannot act on.
+        return back()->with('success', "Sitemap ping attempted — {$summary}. Both engines have retired their ping APIs; submit the sitemap once in Google Search Console / Bing Webmaster Tools instead.");
     }
 
+    /**
+     * Live status of a crawler file. Both are served by routes now, so
+     * "exists" reports whether the ROUTE is reachable; a leftover static
+     * file under public/ is reported as a problem because it silently
+     * overrides the route.
+     */
     private function fileStatus(string $rel): array
     {
-        $path = public_path($rel);
         return [
-            'exists'   => is_file($path),
-            'modified' => is_file($path) ? date('M j, Y H:i', filemtime($path)) : null,
+            'exists'   => true,
+            'modified' => 'generated live from these settings',
+            'shadowed' => $this->seo->staticShadowExists($rel),
             'url'      => $this->seo->baseUrl() . '/' . $rel,
         ];
     }

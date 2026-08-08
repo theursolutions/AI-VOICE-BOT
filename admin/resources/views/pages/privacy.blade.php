@@ -10,7 +10,9 @@
     'pageTitle'       => 'Privacy Policy',
     'pageSubtitle'    => 'Plain-English: what we collect, why, and the control you keep over it.',
     'pageMeta'        => 'Last updated: ' . $effective,
-    'metaDescription' => 'How ' . $brand . ' collects, uses, and protects personal data — written in plain language.',
+    'seoTitle'        => 'Privacy Policy — ' . $brand,
+    'metaDescription' => 'How ' . $brand . ' collects, uses, stores and protects personal and conversation data — written in plain language, with your rights and our retention periods spelled out.',
+    'breadcrumbs'     => [['name' => 'Privacy Policy', 'url' => '/privacy']],
 ])
 
 @section('content')

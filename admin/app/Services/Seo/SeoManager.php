@@ -30,66 +30,43 @@ class SeoManager
         return rtrim($url, '/');
     }
 
-    // ── robots.txt ───────────────────────────────────────────────────
+    // ── robots.txt / sitemap.xml ─────────────────────────────────────
 
     /**
-     * Write public/robots.txt. We always append a `Sitemap:` line pointing
-     * at the generated sitemap (de-duplicated) so crawlers discover it.
+     * Both files are now GENERATED PER REQUEST by
+     * App\Http\Controllers\SeoFilesController (routes /robots.txt and
+     * /sitemap.xml), so they always reflect the current settings.
+     *
+     * A leftover static file under public/ would silently win over the
+     * route — nginx's `try_files $uri` serves the file and PHP never runs —
+     * and that is exactly how production ended up advertising a robots.txt
+     * with no Sitemap: line for months. So "applying" the SEO settings now
+     * means *removing* any stale static copy and dropping the response
+     * cache, not writing new files.
+     *
+     * @return array<int,array{ok:bool,message:string}>
      */
-    public function writeRobots(string $body): array
+    public function syncCrawlerFiles(): array
     {
-        $body = trim($body) . "\n";
+        $notices = [];
 
-        // Ensure exactly one Sitemap: line, pointing at our sitemap.
-        $sitemapUrl = $this->baseUrl() . '/sitemap.xml';
-        $lines = preg_split('/\R/', $body);
-        $lines = array_values(array_filter($lines, fn ($l) => stripos(trim($l), 'sitemap:') !== 0));
-        $lines[] = 'Sitemap: ' . $sitemapUrl;
-        $final = implode("\n", $lines) . "\n";
-
-        return $this->put('robots.txt', $final);
-    }
-
-    // ── sitemap.xml ──────────────────────────────────────────────────
-
-    /**
-     * @param array<int,array{loc:string,changefreq?:string,priority?:string}> $urls
-     */
-    public function buildSitemapXml(array $urls): string
-    {
-        $base = $this->baseUrl();
-        $today = date('Y-m-d');
-
-        $out  = '<?xml version="1.0" encoding="UTF-8"?>' . "\n";
-        $out .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . "\n";
-
-        foreach ($urls as $u) {
-            $loc = trim((string) ($u['loc'] ?? ''));
-            if ($loc === '') {
+        foreach (['robots.txt', 'sitemap.xml'] as $rel) {
+            $path = $this->publicPath($rel);
+            if (! is_file($path)) {
                 continue;
             }
-            // Allow either absolute URLs or root-relative paths.
-            if (! preg_match('#^https?://#i', $loc)) {
-                $loc = $base . '/' . ltrim($loc, '/');
-            }
-            $changefreq = trim((string) ($u['changefreq'] ?? 'weekly'));
-            $priority   = trim((string) ($u['priority'] ?? '0.5'));
-
-            $out .= "  <url>\n";
-            $out .= '    <loc>' . htmlspecialchars($loc, ENT_XML1) . "</loc>\n";
-            $out .= '    <lastmod>' . $today . "</lastmod>\n";
-            $out .= '    <changefreq>' . htmlspecialchars($changefreq, ENT_XML1) . "</changefreq>\n";
-            $out .= '    <priority>' . htmlspecialchars($priority, ENT_XML1) . "</priority>\n";
-            $out .= "  </url>\n";
+            $notices[] = @unlink($path)
+                ? ['ok' => true,  'message' => "Removed the stale static /{$rel} (it is now generated live)."]
+                : ['ok' => false, 'message' => "Could not remove public/{$rel} — it shadows the live /{$rel} route. Delete it on the server."];
         }
 
-        $out .= '</urlset>' . "\n";
-        return $out;
+        return $notices;
     }
 
-    public function writeSitemap(array $urls): array
+    /** Is a stale static file still shadowing one of the live routes? */
+    public function staticShadowExists(string $rel): bool
     {
-        return $this->put('sitemap.xml', $this->buildSitemapXml($urls));
+        return is_file($this->publicPath($rel));
     }
 
     // ── Google / Bing site-verification file ─────────────────────────
