@@ -8,7 +8,9 @@
     'pageTitle'       => 'Cookie Policy',
     'pageSubtitle'    => 'The small files that keep you signed in and help us improve the site.',
     'pageMeta'        => 'Last updated: ' . $effective,
-    'metaDescription' => 'How ' . $brand . ' uses cookies and similar technologies.',
+    'seoTitle'        => 'Cookie Policy — ' . $brand,
+    'metaDescription' => 'The cookies ' . $brand . ' sets, what each one is for, how long it lasts, and how to control them in your browser.',
+    'breadcrumbs'     => [['name' => 'Cookie Policy', 'url' => '/cookies']],
 ])
 
 @section('content')

@@ -15,7 +15,10 @@
     'pageEyebrow'     => 'We’d love to hear from you',
     'pageTitle'       => 'Contact <span class="accent">' . $brand . '</span>',
     'pageSubtitle'    => 'Questions, demos, or just curious whether it fits your business? Reach out — a real person will get back to you.',
-    'metaDescription' => 'Get in touch with ' . $brand . ' — call, email, or request a callback from our AI agent.',
+    'seoTitle'        => 'Contact ' . $brand . ' — book a demo or request a callback',
+    'metaDescription' => 'Talk to ' . $brand . ' about AI voice agents, WhatsApp and web chat for your business. Call ' . $phone . ', email ' . $email . ', or have our AI agent call you back.',
+    'pageSchemaType'  => 'ContactPage',
+    'breadcrumbs'     => [['name' => 'Contact', 'url' => '/contact']],
 ])
 
 @push('head')

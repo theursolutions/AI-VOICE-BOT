@@ -3,6 +3,11 @@
 /public/build
 /public/hot
 /public/storage
+# Served by routes (App\Http\Controllers\SeoFilesController). A real file of
+# either name is served by nginx in preference to the route and silently
+# shadows it — never commit one.
+/public/robots.txt
+/public/sitemap.xml
 /storage/*.key
 /vendor
 .env

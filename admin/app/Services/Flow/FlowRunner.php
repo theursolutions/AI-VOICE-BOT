@@ -29,7 +29,48 @@ class FlowRunner
 {
     public const META_KEY = 'flow';
 
-    public function __construct(private TenantManager $tenants) {}
+    public function __construct(
+        private TenantManager $tenants,
+        private \App\Services\Telephony\WelcomeAudioService $tts,
+    ) {}
+
+    /**
+     * TwiML for one spoken line, in the caller's cloned voice when we can.
+     *
+     * Every node used to emit `<Say voice="Polly.X">`, so a flow-routed number
+     * answered in a stock Amazon voice no matter which cloned voice the agent
+     * had — the whole point of cloning was lost the moment a flow was attached
+     * to the number.
+     *
+     * Synthesis is cached by (text + speaker), so a given prompt is generated
+     * once and every later call is a file read. The timeout is deliberately
+     * short: Twilio abandons a webhook that takes too long, so a cold cache
+     * must degrade to Polly for this one call rather than drop it.
+     */
+    private function speak(Project $project, Session $session, string $text, string $polly, string $lang): string
+    {
+        $text = trim($text);
+        if ($text === '') {
+            return '';
+        }
+
+        $voice = $session->voice_id ? \App\Models\Voice::find($session->voice_id) : null;
+        $url   = $this->tts->urlFor($project, $text, $voice, self::TTS_TIMEOUT_SECS);
+
+        if ($url) {
+            return "  <Play>" . $this->xml($url) . "</Play>\n";
+        }
+
+        Log::info('FlowRunner: cloned-voice TTS unavailable, using Polly', [
+            'project_id' => $project->id,
+            'voice_id'   => $session->voice_id,
+        ]);
+
+        return "  <Say voice=\"{$polly}\" language=\"{$lang}\">" . $this->xml($text) . "</Say>\n";
+    }
+
+    /** Twilio drops a webhook that stalls; stay well inside that budget. */
+    private const TTS_TIMEOUT_SECS = 10;
 
     /**
      * First entry — caller picks up. Find the start node, advance,
@@ -102,12 +143,12 @@ class FlowRunner
         $polly = $this->pollyVoiceForLang($lang);
 
         switch ($type) {
-            case 'say':       return $this->renderSay($project, $node, $def, $lang, $polly, $webhookBase);
+            case 'say':       return $this->renderSay($project, $session, $node, $def, $lang, $polly, $webhookBase);
             case 'capture_dtmf':
                               return $this->renderCaptureDtmf($project, $node, $def, $lang, $polly, $webhookBase, $session);
             case 'transfer_ai':
                               return $this->renderTransferAi($project, $session, $node);
-            case 'end':       return $this->endTwiML($data['message'] ?? 'Goodbye.', $polly, $lang);
+            case 'end':       return $this->endTwiML($data['message'] ?? 'Goodbye.', $polly, $lang, $project, $session);
             default:
                 // Unsupported node type (capture_speech, webhook, branch
                 // etc. land here until we add their renderers). Fail
@@ -117,7 +158,7 @@ class FlowRunner
         }
     }
 
-    private function renderSay(Project $project, array $node, array $def, string $lang, string $polly, string $webhookBase): string
+    private function renderSay(Project $project, Session $session, array $node, array $def, string $lang, string $polly, string $webhookBase): string
     {
         $data = $node['data'] ?? [];
         // After speaking we need to advance — Twilio doesn't auto-call
@@ -138,10 +179,10 @@ class FlowRunner
             // Fall through to TTS if asset is missing
         }
 
-        $text = $this->xml($data['text'] ?? '');
+        // Cloned voice when we have one, Polly only as a fallback.
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             . "<Response>\n"
-            . "  <Say voice=\"{$polly}\" language=\"{$lang}\">{$text}</Say>\n"
+            . $this->speak($project, $session, (string) ($data['text'] ?? ''), $polly, $lang)
             . "  <Redirect method=\"POST\">" . $this->xml($afterUrl) . "</Redirect>\n"
             . "</Response>";
     }
@@ -162,8 +203,8 @@ class FlowRunner
             }
         }
         if ($promptXml === '') {
-            $text = $this->xml($data['prompt'] ?? '');
-            $promptXml = "    <Say voice=\"{$polly}\" language=\"{$lang}\">{$text}</Say>\n";
+            // speak() indents by two; menu prompts sit inside <Gather>.
+            $promptXml = '  ' . $this->speak($project, $session, (string) ($data['prompt'] ?? ''), $polly, $lang);
         }
 
         // On timeout (no Digits in callback) Twilio still POSTs back —
@@ -218,12 +259,26 @@ class FlowRunner
             . "</Response>";
     }
 
-    private function endTwiML(string $msg, string $polly = 'Polly.Joanna', string $lang = 'en-US'): string
-    {
-        $text = $this->xml($msg);
+    /**
+     * $project/$session are optional because several call sites are error
+     * paths reached before a session is in hand (misconfigured flow, unknown
+     * node). Those keep the Polly sign-off; the normal "end" node passes both
+     * and hangs up in the caller's own voice like the rest of the flow.
+     */
+    private function endTwiML(
+        string $msg,
+        string $polly = 'Polly.Joanna',
+        string $lang = 'en-US',
+        ?Project $project = null,
+        ?Session $session = null,
+    ): string {
+        $line = ($project && $session)
+            ? $this->speak($project, $session, $msg, $polly, $lang)
+            : "  <Say voice=\"{$polly}\" language=\"{$lang}\">" . $this->xml($msg) . "</Say>\n";
+
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
             . "<Response>\n"
-            . "  <Say voice=\"{$polly}\" language=\"{$lang}\">{$text}</Say>\n"
+            . $line
             . "  <Hangup/>\n"
             . "</Response>";
     }

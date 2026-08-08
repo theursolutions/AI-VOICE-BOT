@@ -25,10 +25,16 @@ class WelcomeAudioService
      * Return a public HTTPS URL Twilio can <Play>, or null if we can't
      * generate one (no voice configured, Python down, etc.). Callers
      * fall back to TwiML <Say> in that case.
+     *
+     * $voice is the voice bound to THIS call (session.voice_id, cloned from
+     * the routed agent). Pass it whenever you have it: without it this falls
+     * back to the project-wide default, which is wrong the moment a number
+     * routes to an agent whose voice isn't the project default — the caller
+     * would hear one voice say hello and a different one answer.
      */
-    public function urlForProject(Project $project, string $welcomeText): ?string
+    public function urlFor(Project $project, string $welcomeText, ?Voice $voice = null, int $timeoutSecs = 60): ?string
     {
-        $voice = $this->resolveDefaultVoice($project);
+        $voice = $voice ?: $this->resolveDefaultVoice($project);
         if (!$voice || empty($voice->reference_url)) {
             Log::info('WelcomeAudioService: no voice for project, falling back to Say', [
                 'project_id' => $project->id,
@@ -61,7 +67,7 @@ class WelcomeAudioService
         }
 
         // Cache miss — synthesize via Python's /tts endpoint.
-        $ok = $this->synthesizeViaPython($welcomeText, $speakerPath, $absPath, $voice->language ?? 'en');
+        $ok = $this->synthesizeViaPython($welcomeText, $speakerPath, $absPath, $voice->language ?? 'en', $timeoutSecs);
         if (!$ok || !is_file($absPath)) {
             return null;
         }
@@ -108,7 +114,7 @@ class WelcomeAudioService
      * later if this becomes a perf concern; for now the upload is fine
      * (it only runs once per (text, voice) combo).
      */
-    private function synthesizeViaPython(string $text, string $speakerPath, string $outPath, string $language): bool
+    private function synthesizeViaPython(string $text, string $speakerPath, string $outPath, string $language, int $timeoutSecs = 60): bool
     {
         $base = rtrim((string) config('services.python.base_url'), '/');
         $url  = $base . '/tts';
@@ -117,7 +123,9 @@ class WelcomeAudioService
         $cfile = new \CURLFile($speakerPath, 'audio/wav', basename($speakerPath));
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
-            CURLOPT_TIMEOUT        => 60,    // welcome synth can be slow on CPU
+            // Caller decides: the welcome can afford to wait (it's generated
+            // once), an in-flow prompt cannot — Twilio abandons a slow webhook.
+            CURLOPT_TIMEOUT        => $timeoutSecs,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_POSTFIELDS     => [
                 'text'        => $text,
@@ -141,10 +149,30 @@ class WelcomeAudioService
         return $written !== false && $written > 0;
     }
 
+    /**
+     * Trim the welcome cache for a project, keeping the newest few.
+     *
+     * This used to delete EVERY file except the one just written. That was
+     * fine when a project had one voice, but a project with several agents
+     * (each with their own cloned voice) then evicted the other agents'
+     * greetings on every call — so each call re-synthesized from scratch.
+     * XTTS on CPU is slow enough that the round-trip can outlast Twilio's
+     * webhook timeout, which is exactly when the caller drops to the Polly
+     * fallback. Keeping a handful of entries costs a few hundred KB.
+     */
+    private const WELCOME_CACHE_KEEP = 8;
+
     private function purgeStaleWelcomes(int $projectId, string $keepFilename): void
     {
         $welcomesDir = $this->welcomesDir();
-        foreach (glob($welcomesDir . DIRECTORY_SEPARATOR . "project_{$projectId}_*.wav") ?: [] as $file) {
+        $files = glob($welcomesDir . DIRECTORY_SEPARATOR . "project_{$projectId}_*.wav") ?: [];
+        if (count($files) <= self::WELCOME_CACHE_KEEP) {
+            return;
+        }
+
+        // Newest first, then drop the tail — never the file we just wrote.
+        usort($files, fn ($a, $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
+        foreach (array_slice($files, self::WELCOME_CACHE_KEEP) as $file) {
             if (basename($file) !== $keepFilename) {
                 @unlink($file);
             }

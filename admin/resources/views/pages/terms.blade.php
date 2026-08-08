@@ -8,7 +8,9 @@
     'pageTitle'       => 'Terms of Service',
     'pageSubtitle'    => 'The agreement between you and ' . $brand . ' — written to be read, not skipped.',
     'pageMeta'        => 'Last updated: ' . $effective,
-    'metaDescription' => 'The terms that govern your use of ' . $brand . '.',
+    'seoTitle'        => 'Terms of Service — ' . $brand,
+    'metaDescription' => 'The agreement between you and ' . $brand . ': what the service covers, your account responsibilities, acceptable use, billing, and how either side can end it.',
+    'breadcrumbs'     => [['name' => 'Terms of Service', 'url' => '/terms']],
 ])
 
 @section('content')

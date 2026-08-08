@@ -4,12 +4,85 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
+    @php
+        // The FAQ is built here, above the <head> include, because the same
+        // array feeds two things that must never drift apart: the visible
+        // <details> list further down the page and the FAQPage structured
+        // data below. Marking up an answer that isn't on the page is exactly
+        // the kind of thing that gets rich results revoked.
+        $faqDefaults = [
+            ['How long does setup actually take?', 'Most teams are live in under five minutes. Connect a data source, pick a voice, drop the chat widget on your site — and your agent starts answering. Connecting a phone number or WhatsApp takes a few minutes more.'],
+            ['Do I need any technical skills or developers?', 'No. Everything — data sources, voices, flows, channels and team access — is configured from a point-and-click dashboard. If you can fill in a form, you can launch an agent.'],
+            ['Where does the agent get its answers?', 'Only from the data you give it: your website, your documents, and your databases. It does not make things up about your business — and you control exactly which data it can see.'],
+            ['Is my customer data safe?', 'Yes. Every workspace is isolated in its own database, you choose which tables and columns the AI may read, and every conversation is logged and exportable. You can also bring your own AI keys or run models locally.'],
+            ['Can it really sound like me?', 'A 10-second sample is enough to clone your voice, or you can pick from 30+ ready-made voices in 13 languages. Different agents can use different voices for sales, support, or billing.'],
+            ['What does it cost, and can I cancel?', 'Start free — no credit card required. Upgrade when you’re ready, cancel anytime, and take your data with you. No long-term contracts, no lock-in.'],
+        ];
+        $faqs = [];
+        foreach ($faqDefaults as $i => $pair) {
+            $faqs[] = [
+                tva_setting('content.faq' . ($i + 1) . '_q', $pair[0]),
+                tva_setting('content.faq' . ($i + 1) . '_a', $pair[1]),
+            ];
+        }
+
+        $brandName = tva_setting('content.brand_name', 'Serve AI');
+
+        $homeJsonLd = [
+            // The product itself. No aggregateRating and no offers: we have
+            // neither published reviews nor a public price list, and inventing
+            // either is a manual-action risk, not a shortcut.
+            [
+                '@type'               => 'SoftwareApplication',
+                '@id'                 => \App\Support\Seo::origin() . '/#software',
+                'name'                => $brandName,
+                'applicationCategory' => 'BusinessApplication',
+                'applicationSubCategory' => 'Customer Relationship Management',
+                'operatingSystem'     => 'Web browser',
+                'url'                 => \App\Support\Seo::origin() . '/',
+                'description'         => tva_setting('content.hero_subtitle', ''),
+                'featureList'         => array_values(array_filter([
+                    tva_setting('content.feat1_title', ''),
+                    tva_setting('content.feat2_title', ''),
+                    tva_setting('content.feat3_title', ''),
+                    tva_setting('content.feat4_title', ''),
+                    tva_setting('content.feat5_title', ''),
+                    tva_setting('content.feat6_title', ''),
+                ])),
+                'publisher'           => ['@id' => \App\Support\Seo::origin() . '/#organization'],
+            ],
+            [
+                '@type'      => 'FAQPage',
+                '@id'        => \App\Support\Seo::canonical('/') . '#faq',
+                'mainEntity' => array_map(fn ($f) => [
+                    '@type'          => 'Question',
+                    'name'           => strip_tags((string) $f[0]),
+                    'acceptedAnswer' => ['@type' => 'Answer', 'text' => strip_tags((string) $f[1])],
+                ], $faqs),
+            ],
+        ];
+    @endphp
+
     {{-- SEO meta, social cards, analytics, structured data — managed in /admin/seo --}}
-    @include('partials.seo-head')
+    @include('partials.seo-head', [
+        'canonicalPath' => '/',
+        'jsonLd'        => $homeJsonLd,
+    ])
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    {{-- Fonts are loaded without blocking the first paint: the stylesheet is
+         fetched at `print` priority and promoted to `all` once it lands. The
+         page already renders in the system-UI fallback (font-family lists it
+         second), so this trades a brief font swap for a faster LCP. --}}
+    <link rel="preload" as="style"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap">
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap">
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap">
+    </noscript>
 
     <style>
         :root {
@@ -778,6 +851,11 @@
         <a href="#platform">Features</a>
         <a href="#cases">Use cases</a>
         <a href="#faq">FAQ</a>
+        {{-- Real pages, not anchors: these are the only crawlable links from
+             the homepage into /security and /about, which otherwise hang off
+             the footer alone. --}}
+        <a href="{{ url('/security') }}">Security</a>
+        <a href="{{ url('/contact') }}">Contact</a>
         {{-- Signed-in visitors get a way back into the app instead of being
              asked to sign in again. /dashboard redirects to the active
              workspace, or to the picker when there's more than one. --}}
@@ -1088,26 +1166,18 @@
         <div class="section__eyebrow reveal">{{ tva_setting('content.faq_eyebrow', 'Questions, answered') }}</div>
         <h2 class="reveal">{{ tva_setting('content.faq_title', 'Everything you’re probably wondering.') }}</h2>
 
-        @php
-            $faqs = [
-                ['How long does setup actually take?', 'Most teams are live in under five minutes. Connect a data source, pick a voice, drop the chat widget on your site — and your agent starts answering. Connecting a phone number or WhatsApp takes a few minutes more.'],
-                ['Do I need any technical skills or developers?', 'No. Everything — data sources, voices, flows, channels and team access — is configured from a point-and-click dashboard. If you can fill in a form, you can launch an agent.'],
-                ['Where does the agent get its answers?', 'Only from the data you give it: your website, your documents, and your databases. It does not make things up about your business — and you control exactly which data it can see.'],
-                ['Is my customer data safe?', 'Yes. Every workspace is isolated in its own database, you choose which tables and columns the AI may read, and every conversation is logged and exportable. You can also bring your own AI keys or run models locally.'],
-                ['Can it really sound like me?', 'A 10-second sample is enough to clone your voice, or you can pick from 30+ ready-made voices in 13 languages. Different agents can use different voices for sales, support, or billing.'],
-                ['What does it cost, and can I cancel?', 'Start free — no credit card required. Upgrade when you’re ready, cancel anytime, and take your data with you. No long-term contracts, no lock-in.'],
-            ];
-        @endphp
+        {{-- $faqs is built at the top of this file, so the FAQPage JSON-LD in
+             the <head> and this visible list are always the same questions. --}}
         <div class="faq">
             @foreach ($faqs as $i => $q)
                 <details class="faq__item reveal" @if($i === 0) open @endif>
                     <summary class="faq__q" data-cursor="explore">
-                        <span>{{ tva_setting('content.faq'.($i+1).'_q', $q[0]) }}</span>
+                        <span>{{ $q[0] }}</span>
                         <span class="faq__chev" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
                     </summary>
-                    <div class="faq__a">{{ tva_setting('content.faq'.($i+1).'_a', $q[1]) }}</div>
+                    <div class="faq__a">{{ $q[1] }}</div>
                 </details>
             @endforeach
         </div>
@@ -1157,11 +1227,18 @@
 @endif
 
 <!-- ── Three.js + GSAP via CDN ────────────────────────────────────── -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+{{-- three.js is ~600 KB and gsap another ~70 KB. Loaded synchronously they
+     hold the main thread for the whole download+parse, which is what shows up
+     as Total Blocking Time / poor INP in Core Web Vitals. `defer` lets them
+     download in parallel with the rest of the page and run in source order
+     just before DOMContentLoaded — so the block below, which now waits for
+     that event, still sees THREE and gsap exactly as it did before. --}}
+<script defer src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 
 <script>
+document.addEventListener('DOMContentLoaded', function () {
 /* ──────────────────────────── Mobile menu ────────────────────────── */
 (function () {
     var nav    = document.getElementById('siteNav');
@@ -1886,6 +1963,7 @@
     }, { threshold: 0.35 });
     sections.forEach(function (s) { io.observe(s); });
 })();
+});  /* end DOMContentLoaded — see the defer note above the CDN scripts */
 </script>
 
 </body>

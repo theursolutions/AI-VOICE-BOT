@@ -4,11 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    @php $brand = tva_setting('content.brand_name', 'Serve AI'); @endphp
-    {{-- SEO meta (with per-page title/description override) --}}
+    @php
+        $brand = tva_setting('content.brand_name', 'Serve AI');
+
+        // $pageTitle carries markup (<span class="accent">…</span>) because it
+        // is also the visible <h1>, and a heading is rarely a good
+        // search-result title. A page passes `seoTitle` to set the <title>
+        // verbatim (brand included); otherwise we fall back to the stripped
+        // heading with the brand appended.
+        $headTitle = isset($seoTitle)
+            ? $seoTitle
+            : trim(strip_tags($pageTitle ?? '') . ' — ' . $brand, ' —');
+    @endphp
+    {{-- SEO meta (with per-page title/description/schema overrides) --}}
     @include('partials.seo-head', [
-        'metaTitle'       => trim(($pageTitle ?? '') . ' — ' . $brand, ' —'),
+        'metaTitle'       => $headTitle,
         'metaDescription' => $metaDescription ?? null,
+        'breadcrumbs'     => $breadcrumbs ?? null,
+        'pageSchemaType'  => $pageSchemaType ?? 'WebPage',
+        'jsonLd'          => $jsonLd ?? [],
     ])
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -132,6 +146,15 @@
         }
         .btn:hover { transform: translateY(-2px); }
         .btn--ghost { background: transparent; border: 1px solid var(--line-hot); color: var(--text); box-shadow: none; }
+
+        /* ── Breadcrumbs ── */
+        .crumbs { padding: 18px 0 0; font-size: 12.5px; color: var(--text-dim2); }
+        .crumbs ol { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; padding: 0; }
+        .crumbs li { display: flex; align-items: center; gap: 8px; }
+        .crumbs a { color: var(--text-dim); }
+        .crumbs a:hover { color: var(--neon-2); text-decoration: underline; text-underline-offset: 2px; }
+        .crumbs [aria-current="page"] { color: var(--text); }
+        .crumbs__sep { color: var(--text-dim2); }
     </style>
     @stack('head')
     @include('partials.sweet-alert')
@@ -145,6 +168,8 @@
     <div class="nav__links">
         <a href="{{ url('/') }}#platform">Features</a>
         <a href="{{ url('/') }}#cases">Use cases</a>
+        <a href="{{ url('/security') }}">Security</a>
+        <a href="{{ url('/about') }}">About</a>
         <a href="{{ url('/contact') }}">Contact</a>
         {{-- Signed in → straight back to the app; /dashboard resolves the
              active workspace (or the picker). Signed out → sign in / sign up. --}}
@@ -156,6 +181,27 @@
         @endauth
     </div>
 </nav>
+
+{{-- Visible breadcrumb trail. Mirrors the BreadcrumbList JSON-LD emitted by
+     partials.seo-head, so the markup and the page never disagree — and gives
+     every inner page a crawlable link back up to the homepage. --}}
+@isset($breadcrumbs)
+<nav class="crumbs wrap" aria-label="Breadcrumb">
+    <ol>
+        <li><a href="{{ url('/') }}">Home</a></li>
+        @foreach ($breadcrumbs as $crumb)
+            <li>
+                <span class="crumbs__sep" aria-hidden="true">/</span>
+                @if ($loop->last)
+                    <span aria-current="page">{{ strip_tags($crumb['name']) }}</span>
+                @else
+                    <a href="{{ url($crumb['url']) }}">{{ strip_tags($crumb['name']) }}</a>
+                @endif
+            </li>
+        @endforeach
+    </ol>
+</nav>
+@endisset
 
 <header class="page-hero">
     <div class="wrap">

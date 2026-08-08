@@ -2,7 +2,7 @@
      Breeze's <x-guest-layout> (plain Tailwind, wrong branding, and the layout
      that was 500ing on a bad @vite entry). Same two-column split, same input
      styling, so the reset flow doesn't look like a different product. --}}
-@extends('layouts.auth')
+@extends('layouts.auth', ['authTitle' => 'Reset your password'])
 @section('content')
 <div class="container sm:px-10">
     <div class="block xl:grid grid-cols-2 gap-4">

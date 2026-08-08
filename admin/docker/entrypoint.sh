@@ -70,6 +70,16 @@ if [ "$ROLE" = "web" ]; then
     exit 1
   fi
   php artisan storage:link --force 2>/dev/null || true
+
+  # SEO: /robots.txt and /sitemap.xml are routes. A static file of either
+  # name left over from an older deploy is served by nginx in preference to
+  # the route, so drop it here and log what crawlers will actually see.
+  # Non-fatal: a wrong sitemap must never stop the app from serving.
+  php artisan seo:publish || true
+
+  # Regenerate the Open Graph share card so it carries this deployment's
+  # brand name, tagline and domain. Skipped silently if GD is missing.
+  php artisan seo:og-image >/dev/null 2>&1 || true
 fi
 
 # --- Make runtime state owned by www-data -----------------------------------

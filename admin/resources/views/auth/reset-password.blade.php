@@ -3,7 +3,7 @@
      than Breeze's <x-guest-layout>, which is plain Tailwind with different
      branding — landing on it from a Serve AI email looked like a different
      product mid-flow. --}}
-@extends('layouts.auth')
+@extends('layouts.auth', ['authTitle' => 'Choose a new password'])
 @section('content')
 <div class="container sm:px-10">
     <div class="block xl:grid grid-cols-2 gap-4">

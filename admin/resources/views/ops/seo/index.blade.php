@@ -136,7 +136,13 @@
             <div class="flex-1">
                 <div class="seo-statcard__label">robots.txt</div>
                 <div class="seo-statcard__val"><a href="{{ $files['robots']['url'] }}" target="_blank">{{ $files['robots']['url'] }}</a></div>
-                <div class="seo-statcard__sub">{{ $files['robots']['exists'] ? 'Updated '.$files['robots']['modified'] : 'Default file' }}</div>
+                <div class="seo-statcard__sub">
+                    @if ($files['robots']['shadowed'])
+                        <span style="color:#f87171;">⚠ A static public/robots.txt is overriding the live version — press Save to remove it.</span>
+                    @else
+                        Generated live from these settings
+                    @endif
+                </div>
             </div>
         </div>
         <div class="seo-statcard">
@@ -144,14 +150,20 @@
             <div class="flex-1">
                 <div class="seo-statcard__label">sitemap.xml</div>
                 <div class="seo-statcard__val"><a href="{{ $files['sitemap']['url'] }}" target="_blank">{{ $files['sitemap']['url'] }}</a></div>
-                <div class="seo-statcard__sub">{{ $files['sitemap']['exists'] ? 'Generated '.$files['sitemap']['modified'] : 'Not generated yet — Save to create' }}</div>
+                <div class="seo-statcard__sub">
+                    @if ($files['sitemap']['shadowed'])
+                        <span style="color:#f87171;">⚠ A static public/sitemap.xml is overriding the live version — press Save to remove it.</span>
+                    @else
+                        Generated live · only indexable URLs
+                    @endif
+                </div>
             </div>
         </div>
         <div class="seo-statcard">
             <div class="seo-statcard__ic">📡</div>
             <div class="flex-1">
                 <div class="seo-statcard__label">Submit to engines</div>
-                <div class="seo-statcard__sub" style="margin-bottom:8px;">Regenerate &amp; ping Google + Bing with your sitemap.</div>
+                <div class="seo-statcard__sub" style="margin-bottom:8px;">Ping Google + Bing. Both retired these endpoints — the real path is submitting the sitemap once in Search Console.</div>
                 <form method="POST" action="{{ route('ops.seo.ping') }}">
                     @csrf
                     <button type="submit" class="btn btn-primary btn-sm"><i data-lucide="send" class="w-3 h-3 inline -mt-0.5 mr-1"></i> Submit sitemap</button>
@@ -355,7 +367,7 @@
                     <div class="seo-card">
                         <div class="seo-card__head">
                             <div class="seo-card__title">🗺️ XML sitemap</div>
-                            <div class="seo-card__sub">List the URLs you want indexed. Use absolute URLs or root-relative paths (e.g. <code>/pricing</code>). Generated to <code>/sitemap.xml</code> on save.</div>
+                            <div class="seo-card__sub">List the URLs you want indexed. Use absolute URLs or root-relative paths (e.g. <code>/pricing</code>). Served live at <code>/sitemap.xml</code>. Entries that are on the noindex list, or that no longer resolve to a page, are dropped automatically.</div>
                         </div>
                         <div class="seo-sm-row" style="font-size:11px;color:#94a3b8;text-transform:uppercase;letter-spacing:.04em;font-weight:700;">
                             <div>URL / path</div><div>Change freq</div><div>Priority</div><div></div>

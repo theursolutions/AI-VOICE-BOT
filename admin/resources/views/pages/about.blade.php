@@ -5,7 +5,10 @@
     'pageEyebrow'     => 'About us',
     'pageTitle'       => 'Every business deserves an assistant that <span class="accent">never sleeps.</span>',
     'pageSubtitle'    => 'We built ' . $brand . ' so a missed call or a slow reply never costs you another customer.',
-    'metaDescription' => 'About ' . $brand . ' — our mission to give every business an AI receptionist and CRM that works around the clock.',
+    'seoTitle'        => 'About ' . $brand . ' — the AI receptionist that never sleeps',
+    'metaDescription' => 'Why we built ' . $brand . ': an AI receptionist and CRM that answers every call, chat and message for small businesses — 24/7, in your own voice.',
+    'pageSchemaType'  => 'AboutPage',
+    'breadcrumbs'     => [['name' => 'About', 'url' => '/about']],
 ])
 
 @section('content')

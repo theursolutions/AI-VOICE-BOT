@@ -16,6 +16,12 @@ class Kernel extends HttpKernel
     protected $middleware = [
         // \App\Http\Middleware\TrustHosts::class,
         \App\Http\Middleware\TrustProxies::class,
+        // One URL per page: 301 /about/ → /about before anything else runs.
+        // nginx (production) does not do this for us the way Apache's
+        // .htaccess does locally, so both spellings returned 200 in prod.
+        \App\Http\Middleware\RedirectTrailingSlash::class,
+        // noindex header on the authenticated app (see the class docblock).
+        \App\Http\Middleware\NoIndexPrivateAreas::class,
         \Illuminate\Http\Middleware\HandleCors::class,
         \App\Http\Middleware\PreventRequestsDuringMaintenance::class,
         \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,

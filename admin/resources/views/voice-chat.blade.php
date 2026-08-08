@@ -1,7 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <title>Voice Bot</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {{-- Internal recording harness, not a page for searchers: keep it out of
+         the index (crawlable, so the tag is actually read). --}}
+    <meta name="robots" content="noindex, nofollow">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 </head>

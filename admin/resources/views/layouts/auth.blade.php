@@ -6,13 +6,18 @@
     <meta charset="utf-8">
     <link href="{{serveai_icon()}}" rel="shortcut icon">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Midone admin is super flexible, powerful, clean & modern responsive tailwind admin template with unlimited possibilities.">
-    <meta name="keywords" content="admin template, Midone Admin Template, dashboard template, flat admin template, responsive admin template, web app">
-    <meta name="author" content="LEFT4CODE">
+    {{-- Sign-in / sign-up screens are not search results: they are thin,
+         duplicated across every SaaS, and a searcher who lands on one has
+         been sent to the wrong place. noindex, follow — crawlable so the
+         tag is read, and so the links back into the site still count. --}}
+    <meta name="robots" content="noindex, follow">
+    <meta name="description" content="Sign in to your {{ tva_setting('content.brand_name', 'Serve AI') }} workspace.">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {{-- Same source as layouts/head.blade.php so the tab title is consistent
-         everywhere and doesn't depend on APP_NAME being set correctly in .env. --}}
-    <title>{{ tva_setting('content.brand_name', 'Serve AI') }}</title>
+         everywhere and doesn't depend on APP_NAME being set correctly in .env.
+         The vendor template's own description/keywords/author tags used to sit
+         here and were being served on /login and /register verbatim. --}}
+    <title>{{ ($authTitle ?? '') !== '' ? $authTitle . ' — ' : '' }}{{ tva_setting('content.brand_name', 'Serve AI') }}</title>
     <link rel="stylesheet" href="{{url('/assets/dist/css/app.css')}}" />
 
     {{-- ── Mobile fixes for the Midone auth shell ──────────────────────────

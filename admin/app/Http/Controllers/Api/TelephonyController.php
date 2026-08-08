@@ -123,6 +123,18 @@ class TelephonyController extends Controller
             'update_at'        => $now,
         ]);
 
+        // Pick the BotAgent for this call BEFORE any branch below can
+        // return. Sets session.agent_id, session.skill_id and — the part
+        // that matters here — session.voice_id, cloned from the agent.
+        //
+        // This used to run only on the Media-Stream path, *after* the Flow
+        // branch had already returned. A number routed to a Conversation
+        // Flow therefore kept voice_id = null for the whole call, so every
+        // later step (including the transfer-to-AI hand-off) fell back to a
+        // stock voice instead of the caller's cloned one.
+        $this->router->assignToSession($project, $session);
+        $session->refresh();
+
         // If this number is bound to a saved Flow, hand the call to the
         // FlowRunner instead of opening a Media Stream right away. The
         // flow walks the graph (IVR menus, Say nodes, etc.) and only
@@ -151,14 +163,6 @@ class TelephonyController extends Controller
             ]);
         }
 
-        // Pick the BotAgent that should handle this call based on the
-        // per-number routing config (or fall back to project default).
-        // Sets session.agent_id, session.skill_id (if skill-routed),
-        // and session.voice_id (cloned from the agent), so the JWT
-        // minter picks up the right cloned voice.
-        $this->router->assignToSession($project, $session);
-        $session->refresh();
-
         $token = $this->tokens->mint($session);
 
         // Twilio Media Streams require wss:// URLs. Build the WS URL
@@ -185,7 +189,12 @@ class TelephonyController extends Controller
         // welcome-text or voice change. If anything goes wrong it
         // returns null and we fall back to Polly so the call still
         // works.
-        $welcomeAudioUrl = $this->welcome->urlForProject($project, $welcomeText);
+        // Pass the voice bound to THIS session (cloned from the routed agent)
+        // so the greeting is in the same voice that answers afterwards. Without
+        // it the service silently used the project default and the caller heard
+        // two different voices in one call.
+        $callVoice = $session->voice_id ? \App\Models\Voice::find($session->voice_id) : null;
+        $welcomeAudioUrl = $this->welcome->urlFor($project, $welcomeText, $callVoice);
 
         $tokenXml = htmlspecialchars($token, ENT_XML1);
 

@@ -21,6 +21,16 @@ Route::post('/api/demo-call', [App\Http\Controllers\PublicLandingController::cla
 Route::post('/api/contact', [App\Http\Controllers\PublicContactController::class, 'store'])
     ->name('contact.store');
 
+// ── Crawler files (always live — never a stale file on disk) ────────────
+// GET /robots.txt and /sitemap.xml are generated from the SEO settings on
+// every request (cached an hour). See App\Http\Controllers\SeoFilesController
+// for why these are routes and not static files in public/.
+Route::get('/robots.txt', [App\Http\Controllers\SeoFilesController::class, 'robots'])->name('seo.robots');
+Route::get('/sitemap.xml', [App\Http\Controllers\SeoFilesController::class, 'sitemap'])->name('seo.sitemap');
+Route::get('/sitemap-{n}.xml', [App\Http\Controllers\SeoFilesController::class, 'sitemapChunk'])
+    ->where('n', '[0-9]+')
+    ->name('seo.sitemap.chunk');
+
 // ── Public marketing + legal pages (footer links) ───────────────────────
 Route::view('/about',          'pages.about')->name('about');
 Route::view('/contact',        'pages.contact')->name('contact');

@@ -50,10 +50,15 @@ class TelephonyWebController extends Controller
         foreach ($projects as $p) {
             $this->tenants->useFor($p);
             $perProject[$p->id] = [
-                'agents' => BotAgent::where('project_id', $p->id)
+                // `voice` is eager-loaded so the number modal can show WHICH
+                // cloned voice each agent answers in. Without it the only
+                // voice control on this screen was the Polly fallback, which
+                // reads as "telephony has no cloned-voice setting at all".
+                'agents' => BotAgent::with('voice:id,name')
+                    ->where('project_id', $p->id)
                     ->where('status', BotAgent::STATUS_ACTIVE)
                     ->orderBy('name')
-                    ->get(['id', 'name']),
+                    ->get(['id', 'name', 'voice_id']),
                 'skills' => Skill::where('project_id', $p->id)
                     ->where('status', Skill::STATUS_ACTIVE)
                     ->orderBy('name')

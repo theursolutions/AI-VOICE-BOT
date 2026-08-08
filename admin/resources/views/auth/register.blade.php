@@ -1,4 +1,4 @@
-@extends('layouts.auth')
+@extends('layouts.auth', ['authTitle' => 'Create your account'])
 
 @section('content')
  <div class="container sm:px-10">
