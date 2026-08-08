@@ -80,6 +80,22 @@
         </div>
     @endif
 
+    {{-- Upload failures land here. Without this block the page rendered only
+         session('success'), so a rejected file (wrong format, too large) or a
+         server-side write failure produced NO feedback at all — the form just
+         reappeared and the voice never showed up. --}}
+    @if ($errors->any())
+        <div class="alert alert-danger-soft show mb-4 flex items-start">
+            <i data-lucide="alert-triangle" class="w-4 h-4 mr-2 mt-0.5 flex-shrink-0"></i>
+            <div>
+                <div class="font-medium">Couldn't save that voice.</div>
+                @foreach ($errors->all() as $e)
+                    <div class="text-xs mt-1">{{ $e }}</div>
+                @endforeach
+            </div>
+        </div>
+    @endif
+
     <div class="intro-y box p-3 mb-5">
         <form method="GET">
             <label class="tva-form-label">Project</label>

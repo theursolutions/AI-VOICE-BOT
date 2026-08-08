@@ -80,6 +80,10 @@ if [ "$ROLE" = "web" ]; then
   # Regenerate the Open Graph share card so it carries this deployment's
   # brand name, tagline and domain. Skipped silently if GD is missing.
   php artisan seo:og-image >/dev/null 2>&1 || true
+
+  # Display-sized brand icons. The 850x887 source is 257 KB and was being
+  # served for the 28 px nav mark; these variants are ~5 KB / ~1 KB.
+  php artisan brand:icons >/dev/null 2>&1 || true
 fi
 
 # --- Make runtime state owned by www-data -----------------------------------

@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -94,7 +95,49 @@ class VoiceWebController extends Controller
         // store it as .wav — Coqui's audio loader handles common formats
         // via soundfile/torchaudio, so this is mostly cosmetic. For
         // best results users should upload mono 24kHz wav.
-        $upload->move(dirname($absPath), basename($absPath));
+        //
+        // This move is the step that fails when the speakers dir isn't
+        // writable (the classic symptom of the storage-permission bug). It
+        // used to be unguarded: the exception escaped AFTER the row was
+        // created, leaving a voice stuck at `training` with a null
+        // reference_url — visible on this page, silently unusable
+        // everywhere else. Now a failure cleans up and says so.
+        try {
+            $upload->move(dirname($absPath), basename($absPath));
+        } catch (\Throwable $e) {
+            Log::error('VoiceWebController: speaker upload failed to move', [
+                'project_id' => $project->id,
+                'voice_id'   => $voice->id,
+                'dest'       => $absPath,
+                'writable'   => is_writable(dirname($absPath)),
+                'err'        => $e->getMessage(),
+            ]);
+
+            // Don't leave a half-created voice behind for the user to trip over.
+            $voice->forceDelete();
+
+            return back()
+                ->withInput()
+                ->withErrors(['speaker' => 'Could not save the audio file — the voice was not created. '
+                    . 'The speakers directory is not writable on the server ('
+                    . dirname($absPath) . '). Check permissions and try again.']);
+        }
+
+        // Guard against a "successful" move that wrote nothing (full disk,
+        // silently-failing mount). A zero-byte speaker clones no voice.
+        if (!is_file($absPath) || filesize($absPath) < 1024) {
+            Log::error('VoiceWebController: speaker file missing or too small after move', [
+                'project_id' => $project->id, 'voice_id' => $voice->id,
+                'path' => $absPath, 'size' => @filesize($absPath),
+            ]);
+            @unlink($absPath);
+            $voice->forceDelete();
+
+            return back()
+                ->withInput()
+                ->withErrors(['speaker' => 'The uploaded audio did not save correctly on the server. '
+                    . 'The voice was not created — please try again.']);
+        }
 
         $voice->reference_url = $absPath;
         $voice->status = 'ready';

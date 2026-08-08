@@ -45,8 +45,14 @@ class BotAgentWebController extends Controller
                 ->where('status', 'active')
                 ->orderBy('name')
                 ->get();
+            // Every voice, not just `ready` ones. The old `where('status','ready')`
+            // meant a voice whose upload failed (left at `training` with a null
+            // reference_url) vanished from this dropdown while still showing on
+            // the Voices page — so the picker looked empty apart from the
+            // "project default" placeholder and there was no clue why. The modal
+            // renders unusable ones disabled, with their status, so the reason is
+            // visible instead of silent.
             $voices = Voice::where('project_id', $project->id)
-                ->where('status', 'ready')
                 ->orderBy('name')
                 ->get();
         }
