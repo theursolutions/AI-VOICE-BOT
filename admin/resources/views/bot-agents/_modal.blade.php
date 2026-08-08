@@ -53,14 +53,37 @@
             <div class="js-ai" style="{{ $atype==='human' ? 'display:none' : '' }}">
                 <div class="mb-3">
                     <label class="form-label">Voice</label>
+                    @php
+                        $currentVoiceId = old('voice_id', $agent->voice_id ?? null);
+                        $notReady = $voices->filter(fn ($v) => $v->status !== 'ready');
+                    @endphp
                     <select name="voice_id" class="form-select">
                         <option value="">— project default —</option>
                         @foreach ($voices as $v)
-                            <option value="{{ $v->id }}" @selected(($agent->voice_id ?? null) == $v->id)>
-                                {{ $v->name }} ({{ $v->language }})
+                            @php
+                                $usable = $v->status === 'ready' && !empty($v->reference_url);
+                                $isCurrent = (string) $currentVoiceId === (string) $v->id;
+                            @endphp
+                            {{-- Never disable the option that's already saved: a disabled
+                                 <option> isn't submitted, so doing so would silently clear
+                                 the agent's voice the next time anyone saved this form. --}}
+                            <option value="{{ $v->id }}"
+                                    @selected($isCurrent)
+                                    @disabled(!$usable && !$isCurrent)>
+                                {{ $v->name }} ({{ $v->language }})@unless ($usable) — {{ $v->status }}, not usable yet @endunless
                             </option>
                         @endforeach
                     </select>
+                    @if ($notReady->isNotEmpty())
+                        <small class="text-xs mt-1 block" style="color:#b45309;">
+                            <i data-lucide="alert-triangle" class="w-3 h-3 inline -mt-0.5"></i>
+                            {{ $notReady->count() }} voice(s) can't be used yet — a clone stays
+                            <code>training</code> when its audio upload didn't land.
+                            Re-upload it on the
+                            <a href="{{ route('voices.index', ['client' => $client->slug]) }}?project_id={{ hashid($projectId) }}" class="text-primary">Voices</a>
+                            page.
+                        </small>
+                    @endif
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Persona / system prompt</label>

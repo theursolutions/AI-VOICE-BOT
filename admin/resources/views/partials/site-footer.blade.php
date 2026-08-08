@@ -29,7 +29,12 @@
             {{-- Brand + tagline + social --}}
             <div class="site-footer__brandcol">
                 <a href="{{ url('/') }}" class="site-footer__brand">
-                    <img class="site-footer__mark" src="{{ serveai_icon() }}" alt="{{ $brand }} logo" width="28" height="28">{{ $brand }}
+                    @php $footIconWebp = serveai_icon_sized(64, 'webp'); @endphp
+                    <picture>
+                        @if ($footIconWebp)<source srcset="{{ $footIconWebp }}" type="image/webp">@endif
+                        <img class="site-footer__mark" src="{{ serveai_icon_sized(64) }}" alt="{{ $brand }} logo"
+                             width="28" height="28" loading="lazy" decoding="async">
+                    </picture>{{ $brand }}
                 </a>
                 <p class="site-footer__tagline">{{ $tagline }}</p>
 
@@ -60,7 +65,7 @@
             {{-- Link columns --}}
             <div class="site-footer__links">
                 <div class="site-footer__col">
-                    <h4>Product</h4>
+                    <h3>Product</h3>
                     <a href="{{ url('/') }}#platform">Features</a>
                     <a href="{{ url('/') }}#channels">Channels</a>
                     <a href="{{ url('/') }}#cases">Who it's for</a>
@@ -73,7 +78,7 @@
                     @endauth
                 </div>
                 <div class="site-footer__col">
-                    <h4>Company</h4>
+                    <h3>Company</h3>
                     <a href="{{ url('/about') }}">About us</a>
                     <a href="{{ url('/contact') }}">Contact</a>
                     {{-- Signed in → back into the app; no point offering a
@@ -86,14 +91,14 @@
                     @endauth
                 </div>
                 <div class="site-footer__col">
-                    <h4>Legal</h4>
+                    <h3>Legal</h3>
                     <a href="{{ url('/privacy') }}">Privacy Policy</a>
                     <a href="{{ url('/terms') }}">Terms of Service</a>
                     <a href="{{ url('/refund-policy') }}">Refund Policy</a>
                     <a href="{{ url('/cookies') }}">Cookie Policy</a>
                 </div>
                 <div class="site-footer__col site-footer__col--contact">
-                    <h4>Get in touch</h4>
+                    <h3>Get in touch</h3>
                     @if ($phone)
                         <a href="{{ $telHref }}" class="site-footer__contact">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.86 19.86 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
@@ -176,7 +181,7 @@
         display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px;
     }
     .site-footer__col { display: flex; flex-direction: column; gap: 12px; }
-    .site-footer__col h4 {
+    .site-footer__col h3 {
         margin: 0 0 4px; font-size: 12px; font-weight: 700;
         text-transform: uppercase; letter-spacing: .12em;
         color: var(--text, #e6edf3);

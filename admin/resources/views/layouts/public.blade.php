@@ -39,8 +39,12 @@
             --line-hot:  rgba(59, 130, 246, .35);
             --text:      #e6edf3;
             --text-dim:  #8b96a8;
-            --text-dim2: #5a6478;
+            --text-dim2: #727e93;
             --neon:      #3b82f6;
+            /* Button fill only. White on --neon is 3.68:1 (AA needs 4.5);
+               this is 5.17:1. --neon stays as-is for text/glow, where it
+               already passes at 5.51:1 on the dark background. */
+            --neon-btn:  #2563eb;
             --neon-2:    #60a5fa;
             --radius:    14px;
         }
@@ -73,7 +77,7 @@
         .nav__links { margin-left: auto; display: flex; gap: 22px; font-size: 13px; color: var(--text-dim); align-items: center; }
         .nav__links a:hover { color: var(--text); }
         .nav__cta {
-            background: var(--neon); color: #fff; padding: 7px 14px; border-radius: 999px;
+            background: var(--neon-btn); color: #fff; padding: 7px 14px; border-radius: 999px;
             font-weight: 600; font-size: 13px; box-shadow: 0 0 22px rgba(59, 130, 246, .45);
             transition: transform .15s, box-shadow .15s;
         }
@@ -141,7 +145,7 @@
         .page-cta p { color: var(--text-dim); margin: 0 auto 22px; max-width: 460px; }
         .btn {
             display: inline-flex; align-items: center; gap: 8px;
-            background: var(--neon); color: #fff; padding: 13px 24px; border-radius: 12px;
+            background: var(--neon-btn); color: #fff; padding: 13px 24px; border-radius: 12px;
             font-weight: 700; box-shadow: 0 0 32px rgba(59,130,246,.45); transition: transform .15s;
         }
         .btn:hover { transform: translateY(-2px); }
@@ -163,7 +167,12 @@
 
 <nav class="nav">
     <a href="{{ url('/') }}" class="nav__brand">
-        <img class="nav__brand-mark" src="{{ serveai_icon() }}" alt="{{ $brand }} logo" width="30" height="30">{{ $brand }}
+        @php $navIconWebp = serveai_icon_sized(64, 'webp'); @endphp
+        <picture>
+            @if ($navIconWebp)<source srcset="{{ $navIconWebp }}" type="image/webp">@endif
+            <img class="nav__brand-mark" src="{{ serveai_icon_sized(64) }}" alt="{{ $brand }} logo"
+                 width="30" height="30" fetchpriority="high" decoding="async">
+        </picture>{{ $brand }}
     </a>
     <div class="nav__links">
         <a href="{{ url('/') }}#platform">Features</a>

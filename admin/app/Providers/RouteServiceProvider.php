@@ -33,6 +33,11 @@ class RouteServiceProvider extends ServiceProvider
                 ->prefix('api')
                 ->group(base_path('routes/api.php'));
 
+            // Deliberately NO middleware group: /robots.txt and /sitemap.xml
+            // need no session, cookies or CSRF, and a Set-Cookie header on
+            // them makes the responses uncacheable by any shared cache.
+            Route::group([], base_path('routes/crawler.php'));
+
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
         });

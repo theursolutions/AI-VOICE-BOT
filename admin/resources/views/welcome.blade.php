@@ -94,8 +94,12 @@
             --line-hot:  rgba(59, 130, 246, .35);
             --text:      #e6edf3;
             --text-dim:  #8b96a8;
-            --text-dim2: #5a6478;
+            --text-dim2: #727e93;
             --neon:      #3b82f6;
+            /* Button fill only. White on --neon is 3.68:1 (AA needs 4.5);
+               this is 5.17:1. --neon stays as-is for text/glow, where it
+               already passes at 5.51:1 on the dark background. */
+            --neon-btn:  #2563eb;
             --neon-2:    #60a5fa;
             --hot:       #ff5e87;
             --warn:      #ffcb6b;
@@ -140,7 +144,7 @@
         .nav__links { margin-left: auto; display: flex; gap: 22px; font-size: 13px; color: var(--text-dim); }
         .nav__links a:hover { color: var(--text); }
         .nav__cta {
-            background: var(--neon); color: #ffffff; padding: 7px 14px;
+            background: var(--neon-btn); color: #ffffff; padding: 7px 14px;
             border-radius: 999px; font-weight: 600; font-size: 13px;
             box-shadow: 0 0 22px rgba(59, 130, 246, .45);
             transition: transform .15s ease, box-shadow .15s ease;
@@ -276,7 +280,7 @@
         }
         .callbar input::placeholder { color: var(--text-dim2); }
         .callbar button {
-            background: var(--neon); color: #ffffff; border: none;
+            background: var(--neon-btn); color: #ffffff; border: none;
             padding: 10px 18px; border-radius: 10px;
             font-weight: 700; font-size: 14px; cursor: pointer;
             white-space: nowrap;
@@ -428,7 +432,7 @@
             display:flex; align-items:center; justify-content:center;
             font-size:14px;
         }
-        .mock-call__btn--ans { background:var(--neon); color:#ffffff; }
+        .mock-call__btn--ans { background:var(--neon-btn); color:#ffffff; }
         .mock-call__btn--rej { background:rgba(255,94,135,.18); color:var(--hot); border:1px solid rgba(255,94,135,.4); }
 
         /* Mockup: live transcript */
@@ -539,7 +543,7 @@
         .cta p { color: var(--text-dim); margin: 0 auto 30px; max-width: 480px; font-size: 16px; }
         .cta a.btn {
             display: inline-flex; align-items: center; gap: 8px;
-            background: var(--neon); color: #ffffff;
+            background: var(--neon-btn); color: #ffffff;
             padding: 14px 26px; border-radius: 12px; font-weight: 700;
             box-shadow: 0 0 32px rgba(59,130,246,.5);
         }
@@ -606,7 +610,7 @@
         .tva-launcher-floating {
             position: fixed; bottom: 22px; right: 22px; z-index: 60;
             width: 60px; height: 60px; border-radius: 50%;
-            background: var(--neon); color: #ffffff;
+            background: var(--neon-btn); color: #ffffff;
             display: flex; align-items: center; justify-content: center;
             cursor: pointer; box-shadow: 0 0 40px rgba(59,130,246,.5);
             transition: transform .2s;
@@ -838,7 +842,15 @@
 <!-- ── Top nav ─────────────────────────────────────────────────────── -->
 <nav class="nav" id="siteNav">
     <div class="nav__brand">
-        <img class="nav__brand-mark" src="{{ serveai_icon() }}" alt="{{ tva_setting('content.brand_name', 'Serve AI') }} logo" width="28" height="28">
+        {{-- 64 px variants (2× for this 28 px slot) instead of the 850×887,
+             257 KB source file — see `php artisan brand:icons`. --}}
+        @php $navIconWebp = serveai_icon_sized(64, 'webp'); @endphp
+        <picture>
+            @if ($navIconWebp)<source srcset="{{ $navIconWebp }}" type="image/webp">@endif
+            <img class="nav__brand-mark" src="{{ serveai_icon_sized(64) }}"
+                 alt="{{ tva_setting('content.brand_name', 'Serve AI') }} logo"
+                 width="28" height="28" fetchpriority="high" decoding="async">
+        </picture>
         {{ tva_setting('content.brand_name', 'Serve AI') }}
     </div>
     <button type="button" class="nav__toggle" id="navToggle"
@@ -869,6 +881,11 @@
         <a href="{{ url('/register') }}" class="nav__cta" data-cursor="open">Get started free</a>
     @endauth
 </nav>
+
+{{-- <main> landmark: lets screen-reader and keyboard users skip the nav
+     straight to the content. The page had none — every other public page
+     gets one from layouts.public. --}}
+<main id="content">
 
 <!-- ── HERO ────────────────────────────────────────────────────────── -->
 <section class="hero">
@@ -1195,6 +1212,8 @@
     </div>
 </section>
 
+</main>
+
 @include('partials.site-footer')
 
 <!-- ── Webchat widget (real production embed via loader.js) ───────── -->
@@ -1227,18 +1246,28 @@
 @endif
 
 <!-- ── Three.js + GSAP via CDN ────────────────────────────────────── -->
-{{-- three.js is ~600 KB and gsap another ~70 KB. Loaded synchronously they
-     hold the main thread for the whole download+parse, which is what shows up
-     as Total Blocking Time / poor INP in Core Web Vitals. `defer` lets them
-     download in parallel with the rest of the page and run in source order
-     just before DOMContentLoaded — so the block below, which now waits for
-     that event, still sees THREE and gsap exactly as it did before. --}}
-<script defer src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+{{-- gsap + ScrollTrigger (~46 KB transferred) drive the scroll reveals on
+     every device, so they load here — deferred, so they download in parallel
+     with parsing and run in order just before DOMContentLoaded.
+
+     three.js is NOT loaded here. It is ~617 KB to parse and compile, and the
+     WebGL scenes it powers are already skipped on phones and for
+     prefers-reduced-motion — so on exactly the devices Lighthouse measures,
+     the whole library was downloaded, parsed and never used. It is now
+     fetched from the block below only when something will actually render
+     with it. --}}
 <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+
+/* Registry for the WebGL scenes. They are declared like any other block
+   below but, instead of running immediately, wait until three.js has
+   actually arrived — see the loader at the very bottom of this file. */
+var WEBGL_INITS = [];
+var WANTS_WEBGL = !window.matchMedia('(max-width: 720px)').matches
+               && !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* ──────────────────────────── Mobile menu ────────────────────────── */
 (function () {
     var nav    = document.getElementById('siteNav');
@@ -1322,14 +1351,10 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 
 /* ───────────────────────────── Three.js hero orb ───────────────── */
-(function () {
-    // Skip the WebGL scene on phones / low-power devices — the
-    // CSS-only glow blob + status ring + starfield are enough atmosphere
-    // and we save ~600 KB of JS execution.
-    var isPhone = window.matchMedia('(max-width: 720px)').matches;
-    var prefersReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (isPhone || prefersReduce) return;
-    if (typeof THREE === 'undefined') return;
+WEBGL_INITS.push(function () {
+    // Phones / reduced-motion never get here: WANTS_WEBGL gates whether
+    // three.js is fetched at all, so this scene simply never runs there.
+    // The CSS-only glow blob + status ring + starfield carry the atmosphere.
     var mount = document.getElementById('heroScene');
     if (!mount) return;
 
@@ -1391,7 +1416,7 @@ document.addEventListener('DOMContentLoaded', function () {
         camera.aspect = nw / nh; camera.updateProjectionMatrix();
         renderer.setSize(nw, nh);
     });
-})();
+});
 
 /* ─────────────────────────── Reveal on scroll ───────────────────── */
 (function () {
@@ -1608,12 +1633,7 @@ document.addEventListener('DOMContentLoaded', function () {
 })();
 
 /* ─────────────────── Extra 3D mini-scenes (Three.js) ───────────── */
-(function () {
-    if (typeof THREE === 'undefined') return;
-    var isPhone = window.matchMedia('(max-width: 720px)').matches;
-    var reduce  = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    if (isPhone || reduce) return;
-
+WEBGL_INITS.push(function () {
     // Tiny helper — build a transparent scene that fits an element.
     function spawnScene(mountId, builder) {
         var mount = document.getElementById(mountId);
@@ -1674,7 +1694,7 @@ document.addEventListener('DOMContentLoaded', function () {
         scene.add(crys);
         return { update: function () { crys.rotation.x += 0.007; crys.rotation.z += 0.004; } };
     });
-})();
+});
 
 /* ───────────────────── Scroll parallax for sections ────────────── */
 (function () {
@@ -1963,7 +1983,35 @@ document.addEventListener('DOMContentLoaded', function () {
     }, { threshold: 0.35 });
     sections.forEach(function (s) { io.observe(s); });
 })();
-});  /* end DOMContentLoaded — see the defer note above the CDN scripts */
+
+/* ──────────────── three.js: fetched only if it will be used ──────────────
+   Phones and reduced-motion visitors never download it. Everyone else gets
+   it after first paint (requestIdleCallback, or a short timeout as a
+   fallback) so the 617 KB parse+compile lands off the critical path instead
+   of inside it. If the request fails, the page is simply missing its
+   decorative geometry — nothing functional depends on it. */
+(function () {
+    if (!WANTS_WEBGL || !WEBGL_INITS.length) return;
+
+    function load() {
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js';
+        s.async = true;
+        s.onload = function () {
+            WEBGL_INITS.forEach(function (init) {
+                try { init(); } catch (e) { /* one broken scene must not kill the rest */ }
+            });
+        };
+        document.head.appendChild(s);
+    }
+
+    if ('requestIdleCallback' in window) {
+        requestIdleCallback(load, { timeout: 2500 });
+    } else {
+        setTimeout(load, 1200);
+    }
+})();
+});  /* end DOMContentLoaded — see the note above the CDN scripts */
 </script>
 
 </body>

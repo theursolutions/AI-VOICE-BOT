@@ -62,8 +62,10 @@
         ]
     ))));
 
-    $faviconHref = !empty($seo['favicon_url']) ? $seo['favicon_url'] : serveai_icon();
-    $appleHref   = !empty($seo['apple_touch_icon']) ? $seo['apple_touch_icon'] : $faviconHref;
+    // Sized variants, not the 850×887 source: a browser downloads the
+    // favicon on every first visit, and iOS wants exactly 180×180.
+    $faviconHref = !empty($seo['favicon_url']) ? $seo['favicon_url'] : serveai_icon_sized(64);
+    $appleHref   = !empty($seo['apple_touch_icon']) ? $seo['apple_touch_icon'] : serveai_icon_sized(180);
     $siteName    = $seo['og_site_name'] ?: ($seo['org_name'] ?? 'Serve AI');
 @endphp
 <title>{{ $pageTitle }}</title>
