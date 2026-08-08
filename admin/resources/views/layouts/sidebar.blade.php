@@ -89,6 +89,42 @@
         </li>
         @endif
 
+        {{-- ── Email-verification gate ─────────────────────────────────────────
+             Everything below stays VISIBLE but veiled until the user verifies
+             their email, so they can see what they're unlocking. Dashboard and
+             Ask AI above remain usable so the account isn't a dead end.
+
+             This is presentation only — the real enforcement is server-side
+             (EnsureEmailVerified middleware). A blurred link is still a link,
+             so pointer-events:none here is convenience, not security. --}}
+        @php $tvaVerified = !Auth::check() || Auth::user()->hasVerifiedEmail(); @endphp
+        @unless ($tvaVerified)
+        <style>
+            .tva-lock { position:relative; }
+            .tva-lock__items { filter:blur(3px); opacity:.40; pointer-events:none; user-select:none; }
+            .tva-lock__veil {
+                position:absolute; inset:0; z-index:5;
+                display:flex; flex-direction:column; align-items:center; justify-content:center;
+                gap:10px; text-align:center; padding:18px; text-decoration:none;
+            }
+            .tva-lock__veil:hover .tva-lock__cta { text-decoration:underline; }
+            .tva-lock__icon {
+                width:44px; height:44px; border-radius:50%;
+                display:flex; align-items:center; justify-content:center;
+                background:rgba(239,68,68,.14); border:1px solid rgba(239,68,68,.45);
+                color:#ef4444; flex-shrink:0;
+            }
+            .tva-lock__cta { color:#fecaca; font-size:11.5px; line-height:1.45; font-weight:500; max-width:170px; }
+        </style>
+        <div class="tva-lock">
+            <a class="tva-lock__veil" href="{{ route('verification.notice') }}"
+               title="Verify your email to unlock these features">
+                <span class="tva-lock__icon"><i data-lucide="lock" class="w-5 h-5"></i></span>
+                <span class="tva-lock__cta">Verify your email to unlock the amazing features</span>
+            </a>
+            <div class="tva-lock__items">
+        @endunless
+
         {{-- Live Compute (was "Compute Mesh") — directly after Ask AI --}}
         @if($can('compute'))
         <li>
@@ -342,5 +378,10 @@
             </ul>
         </li>
         @endif
+
+        @unless ($tvaVerified)
+            </div>{{-- .tva-lock__items --}}
+        </div>{{-- .tva-lock --}}
+        @endunless
     </ul>
 </nav>
