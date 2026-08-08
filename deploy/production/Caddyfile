@@ -48,6 +48,20 @@
 	}
 }
 
+# ── www → apex ──────────────────────────────────────────────────────────────
+# One hostname for the site, permanently. Without this, a link written as
+# www.serveai.com.pk either fails to resolve (today) or — once the DNS record
+# exists — serves a second copy of the site that Google treats as a separate
+# property, splitting the ranking signals between them.
+#
+# ORDER MATTERS: deploy this block BEFORE adding the `www` DNS record. Caddy
+# only requests a certificate for hostnames it has a site block for, so a www
+# record pointing here with no block gives visitors a TLS error.
+www.{$APP_DOMAIN} {
+	import security_headers
+	redir https://{$APP_DOMAIN}{uri} permanent
+}
+
 # ── App domain: admin UI + API (and, optionally, the monitoring UIs) ─────────
 {$APP_DOMAIN} {
 	encode zstd gzip

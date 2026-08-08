@@ -256,6 +256,13 @@ return [
         'case5_icon' => '🧰', 'case5_title' => 'Services & trades',        'case5_body' => 'Captures job details from every caller, gives quotes from your price list, and makes sure no lead slips away while you’re on a job.',
         'case6_icon' => '📈', 'case6_title' => 'Agencies & B2B',           'case6_body' => 'Qualifies leads around the clock, books demos straight into your calendar, and hands sales a CRM full of ready-to-call prospects.',
 
+        // ── Testimonials ─────────────────────────────────────────────
+        // Only the section heading lives here. The quotes themselves are
+        // rows in the `testimonials` table, managed at /admin/testimonials.
+        'testimonials_eyebrow' => 'Loved by the people answering the phone',
+        'testimonials_title'   => 'Real teams. Real calls. Real revenue saved.',
+        'testimonials_lead'    => 'Owners, managers and front-desk teams who stopped losing customers to a ringing phone and an empty inbox.',
+
         // ── Final CTA ────────────────────────────────────────────────
         'cta_title'         => 'Ready to never miss a lead again?',
         'cta_subtitle'      => "Spin up your agent in 90 seconds. Cancel anytime. We won't sleep on a single call.",
@@ -266,7 +273,21 @@ return [
         'footer_tagline'    => 'The AI receptionist and CRM that answers every call, chat and message — 24/7, in your own voice.',
         'contact_phone'     => '+92 349 149 4383',
         'contact_email'     => 'info@serveai.com.pk',
-        'contact_address'   => 'Arfa Software Technology Park, Lahore, Pakistan',
+        // Displayed in the footer, on /contact and /privacy, and in emails.
+        // MUST match the Google Business Profile listing character-for-character:
+        // Google cross-checks the two, and an inconsistent name/address/phone is
+        // the most common reason a local listing underperforms.
+        'contact_address'   => 'Daftarkhwan | Vogue, Vogue Towers, MM Alam Rd, Block C2, Gulberg III, Lahore 54000, Pakistan',
+
+        // Split form, used only for the PostalAddress structured data. Keeping
+        // these separate stops "Lahore" appearing twice (once inside
+        // streetAddress, once as addressLocality), which is what happens when
+        // the whole display string is dropped into streetAddress.
+        'contact_street'      => 'Daftarkhwan | Vogue, Vogue Towers, MM Alam Rd, Block C2, Gulberg III',
+        'contact_city'        => 'Lahore',
+        'contact_region'      => 'Punjab',
+        'contact_postal_code' => '54000',
+        'contact_country'     => 'PK',
         'social_twitter'    => '',   // full URL, e.g. https://x.com/serveai
         'social_linkedin'   => '',
         'social_facebook'   => '',

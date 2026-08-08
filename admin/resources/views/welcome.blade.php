@@ -588,6 +588,129 @@
         .sec-link { color: var(--neon-2); font-weight: 600; font-size: 14px; }
         .sec-link:hover { color: var(--neon); }
 
+        /* ─── Testimonials marquee ───────────────────────────────────── */
+        /* Two rows drift in opposite directions, forever. The seam is hidden
+           by rendering the same cards TWICE inside the track and translating
+           exactly -50%: at that point frame 1 and the loop point are pixel
+           identical. The inter-card gap lives on `.tm-group` as `gap` plus a
+           matching `padding-right`, so the space between the last card of one
+           copy and the first card of the next is the same as everywhere else —
+           putting the gap on the track instead is what leaves a visible jump
+           of half a gap every cycle. */
+        .tm-rating {
+            display: inline-flex; align-items: center; gap: 12px;
+            background: var(--panel-2); border: 1px solid var(--line);
+            border-radius: 999px; padding: 8px 18px 8px 14px; margin-bottom: 34px;
+        }
+        .tm-rating__score {
+            font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700;
+            color: var(--warn); line-height: 1;
+        }
+        .tm-rating__text { font-size: 12.5px; color: var(--text-dim); }
+        .tm-stars { display: inline-flex; gap: 2px; }
+        .tm-stars svg { width: 14px; height: 14px; }
+        .tm-stars .on  { fill: var(--warn); color: var(--warn); }
+        .tm-stars .off { fill: none; color: rgba(255, 203, 107, .3); }
+
+        .tm-rows { display: flex; flex-direction: column; gap: 18px; }
+
+        .tm-marquee {
+            position: relative; overflow: hidden;
+            /* Cards dissolve into the page background at both edges instead of
+               being chopped off by the viewport. */
+            -webkit-mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+                    mask-image: linear-gradient(90deg, transparent, #000 7%, #000 93%, transparent);
+        }
+        .tm-track {
+            display: flex; width: max-content;
+            animation: tmScroll var(--tm-dur, 60s) linear infinite;
+            will-change: transform;
+        }
+        .tm-marquee--rev .tm-track { animation-direction: reverse; }
+        /* Reading a moving quote is hopeless — pointing at a card freezes its
+           row exactly where it is, and moving off resumes from that same
+           point. `animation-play-state` (rather than re-triggering the
+           animation) is what makes the resume seamless instead of a jump back
+           to the start. `is-paused` is set by the pointer script below;
+           `:focus-within` covers keyboard users. */
+        .tm-marquee.is-paused .tm-track,
+        .tm-marquee:focus-within .tm-track { animation-play-state: paused; }
+        /* Same behaviour without JS. Kept as its own rule because one
+           unsupported selector invalidates an entire comma-separated list,
+           which would take the two above down with it on older browsers. */
+        .tm-marquee:has(.tm-card:hover) .tm-track { animation-play-state: paused; }
+        @keyframes tmScroll {
+            from { transform: translate3d(0, 0, 0); }
+            to   { transform: translate3d(-50%, 0, 0); }
+        }
+        .tm-group { display: flex; gap: 18px; padding-right: 18px; }
+
+        .tm-card {
+            position: relative; flex: 0 0 auto; width: 372px;
+            display: flex; flex-direction: column; gap: 14px;
+            background: linear-gradient(158deg, rgba(59, 130, 246, .09), rgba(15, 21, 35, .92) 55%);
+            border: 1px solid var(--line); border-radius: 18px;
+            padding: 26px 26px 22px;
+            transition: border-color .3s, transform .3s, box-shadow .3s;
+        }
+        /* Oversized opening quote, bled into the corner. */
+        .tm-card::before {
+            content: '\201C';
+            position: absolute; top: -14px; right: 18px;
+            font-family: Georgia, 'Times New Roman', serif;
+            font-size: 92px; line-height: 1; color: rgba(59, 130, 246, .16);
+            pointer-events: none; user-select: none;
+        }
+        /* Gradient hairline along the top edge, lit on hover. */
+        .tm-card::after {
+            content: ''; position: absolute; inset: -1px auto auto 0; height: 1px; width: 100%;
+            background: linear-gradient(90deg, transparent, var(--neon-2), transparent);
+            opacity: 0; transition: opacity .3s;
+        }
+        .tm-card:hover {
+            border-color: var(--line-hot); transform: translateY(-4px);
+            box-shadow: 0 26px 60px -28px rgba(59, 130, 246, .55);
+        }
+        .tm-card:hover::after { opacity: .85; }
+
+        .tm-card__quote {
+            font-size: 14.5px; line-height: 1.62; color: var(--text);
+            margin: 0; position: relative; z-index: 1;
+        }
+        .tm-card__foot { display: flex; align-items: center; gap: 12px; margin-top: auto; padding-top: 4px; min-width: 0; }
+        .tm-card__foot > span:last-child { min-width: 0; }
+        .tm-av {
+            width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; object-fit: cover;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 800; color: #fff; letter-spacing: .02em;
+            /* --tm-h is set per card from a hash of the name, so every person
+               keeps the same colour on every page load. */
+            background: linear-gradient(140deg, hsl(var(--tm-h, 217) 85% 58%), hsl(calc(var(--tm-h, 217) + 34) 80% 44%));
+            box-shadow: 0 0 0 1px rgba(255, 255, 255, .12), 0 6px 18px -8px hsl(var(--tm-h, 217) 85% 50%);
+        }
+        .tm-card__name { display: block; font-size: 14px; font-weight: 700; color: var(--text); line-height: 1.3; }
+        .tm-card__role { display: block; font-size: 12px; color: var(--text-dim); line-height: 1.4; }
+
+        @media (max-width: 560px) {
+            .tm-card { width: min(84vw, 320px); padding: 22px 22px 18px; }
+            .tm-card__quote { font-size: 13.5px; }
+        }
+
+        /* Motion-sensitive visitors get a plain swipeable strip: the animation
+           is off, so the duplicate copy is hidden (it would just be the same
+           six quotes twice) and the row becomes scrollable by hand. */
+        @media (prefers-reduced-motion: reduce) {
+            .tm-track { animation: none; }
+            .tm-track > .tm-group + .tm-group { display: none; }
+            .tm-marquee {
+                overflow-x: auto; scroll-snap-type: x mandatory;
+                -webkit-mask-image: none; mask-image: none;
+                padding-bottom: 6px;
+            }
+            .tm-card { scroll-snap-align: center; }
+            .tm-card:hover { transform: none; }
+        }
+
         /* ─── FAQ accordion ──────────────────────────────────────────── */
         .faq { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; }
         .faq__item {
@@ -862,6 +985,7 @@
         <a href="#channels">Channels</a>
         <a href="#platform">Features</a>
         <a href="#cases">Use cases</a>
+        <a href="#testimonials">Reviews</a>
         <a href="#faq">FAQ</a>
         {{-- Real pages, not anchors: these are the only crawlable links from
              the homepage into /security and /about, which otherwise hang off
@@ -1128,6 +1252,122 @@
         </div>
     </div>
 </section>
+
+<!-- ── TESTIMONIALS ───────────────────────────────────────────────── -->
+@php
+    // Rows come from the `testimonials` table (super-admin CRUD at
+    // /admin/testimonials); the heading around them is ordinary content.*
+    // copy. forSite() swallows a missing table so a homepage never 500s on
+    // an un-migrated deploy — it just renders without this section.
+    $tms = \App\Models\Testimonial::forSite();
+
+    if ($tms->isNotEmpty()) {
+        $tmAvg = round($tms->avg('rating'), 1);
+
+        // Two counter-scrolling rows read as a wall of proof; with only a
+        // handful of quotes a second row would be visibly the same cards
+        // again, so stay on one.
+        $tmRows = $tms->count() >= 4
+            ? [$tms->filter(fn ($v, $k) => $k % 2 === 0)->values(),
+               $tms->filter(fn ($v, $k) => $k % 2 === 1)->values()]
+            : [$tms];
+
+        // Each row is repeated until it is wide enough to cover a desktop
+        // viewport — otherwise the loop point lands mid-screen and the
+        // "endless" belt shows its seam.
+        $tmRows = array_map(function ($row) {
+            $cards = collect();
+            while ($cards->count() < 6) {
+                $cards = $cards->concat($row);
+            }
+            return $cards;
+        }, $tmRows);
+    }
+@endphp
+
+@if ($tms->isNotEmpty())
+<section class="section" id="testimonials">
+    <div class="wrap">
+        <div class="section__eyebrow reveal">{{ tva_setting('content.testimonials_eyebrow', 'Loved by the people answering the phone') }}</div>
+        <h2 class="reveal">{{ tva_setting('content.testimonials_title', 'Real teams. Real calls. Real revenue saved.') }}</h2>
+        <p class="lead reveal" style="margin-bottom: 26px;">{{ tva_setting('content.testimonials_lead', 'Owners, managers and front-desk teams who stopped losing customers to a ringing phone and an empty inbox.') }}</p>
+
+        <div class="tm-rating reveal">
+            <span class="tm-rating__score">{{ number_format($tmAvg, 1) }}</span>
+            <span class="tm-stars" aria-hidden="true">
+                @for ($s = 1; $s <= 5; $s++)
+                    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" class="{{ $s <= round($tmAvg) ? 'on' : 'off' }}">
+                        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                    </svg>
+                @endfor
+            </span>
+            <span class="tm-rating__text">
+                average from {{ $tms->count() }} {{ \Illuminate\Support\Str::plural('customer', $tms->count()) }}
+            </span>
+        </div>
+
+        <div class="tm-rows reveal">
+            @foreach ($tmRows as $ri => $row)
+                @php
+                    // Constant apparent speed regardless of how many cards the
+                    // operator has added: seconds scale with card count.
+                    $tmDur = max(30, $row->count() * 7);
+                @endphp
+                <div class="tm-marquee {{ $ri % 2 ? 'tm-marquee--rev' : '' }}"
+                     role="region" aria-label="Customer testimonials{{ count($tmRows) > 1 ? ', row ' . ($ri + 1) : '' }}">
+                    <div class="tm-track" style="--tm-dur: {{ $tmDur }}s;">
+                        {{-- Copy 1 is the real content; copy 2 exists only so the
+                             translate(-50%) loop is seamless, and is hidden from
+                             assistive tech so the quotes aren't announced twice. --}}
+                        @for ($copy = 0; $copy < 2; $copy++)
+                            <div class="tm-group" @if ($copy) aria-hidden="true" @endif>
+                                @foreach ($row as $t)
+                                    @php
+                                        // Stable per-person avatar hue in the blue→violet
+                                        // band, so it never fights the page accent.
+                                        $tmHue = 200 + (crc32((string) $t->name) % 62);
+
+                                        // The card supplies the quote marks. An operator who
+                                        // pasted a quote that was already wrapped in them
+                                        // would otherwise get a doubled pair.
+                                        $tmQuote = trim((string) $t->quote);
+                                        if (preg_match('/^[“"](.+)[”"]$/su', $tmQuote, $m)) {
+                                            $tmQuote = trim($m[1]);
+                                        }
+                                    @endphp
+                                    <figure class="tm-card" data-cursor="explore">
+                                        <span class="tm-stars" aria-hidden="true">
+                                            @for ($s = 1; $s <= 5; $s++)
+                                                <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" class="{{ $s <= $t->rating ? 'on' : 'off' }}">
+                                                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                                                </svg>
+                                            @endfor
+                                        </span>
+                                        <blockquote class="tm-card__quote">“{{ $tmQuote }}”</blockquote>
+                                        <figcaption class="tm-card__foot">
+                                            @if ($t->avatar_url)
+                                                <img class="tm-av" src="{{ $t->avatar_url }}" alt="" loading="lazy" decoding="async" width="42" height="42">
+                                            @else
+                                                <span class="tm-av" style="--tm-h: {{ $tmHue }};" aria-hidden="true">{{ $t->initials }}</span>
+                                            @endif
+                                            <span>
+                                                <span class="tm-card__name">{{ $t->name }}</span>
+                                                @if ($t->attribution)
+                                                    <span class="tm-card__role">{{ $t->attribution }}</span>
+                                                @endif
+                                            </span>
+                                        </figcaption>
+                                    </figure>
+                                @endforeach
+                            </div>
+                        @endfor
+                    </div>
+                </div>
+            @endforeach
+        </div>
+    </div>
+</section>
+@endif
 
 <!-- ── SECURITY & CONTROL ─────────────────────────────────────────── -->
 <section class="section" id="security">
@@ -1430,6 +1670,34 @@ WEBGL_INITS.push(function () {
             opacity: 1, y: 0, duration: 0.9, ease: 'power3.out',
             scrollTrigger: { trigger: el, start: 'top 88%', toggleActions: 'play none none reverse' },
         });
+    });
+})();
+
+/* ───────────────── Testimonials: hover a card, row halts ────────── */
+(function () {
+    var rows = document.querySelectorAll('.tm-marquee');
+    if (!rows.length) return;
+
+    rows.forEach(function (row) {
+        // Delegated on the row, so the pause survives the cards sliding out
+        // from under the cursor and the duplicated copies alike.
+        row.addEventListener('pointerover', function (e) {
+            if (e.target.closest('.tm-card')) row.classList.add('is-paused');
+        });
+        row.addEventListener('pointerout', function (e) {
+            // relatedTarget is where the pointer went; still inside a card
+            // means this is just a hop between child elements.
+            var to = e.relatedTarget;
+            if (to && to.closest && to.closest('.tm-card') && row.contains(to)) return;
+            row.classList.remove('is-paused');
+        });
+        // A touch "hover" never ends on its own — release resumes the belt.
+        row.addEventListener('pointercancel', function () { row.classList.remove('is-paused'); });
+        row.addEventListener('pointerup', function (e) {
+            if (e.pointerType !== 'mouse') row.classList.remove('is-paused');
+        });
+        // Leaving the page mid-hover would otherwise freeze the row for good.
+        row.addEventListener('pointerleave', function () { row.classList.remove('is-paused'); });
     });
 })();
 

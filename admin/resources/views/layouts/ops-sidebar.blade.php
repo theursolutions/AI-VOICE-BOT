@@ -118,6 +118,12 @@
                 <div class="side-menu__title">Page Content</div>
             </a>
         </li>
+        <li>
+            <a href="{{ route('ops.testimonials.index') }}" class="side-menu {{ $is('ops.testimonials.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="quote"></i></div>
+                <div class="side-menu__title">Testimonials</div>
+            </a>
+        </li>
 
         <li class="side-nav__devider my-4"></li>
         <li>

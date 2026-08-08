@@ -102,6 +102,12 @@ class SiteContentController extends Controller
                 $t('case5_icon', 'Case 5 — icon'), $t('case5_title', 'Case 5 — title'), $a('case5_body', 'Case 5 — body'),
                 $t('case6_icon', 'Case 6 — icon'), $t('case6_title', 'Case 6 — title'), $a('case6_body', 'Case 6 — body'),
             ]],
+            // Heading only — the quotes are rows, edited at /admin/testimonials.
+            'Testimonials' => ['icon' => '💬', 'fields' => [
+                $t('testimonials_eyebrow', 'Eyebrow'),
+                $t('testimonials_title', 'Heading'),
+                $a('testimonials_lead', 'Lead paragraph'),
+            ]],
             'Security & Control' => ['icon' => '🔒', 'fields' => [
                 $t('security_eyebrow', 'Eyebrow'),
                 $t('security_title', 'Heading'),

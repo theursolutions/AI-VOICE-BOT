@@ -102,8 +102,14 @@
         <button type="button" onclick="openConnect('instagram')" class="btn text-white" style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);">
             <i data-lucide="instagram" class="w-4 h-4 mr-2 inline"></i> Connect Instagram
         </button>
-        <button type="button" onclick="openConnect('whatsapp')" class="btn text-white" style="background:#25d366;">
+        <button type="button" onclick="connectWhatsApp()" class="btn text-white" style="background:#25d366;">
             <i data-lucide="message-circle" class="w-4 h-4 mr-2 inline"></i> Connect WhatsApp
+        </button>
+        {{-- The customer's WhatsApp lives on their phone, not the machine
+             they administer from. Scanning hands the flow to the device that
+             can actually complete it. --}}
+        <button type="button" onclick="openHandoff('whatsapp')" class="btn btn-secondary" title="Finish on your phone by scanning a QR code">
+            <i data-lucide="qr-code" class="w-4 h-4 mr-1 inline"></i> Scan with phone
         </button>
         <button type="button" class="btn btn-secondary" data-tva-modal-open="channel-create">
             <i data-lucide="plus" class="w-4 h-4 mr-1 inline"></i> Connect channel
@@ -206,12 +212,34 @@
                     @elseif ($log->status === 'failed') <span class="text-danger">{{ $log->error }}</span>
                     @else In progress… @endif
                 </span>
+                @if ($log->isRetry())
+                    <span class="tva-ch-chip" title="Attempt number">#{{ $log->attempt }}</span>
+                @endif
                 <span class="text-[11px] text-slate-400">{{ $log->created_at?->diffForHumans() }}</span>
                 <button type="button" class="btn btn-sm btn-secondary" data-tva-modal-open="channel-log-{{ $log->id }}">
                     <i data-lucide="file-text" class="w-3.5 h-3.5 mr-1 inline"></i> View log
                 </button>
                 @if ($log->status === 'failed')
-                    <button type="button" onclick="openConnect('{{ $retryKey[$log->provider] ?? 'facebook' }}')" class="btn btn-sm btn-primary">Retry</button>
+                    @if ($log->canReplay())
+                        {{-- The whole point of storing the payload: Meta already
+                             authorised us, so this replays our side only. --}}
+                        <form method="POST" action="{{ route('channels.onboarding.retry', ['client' => $client->slug, 'log' => $log->id]) }}" class="inline">
+                            @csrf
+                            <input type="hidden" name="project_id" value="{{ $projectId }}">
+                            <button type="submit" class="btn btn-sm btn-primary" title="Uses the authorisation Meta already gave us — no sign-in needed">
+                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5 mr-1 inline"></i> Retry
+                            </button>
+                        </form>
+                    @else
+                        {{-- Nothing replayable stored (consent was denied, or the
+                             saved credentials lapsed) — this genuinely has to
+                             start at Meta again, and the tooltip says why. --}}
+                        <button type="button" onclick="openConnect('{{ $retryKey[$log->provider] ?? 'facebook' }}')"
+                                class="btn btn-sm btn-secondary"
+                                title="{{ $log->payload?->retryBlockedReason() ?? 'Nothing stored to replay — sign in again.' }}">
+                            <i data-lucide="external-link" class="w-3.5 h-3.5 mr-1 inline"></i> Reconnect
+                        </button>
+                    @endif
                 @endif
             </div>
 
@@ -225,10 +253,37 @@
                         <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
                     </div>
                     <div class="tva-modal__body" style="max-height:62vh; overflow:auto;">
-                        <div class="flex items-center gap-2 mb-3">
+                        <div class="flex items-center gap-2 mb-3 flex-wrap">
                             <span class="tva-ch-chip {{ $sc[$log->status] ?? '' }}" style="{{ $log->status==='started' ? 'background:#fef3c7;color:#92400e;' : '' }}">{{ strtoupper($log->status) }}</span>
+                            {{-- Which entry point was used: the three flows fail in
+                                 different places, so this is the first thing worth
+                                 knowing when reading a failure. --}}
+                            <span class="tva-ch-chip">{{ str_replace('_', ' ', $log->method ?: 'redirect') }}</span>
+                            @if ($log->isRetry())<span class="tva-ch-chip">attempt {{ $log->attempt }}</span>@endif
                             <span class="text-xs text-slate-400">{{ $log->created_at?->format('M j, Y H:i') }}</span>
                         </div>
+
+                        {{-- Plain-language next action, keyed off the failure class
+                             the pipeline recorded — rather than leaving the operator
+                             to interpret a raw Graph error string. --}}
+                        @if ($log->guidance())
+                            <div class="mb-3 p-3 rounded" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; font-size:12.5px;">
+                                <b>What to do:</b> {{ $log->guidance() }}
+                            </div>
+                        @endif
+
+                        @if ($log->payload && $log->status === 'failed')
+                            <div class="mb-3 text-xs" style="color:#475569;">
+                                @if ($log->payload->isRetryable())
+                                    ✅ Meta’s authorisation is saved (until
+                                    {{ $log->payload->expires_at?->format('M j, Y') ?? 'expiry' }}) — Retry replays
+                                    our side only, no sign-in needed. Stopped at
+                                    <b>{{ $log->payload->status }}</b>.
+                                @else
+                                    ⚠️ {{ $log->payload->retryBlockedReason() }}
+                                @endif
+                            </div>
+                        @endif
                         @forelse ((array) $log->steps as $s)
                             <div class="flex items-start gap-3 py-2" style="border-bottom:1px solid #f1f5f9;">
                                 <span style="font-size:15px; line-height:1.2; color:{{ ($s['ok'] ?? false) ? '#16a34a' : '#dc2626' }};">{{ ($s['ok'] ?? false) ? '✓' : '✗' }}</span>
@@ -294,7 +349,7 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">WhatsApp Business Account ID <span class="text-xs text-slate-400">(optional)</span></label>
-                    <input type="text" name="waba_id" maxlength="191" class="form-control" value="{{ old('waba_id') }}" placeholder="WABA id">
+                    <input type="text" name="waba" maxlength="191" class="form-control" value="{{ old('waba') }}" placeholder="WABA id">
                 </div>
                 <div class="mb-1">
                     <label class="form-label">Access token</label>
@@ -309,6 +364,43 @@
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+{{-- ── QR handoff modal ──────────────────────────────────────────────
+     Desktop shows the code; the phone completes the flow. This panel just
+     polls the same onboarding log the phone is writing to, so the operator
+     sees it land without refreshing. --}}
+<div id="channel-handoff" class="tva-modal" hidden>
+    <div class="tva-modal__backdrop" data-tva-modal-close></div>
+    <div class="tva-modal__panel" style="max-width:440px;">
+        <div class="tva-modal__head">
+            <i data-lucide="qr-code" class="w-4 h-4 mr-2 inline" style="color:#25d366;"></i>
+            Finish on your phone
+            <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div class="tva-modal__body" style="text-align:center;">
+            <p class="text-sm text-slate-500" style="margin:0 0 16px;">
+                Scan with your phone camera. Your WhatsApp lives there, so it's the quickest place to finish.
+            </p>
+
+            <div id="handoffQrBox" style="display:inline-block; padding:12px; background:#fff; border:1px solid #e2e8f0; border-radius:14px; min-height:284px; min-width:284px;">
+                <div id="handoffLoading" class="text-xs text-slate-400" style="padding:120px 0;">Generating…</div>
+                <img id="handoffQr" alt="QR code to continue on your phone" width="260" height="260" hidden>
+            </div>
+
+            <div id="handoffState" class="text-sm" style="margin-top:14px; color:#64748b;">
+                Waiting for you to scan…
+            </div>
+
+            <div class="text-xs text-slate-400" style="margin-top:10px;">
+                Expires in <span id="handoffTtl">15:00</span>. Can't scan?
+                <a href="#" id="handoffFallback" style="color:#2563eb;">Continue on this computer instead</a>.
+            </div>
+        </div>
+        <div class="tva-modal__foot">
+            <button type="button" class="btn btn-secondary" data-tva-modal-close>Close</button>
+        </div>
     </div>
 </div>
 
@@ -344,6 +436,166 @@
         var popup = window.open(url, 'metaconnect', 'popup,width=' + w + ',height=' + h + ',left=' + x + ',top=' + y);
         if (!popup) { window.location.href = url; }  // popup blocked → full redirect
     }
+
+    /* ── WhatsApp: Embedded Signup when available, redirect otherwise ─────
+       Embedded Signup is Meta's own popup — the customer never leaves this
+       page and is done in about two minutes. It needs a configuration id
+       from the Meta app (META_WA_CONFIG_ID) and an approved Tech Provider
+       app, so until that exists we fall back to the redirect flow, which
+       needs neither. */
+    var WA_CONFIG_ID = @json((string) config('meta.app.wa_config_id', ''));
+    var META_APP_ID  = @json((string) config('meta.app.id', ''));
+    var ES_POST_URL  = '{{ route('channels.embedded-signup', ['client' => $client->slug]) }}';
+    var CSRF         = '{{ csrf_token() }}';
+
+    function connectWhatsApp() {
+        if (!WA_CONFIG_ID || !META_APP_ID || typeof FB === 'undefined') {
+            return openConnect('whatsapp');       // graceful, not an error
+        }
+        FB.login(function (response) {
+            var code = response && response.authResponse && response.authResponse.code;
+            if (!code) { return; }                // user closed the popup
+
+            var body = new FormData();
+            body.append('_token', CSRF);
+            body.append('project_id', '{{ $projectId }}');
+            body.append('code', code);
+            // Field names deliberately WITHOUT the _id suffix — the
+            // DecodeHashids middleware rewrites any *_id request key to an
+            // integer, which would mangle Meta's numeric string ids.
+            if (window.__waSignup) {
+                body.append('waba', window.__waSignup.waba_id || '');
+                body.append('phone_number', window.__waSignup.phone_number_id || '');
+            }
+
+            fetch(ES_POST_URL, { method: 'POST', body: body, headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (d.ok) { window.location.reload(); }
+                    else { alert(d.message || 'WhatsApp signup failed.'); window.location.reload(); }
+                })
+                .catch(function () { window.location.reload(); });
+        }, {
+            config_id: WA_CONFIG_ID,
+            response_type: 'code',
+            override_default_response_type: true,
+            extras: { setup: {} }
+        });
+    }
+
+    /* Meta posts the chosen WABA + number to the opener via postMessage —
+       it is NOT in the FB.login response, so it has to be captured here and
+       read back above. */
+    window.addEventListener('message', function (event) {
+        if (!/facebook\.com$/.test(new URL(event.origin).hostname)) return;
+        try {
+            var data = JSON.parse(event.data);
+            if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH') {
+                window.__waSignup = data.data || {};
+            }
+        } catch (_) { /* Meta also posts non-JSON chatter; ignore it */ }
+    });
+
+    /* ── QR handoff ─────────────────────────────────────────────────── */
+    var HANDOFF_URL = '{{ url("/c/{$client->slug}/channels/handoff") }}';
+    var handoffTimer = null, handoffTtlTimer = null;
+
+    function openHandoff(provider) {
+        var modal = document.getElementById('channel-handoff');
+        var img   = document.getElementById('handoffQr');
+        var load  = document.getElementById('handoffLoading');
+        var state = document.getElementById('handoffState');
+
+        img.hidden = true; load.hidden = false;
+        state.textContent = 'Waiting for you to scan…';
+        state.style.color = '#64748b';
+        modal.removeAttribute('hidden');
+
+        fetch(HANDOFF_URL + '/' + provider + '?project_id={{ $projectId }}', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d.ok) throw new Error(d.message || 'Could not create the handoff link.');
+                img.src = d.qr; img.hidden = false; load.hidden = true;
+                document.getElementById('handoffFallback').onclick = function (e) {
+                    e.preventDefault(); closeHandoff(); openConnect(provider);
+                };
+                startHandoffPolling(d.log_id);
+                startHandoffTtl(d.expires_in);
+            })
+            .catch(function (e) {
+                load.textContent = e.message || 'Could not generate the QR code.';
+            });
+    }
+
+    function startHandoffPolling(logId) {
+        clearInterval(handoffTimer);
+        var url = HANDOFF_URL + '/' + logId + '/status?project_id={{ $projectId }}';
+        // 3s: fast enough to feel live while the customer is watching, slow
+        // enough not to hammer the app for the full 15-minute window.
+        handoffTimer = setInterval(function () {
+            fetch(url, { headers: { 'Accept': 'application/json' } })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    var state = document.getElementById('handoffState');
+                    if (d.status === 'success') {
+                        clearInterval(handoffTimer); clearInterval(handoffTtlTimer);
+                        state.textContent = '✅ Connected — reloading…';
+                        state.style.color = '#16a34a';
+                        setTimeout(function () { window.location.reload(); }, 900);
+                    } else if (d.status === 'failed') {
+                        clearInterval(handoffTimer); clearInterval(handoffTtlTimer);
+                        state.textContent = '✗ ' + (d.guidance || d.error || 'Onboarding failed.');
+                        state.style.color = '#dc2626';
+                    } else if ((d.steps || []).some(function (s) { return s.step === 'phone_continue'; })) {
+                        state.textContent = '📱 Scanned — finishing on your phone…';
+                        state.style.color = '#2563eb';
+                    }
+                })
+                .catch(function () { /* transient network blip — keep polling */ });
+        }, 3000);
+    }
+
+    function startHandoffTtl(seconds) {
+        clearInterval(handoffTtlTimer);
+        var left = seconds || 900;
+        var el = document.getElementById('handoffTtl');
+        handoffTtlTimer = setInterval(function () {
+            left -= 1;
+            if (left <= 0) {
+                clearInterval(handoffTtlTimer); clearInterval(handoffTimer);
+                document.getElementById('handoffState').textContent = 'This code expired — close and try again.';
+                el.textContent = '0:00';
+                return;
+            }
+            el.textContent = Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0');
+        }, 1000);
+    }
+
+    function closeHandoff() {
+        clearInterval(handoffTimer); clearInterval(handoffTtlTimer);
+        var m = document.getElementById('channel-handoff');
+        if (m) m.setAttribute('hidden', '');
+    }
+    // Stop polling whenever the modal is dismissed, however it was dismissed.
+    document.addEventListener('click', function (e) {
+        if (e.target.closest('#channel-handoff [data-tva-modal-close]')) closeHandoff();
+    });
     @endif
 </script>
+
+@if ($project && config('meta.app.wa_config_id') && config('meta.app.id'))
+{{-- Meta's JS SDK — only loaded when Embedded Signup is actually configured,
+     so an unconfigured install ships no third-party script at all. --}}
+<script async defer crossorigin="anonymous" src="https://connect.facebook.net/en_US/sdk.js"></script>
+<script>
+    window.fbAsyncInit = function () {
+        FB.init({
+            appId: @json((string) config('meta.app.id')),
+            autoLogAppEvents: true,
+            xfbml: false,
+            version: @json((string) config('meta.app.graph_version', 'v21.0')),
+        });
+    };
+</script>
+@endif
 @endsection

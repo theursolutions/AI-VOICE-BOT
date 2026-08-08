@@ -106,6 +106,12 @@
                     <div class="ct-panel {{ $loop->first ? 'is-active' : '' }}" data-panel="{{ $loop->index }}">
                         <div class="ct-card">
                             <div class="ct-card__head"><div class="ct-card__title">{{ $sec['icon'] }} {{ $name }}</div></div>
+                            @if ($name === 'Testimonials')
+                                <div style="font-size:12.5px;color:#64748b;margin:-6px 0 14px;">
+                                    Only the heading is edited here — the quotes themselves are managed in
+                                    <a href="{{ route('ops.testimonials.index') }}" style="color:var(--tva-accent);font-weight:600;">Testimonials</a>.
+                                </div>
+                            @endif
                             <div class="ct-grid2">
                                 @foreach ($sec['fields'] as $f)
                                     @php $isWide = $f['type'] === 'textarea'; @endphp

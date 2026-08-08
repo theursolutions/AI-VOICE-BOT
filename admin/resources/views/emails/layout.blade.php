@@ -17,7 +17,7 @@
     $logo    = $base . '/assets/dist/images/servai-icon-full.png';
     $cEmail  = tva_setting('content.contact_email',   'info@serveai.com.pk');
     $cPhone  = tva_setting('content.contact_phone',   '+92 349 149 4383');
-    $cAddr   = tva_setting('content.contact_address', 'Arfa Software Technology Park, Lahore, Pakistan');
+    $cAddr   = tva_setting('content.contact_address', 'Daftarkhwan | Vogue, Vogue Towers, MM Alam Rd, Block C2, Gulberg III, Lahore 54000, Pakistan');
     $year    = date('Y');
 @endphp
 <!DOCTYPE html>
