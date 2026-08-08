@@ -24,7 +24,8 @@
              {{-- Follow the admin theme: it's dark (html.dark is hard-coded in
                   layouts/master), but auto also handles the light auth pages. --}}
              data-theme="auto"
-             data-size="flexible"></div>
+             data-size="flexible"
+             data-action="turnstile-spin-v2"></div>
 
         @error('cf-turnstile-response')
             <div class="text-danger mt-2 text-xs">{{ $message }}</div>
@@ -33,5 +34,19 @@
 
     @once
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+        <script>
+            // Turnstile tokens are SINGLE-USE: they are redeemed at siteverify and
+            // cannot be replayed. If a submit doesn't navigate away — inline error,
+            // client-side validation, an AJAX post — the DOM still holds the spent
+            // token, and a retry is rejected as `timeout-or-duplicate`. Reset the
+            // widget after every submit so a second attempt gets a fresh token.
+            document.addEventListener('submit', function (e) {
+                if (e.target && e.target.querySelector && e.target.querySelector('.cf-turnstile')) {
+                    setTimeout(function () {
+                        if (window.turnstile) { window.turnstile.reset(); }
+                    }, 0);
+                }
+            }, true);
+        </script>
     @endonce
 @endif
