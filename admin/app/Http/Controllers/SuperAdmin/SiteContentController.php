@@ -29,6 +29,9 @@ class SiteContentController extends Controller
         $t = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'text'];
         $a = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'textarea'];
 
+        // Brand-glyph slugs accepted by the channel icon fields.
+        $icons = implode(' · ', \App\Support\BrandIcons::slugs());
+
         return [
             'Brand' => ['icon' => '🏷️', 'fields' => [
                 $t('brand_name', 'Brand name (nav + footer)'),
@@ -62,12 +65,14 @@ class SiteContentController extends Controller
                 $t('channels_eyebrow', 'Eyebrow'),
                 $t('channels_title', 'Heading'),
                 $a('channels_lead', 'Lead paragraph'),
-                $t('channel1_icon', 'Channel 1 — icon'), $t('channel1_title', 'Channel 1 — title'), $a('channel1_body', 'Channel 1 — body'),
-                $t('channel2_icon', 'Channel 2 — icon'), $t('channel2_title', 'Channel 2 — title'), $a('channel2_body', 'Channel 2 — body'),
-                $t('channel3_icon', 'Channel 3 — icon'), $t('channel3_title', 'Channel 3 — title'), $a('channel3_body', 'Channel 3 — body'),
-                $t('channel4_icon', 'Channel 4 — icon'), $t('channel4_title', 'Channel 4 — title'), $a('channel4_body', 'Channel 4 — body'),
-                $t('channel5_icon', 'Channel 5 — icon'), $t('channel5_title', 'Channel 5 — title'), $a('channel5_body', 'Channel 5 — body'),
-                $t('channel6_icon', 'Channel 6 — icon'), $t('channel6_title', 'Channel 6 — title'), $a('channel6_body', 'Channel 6 — body'),
+                // Channel icons accept a brand slug (rendered as a real logo SVG)
+                // or any emoji, which is printed as typed. See App\Support\BrandIcons.
+                $t('channel1_icon', 'Channel 1 — icon (' . $icons . ', or an emoji)'), $t('channel1_title', 'Channel 1 — title'), $a('channel1_body', 'Channel 1 — body'),
+                $t('channel2_icon', 'Channel 2 — icon (' . $icons . ', or an emoji)'), $t('channel2_title', 'Channel 2 — title'), $a('channel2_body', 'Channel 2 — body'),
+                $t('channel3_icon', 'Channel 3 — icon (' . $icons . ', or an emoji)'), $t('channel3_title', 'Channel 3 — title'), $a('channel3_body', 'Channel 3 — body'),
+                $t('channel4_icon', 'Channel 4 — icon (' . $icons . ', or an emoji)'), $t('channel4_title', 'Channel 4 — title'), $a('channel4_body', 'Channel 4 — body'),
+                $t('channel5_icon', 'Channel 5 — icon (' . $icons . ', or an emoji)'), $t('channel5_title', 'Channel 5 — title'), $a('channel5_body', 'Channel 5 — body'),
+                $t('channel6_icon', 'Channel 6 — icon (' . $icons . ', or an emoji)'), $t('channel6_title', 'Channel 6 — title'), $a('channel6_body', 'Channel 6 — body'),
             ]],
             'Platform Features' => ['icon' => '🧩', 'fields' => [
                 $t('platform_eyebrow', 'Eyebrow'),

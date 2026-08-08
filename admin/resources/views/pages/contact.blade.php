@@ -1,8 +1,8 @@
 @php
     $brand   = tva_setting('content.brand_name', 'Serve AI');
-    $email   = tva_setting('content.contact_email', 'hello@serveai.com');
-    $phone   = tva_setting('content.contact_phone', '');
-    $addr    = tva_setting('content.contact_address', '');
+    $email   = tva_setting('content.contact_email', 'info@serveai.com.pk');
+    $phone   = tva_setting('content.contact_phone', '+92 349 149 4383');
+    $addr    = tva_setting('content.contact_address', 'Arfa Software Technology Park, Lahore, Pakistan');
     $telHref = $phone ? 'tel:' . preg_replace('/[^\d+]/', '', $phone) : '';
     $socials = array_filter([
         'X / Twitter' => tva_setting('content.social_twitter', ''),
@@ -60,6 +60,12 @@
     .cform__msg.is-ok { color: var(--neon-2); }
     .cform__msg.is-err { color: #ff5e87; }
     .cform__hint { font-size: 13px; color: var(--text-dim); margin: 0 0 4px; }
+    /* Honeypot — off-screen rather than display:none, which some bots skip. */
+    .cform__hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+    /* iOS/iPadOS Safari zooms the page when a focused field is under 16px. */
+    @media (max-width: 1024px) {
+        .cform input, .cform textarea { font-size: 16px; }
+    }
 </style>
 @endpush
 
@@ -125,22 +131,33 @@
                 @endif
             </div>
 
-            {{-- Callback form (uses the live demo-call endpoint) --}}
+            {{-- Contact form → POST /api/contact → contact_leads (source=contact_form),
+                 triaged by super-admins at /admin/contacts. --}}
             <div class="contact-card">
-                <h2>Request a callback</h2>
-                <p class="cform__hint">Leave your number and our AI agent will call you in seconds — so you can hear it for yourself.</p>
+                <h2>Send us a message</h2>
+                <p class="cform__hint">Tell us what you need and how to reach you — a real person picks it up.</p>
                 <form id="contactCallForm" class="cform" autocomplete="off">
                     <label for="cf-name">Your name</label>
-                    <input type="text" id="cf-name" name="name" placeholder="Jane Doe">
+                    <input type="text" id="cf-name" name="name" maxlength="120" placeholder="Jane Doe">
 
-                    <label for="cf-phone">Phone number *</label>
-                    <input type="tel" id="cf-phone" name="phone" placeholder="+1 (555) 010-0100" required>
+                    <label for="cf-email">Email</label>
+                    <input type="email" id="cf-email" name="email" maxlength="190" placeholder="jane@company.com">
 
-                    <label for="cf-msg">What can we help with? (optional)</label>
-                    <textarea id="cf-msg" name="message" rows="3" placeholder="Tell us about your business…"></textarea>
+                    <label for="cf-phone">Phone number</label>
+                    <input type="tel" id="cf-phone" name="phone" maxlength="32" placeholder="+92 349 149 4383">
 
-                    <button type="submit">Call me now →</button>
-                    <div id="contactCallMsg" class="cform__msg">No spam. We’ll only use your number to call you back.</div>
+                    <label for="cf-msg">What can we help with?</label>
+                    <textarea id="cf-msg" name="message" rows="3" maxlength="4000" placeholder="Tell us about your business…"></textarea>
+
+                    {{-- Honeypot: hidden from humans, irresistible to bots.
+                         Server-side check lives in PublicContactController. --}}
+                    <div class="cform__hp" aria-hidden="true">
+                        <label for="cf-company-website">Company website</label>
+                        <input type="text" id="cf-company-website" name="company_website" tabindex="-1" autocomplete="off">
+                    </div>
+
+                    <button type="submit">Send message →</button>
+                    <div id="contactCallMsg" class="cform__msg">No spam. We only use your details to reply.</div>
                 </form>
                 <p class="cform__hint" style="margin-top:16px;">Prefer email? Write to <a href="mailto:{{ $email }}" style="color:var(--neon-2);">{{ $email }}</a> and we’ll take it from there.</p>
             </div>
@@ -151,33 +168,73 @@
 
 <script>
 (function () {
-    var f = document.getElementById('contactCallForm');
-    var msg = document.getElementById('contactCallMsg');
+    var f      = document.getElementById('contactCallForm');
+    var msg    = document.getElementById('contactCallMsg');
+    var button = f && f.querySelector('button[type="submit"]');
     if (!f) return;
+
+    function val(name) {
+        var el = f.querySelector('[name="' + name + '"]');
+        return el ? el.value.trim() : '';
+    }
+    function say(text, cls) {
+        msg.textContent = text;
+        msg.className = 'cform__msg' + (cls ? ' ' + cls : '');
+    }
+
     f.addEventListener('submit', function (e) {
         e.preventDefault();
-        var phone = f.querySelector('input[name="phone"]').value.trim();
-        if (!phone) return;
-        msg.textContent = 'Connecting…';
-        msg.className = 'cform__msg';
-        fetch('{{ url('/api/demo-call') }}', {
+
+        var payload = {
+            name:            val('name'),
+            email:           val('email'),
+            phone:           val('phone'),
+            message:         val('message'),
+            company_website: val('company_website')
+        };
+
+        // Mirror the server rule so the common mistake is caught instantly.
+        if (!payload.phone && !payload.email) {
+            say('Give us a phone number or an email address so we can reply.', 'is-err');
+            return;
+        }
+
+        say('Sending…');
+        if (button) { button.disabled = true; }
+
+        fetch('{{ url('/api/contact') }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
                 'X-CSRF-TOKEN': '{{ csrf_token() }}'
             },
-            body: JSON.stringify({ phone: phone })
+            body: JSON.stringify(payload)
         })
-        .then(function (r) { return r.json().catch(function () { return {}; }); })
-        .then(function (body) {
-            msg.textContent = body.message || 'Thanks — we’ll call you shortly.';
-            msg.className = 'cform__msg is-ok';
+        .then(function (r) {
+            return r.json().catch(function () { return {}; })
+                .then(function (body) { return { status: r.status, body: body }; });
+        })
+        .then(function (res) {
+            // 422 carries Laravel's field errors; show the first one rather
+            // than a generic failure the visitor can't act on.
+            if (res.status === 422 && res.body.errors) {
+                var first = Object.keys(res.body.errors)[0];
+                say(res.body.errors[first][0], 'is-err');
+                return;
+            }
+            if (!res.body.ok) {
+                say(res.body.message || 'That didn’t go through. Please email us instead.', 'is-err');
+                return;
+            }
+            say(res.body.message || 'Thanks — we’ll be in touch shortly.', 'is-ok');
             f.reset();
         })
         .catch(function () {
-            msg.textContent = 'Couldn’t reach our servers. Please email us instead.';
-            msg.className = 'cform__msg is-err';
+            say('Couldn’t reach our servers. Please email us instead.', 'is-err');
+        })
+        .finally(function () {
+            if (button) { button.disabled = false; }
         });
     });
 })();

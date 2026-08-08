@@ -1,6 +1,6 @@
 @php
     $brand = tva_setting('content.brand_name', 'Serve AI');
-    $email = tva_setting('content.contact_email', 'hello@serveai.com');
+    $email = tva_setting('content.contact_email', 'info@serveai.com.pk');
 @endphp
 @extends('layouts.public', [
     'pageEyebrow'     => 'Trust',

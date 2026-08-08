@@ -45,11 +45,9 @@ class PublicLandingController extends Controller
             'phone' => 'required|string|min:7|max:32',
         ]);
 
-        // E.164-ish normalisation.
-        $phone = preg_replace('/[^\d+]/', '', $data['phone']);
-        if (!str_starts_with($phone, '+')) {
-            $phone = '+' . ltrim($phone, '0');
-        }
+        // E.164-ish normalisation — shared with the /contact form so the same
+        // visitor doesn't land twice in two different formats.
+        $phone = \App\Support\Phone::e164ish($data['phone']) ?? $data['phone'];
 
         // Append the capture to a JSONL log so we don't lose it even
         // before a real CRM row is created. (Simple, swap to a DB

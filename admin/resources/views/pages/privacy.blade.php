@@ -1,8 +1,8 @@
 @php
     $brand = tva_setting('content.brand_name', 'Serve AI');
-    $email = tva_setting('content.contact_email', 'hello@serveai.com');
-    $phone = tva_setting('content.contact_phone', '');
-    $addr  = tva_setting('content.contact_address', '');
+    $email = tva_setting('content.contact_email', 'info@serveai.com.pk');
+    $phone = tva_setting('content.contact_phone', '+92 349 149 4383');
+    $addr  = tva_setting('content.contact_address', 'Arfa Software Technology Park, Lahore, Pakistan');
     $effective = 'June 28, 2026';
 @endphp
 @extends('layouts.public', [

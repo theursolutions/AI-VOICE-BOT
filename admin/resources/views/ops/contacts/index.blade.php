@@ -29,7 +29,7 @@
             ];
         @endphp
         @foreach ($pills as $key => [$label, $n, $color])
-            <a href="{{ route('ops.contacts.index', array_filter(['status' => $key, 'q' => $search])) }}"
+            <a href="{{ route('ops.contacts.index', array_filter(['status' => $key, 'source' => $source, 'q' => $search])) }}"
                style="display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;text-decoration:none;
                       border:1px solid {{ $status === $key ? $color : '#e2e8f0' }};
                       background:{{ $status === $key ? $color : '#fff' }};color:{{ $status === $key ? '#fff' : '#475569' }};font-size:13px;font-weight:600;">
@@ -44,8 +44,19 @@
             <input type="hidden" name="status" value="{{ $status }}">
             <input type="text" name="q" value="{{ $search }}" placeholder="Search phone, name, email, message…"
                    style="min-width:260px;">
+            @if (count($sources) > 1)
+                <select name="source" onchange="this.form.submit()"
+                        style="font-size:13px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:7px;background:#fff;color:#334155;">
+                    <option value="">All sources</option>
+                    @foreach ($sources as $s)
+                        <option value="{{ $s }}" @selected($source === $s)>{{ $s }}</option>
+                    @endforeach
+                </select>
+            @else
+                <input type="hidden" name="source" value="{{ $source }}">
+            @endif
             <button type="submit" class="btn btn-primary btn-sm">Search</button>
-            @if ($search !== '')
+            @if ($search !== '' || $source !== '')
                 <a href="{{ route('ops.contacts.index', array_filter(['status' => $status])) }}" class="btn btn-secondary btn-sm">Clear</a>
             @endif
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($contacts->total()) }} contact(s)</div>

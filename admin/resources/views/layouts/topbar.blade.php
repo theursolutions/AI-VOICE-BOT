@@ -140,90 +140,136 @@
     <!-- BEGIN: Search -->
     <div class="intro-x relative mr-3 sm:mr-6">
         <div class="search hidden sm:block">
-            <input type="text" class="search__input form-control border-transparent" placeholder="Search...">
-            <i data-lucide="search" class="search__icon dark:text-slate-500"></i> 
+            <input id="tva-search" type="text" autocomplete="off"
+                   class="search__input form-control border-transparent" placeholder="Search pages…">
+            <i data-lucide="search" class="search__icon dark:text-slate-500"></i>
         </div>
-        <a class="notification sm:hidden" href=""> <i data-lucide="search" class="notification__icon dark:text-slate-500"></i> </a>
-        <div class="search-result">
+        <a class="notification sm:hidden" href="javascript:;"> <i data-lucide="search" class="notification__icon dark:text-slate-500"></i> </a>
+
+        {{-- Live page search. Replaces the template's hard-coded demo results
+             ("Mail Settings", stock-photo users, sample products) which linked
+             nowhere and implied features that don't exist.
+
+             The index is built at runtime from the RENDERED SIDEBAR, so it is
+             correct by construction: it can only ever offer pages this user's
+             role actually put in the menu. No endpoint, no query, and no way
+             for it to leak a page the user can't reach. --}}
+        <div class="search-result" id="tva-search-result">
             <div class="search-result__content">
                 <div class="search-result__content__title">Pages</div>
-                <div class="mb-5">
-                    <a href="" class="flex items-center">
-                        <div class="w-8 h-8 bg-success/20 dark:bg-success/10 text-success flex items-center justify-center rounded-full"> <i class="w-4 h-4" data-lucide="inbox"></i> </div>
-                        <div class="ml-3">Mail Settings</div>
-                    </a>
-                    <a href="" class="flex items-center mt-2">
-                        <div class="w-8 h-8 bg-pending/10 text-pending flex items-center justify-center rounded-full"> <i class="w-4 h-4" data-lucide="users"></i> </div>
-                        <div class="ml-3">Users & Permissions</div>
-                    </a>
-                    <a href="" class="flex items-center mt-2">
-                        <div class="w-8 h-8 bg-primary/10 dark:bg-primary/20 text-primary/80 flex items-center justify-center rounded-full"> <i class="w-4 h-4" data-lucide="credit-card"></i> </div>
-                        <div class="ml-3">Transactions Report</div>
-                    </a>
-                </div>
-                <div class="search-result__content__title">Users</div>
-                <div class="mb-5">
-                    <a href="" class="flex items-center mt-2">
-                        <div class="w-8 h-8 image-fit">
-                            <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-6.jpg')}}">
-                        </div>
-                        <div class="ml-3">Robert De Niro</div>
-                        <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">robertdeniro@left4code.com</div>
-                    </a>
-                    <a href="" class="flex items-center mt-2">
-                        <div class="w-8 h-8 image-fit">
-                            <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-12.jpg')}}">
-                        </div>
-                        <div class="ml-3">Robert De Niro</div>
-                        <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">robertdeniro@left4code.com</div>
-                    </a>
-                    <a href="" class="flex items-center mt-2">
-                        <div class="w-8 h-8 image-fit">
-                            <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-10.jpg')}}">
-                        </div>
-                        <div class="ml-3">John Travolta</div>
-                        <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">johntravolta@left4code.com</div>
-                    </a>
-                    <a href="" class="flex items-center mt-2">
-                        <div class="w-8 h-8 image-fit">
-                            <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/profile-10.jpg')}}">
-                        </div>
-                        <div class="ml-3">Kevin Spacey</div>
-                        <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">kevinspacey@left4code.com</div>
-                    </a>
-                </div>
-                <div class="search-result__content__title">Products</div>
-                <a href="" class="flex items-center mt-2">
-                    <div class="w-8 h-8 image-fit">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/preview-12.jpg')}}">
-                    </div>
-                    <div class="ml-3">Nikon Z6</div>
-                    <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">Photography</div>
-                </a>
-                <a href="" class="flex items-center mt-2">
-                    <div class="w-8 h-8 image-fit">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/preview-10.jpg')}}">
-                    </div>
-                    <div class="ml-3">Dell XPS 13</div>
-                    <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">PC &amp; Laptop</div>
-                </a>
-                <a href="" class="flex items-center mt-2">
-                    <div class="w-8 h-8 image-fit">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/preview-13.jpg')}}">
-                    </div>
-                    <div class="ml-3">Samsung Galaxy S20 Ultra</div>
-                    <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">Smartphone &amp; Tablet</div>
-                </a>
-                <a href="" class="flex items-center mt-2">
-                    <div class="w-8 h-8 image-fit">
-                        <img alt="Midone - HTML Admin Template" class="rounded-full" src="{{url('/assets/dist/images/preview-3.jpg')}}">
-                    </div>
-                    <div class="ml-3">Nikon Z6</div>
-                    <div class="ml-auto w-48 truncate text-slate-500 text-xs text-right">Photography</div>
-                </a>
+                <div id="tva-search-hits" class="mb-2"></div>
+                <div id="tva-search-empty" class="text-slate-500 text-xs py-2 hidden">No page matches that.</div>
             </div>
         </div>
     </div>
+
+    <script>
+    (function () {
+        var input  = document.getElementById('tva-search');
+        var panel  = document.getElementById('tva-search-result');
+        var hits   = document.getElementById('tva-search-hits');
+        var empty  = document.getElementById('tva-search-empty');
+        if (!input || !panel || !hits) return;
+
+        // Keyword aliases, mirroring AssistantController::navItems() so typing
+        // "customers" or "contacts" finds Leads here exactly as it does in the
+        // Ask AI voice navigation. Matching is on label OR any alias; the real
+        // label is always what gets displayed.
+        var ALIASES = {
+            'dashboard':       ['home', 'overview', 'main', 'start', 'stats', 'kpi'],
+            'ask ai':          ['assistant', 'ai chat', 'chatbot', 'team assistant', 'copilot'],
+            'live compute':    ['compute', 'mesh', 'gpu', 'workers', 'nodes'],
+            'messages':        ['inbox', 'chats', 'chat', 'agent inbox', 'conversations list', 'dm'],
+            'channels':        ['whatsapp', 'instagram', 'facebook', 'meta', 'integrations', 'connect'],
+            'bot strategy':    ['strategy', 'prompt', 'persona', 'behaviour', 'behavior', 'tone'],
+            'brain & compute': ['brain', 'brain settings', 'model', 'llm', 'provider'],
+            'data sources':    ['sources', 'datasource', 'upload', 'knowledge base', 'kb', 'crawler', 'documents', 'files'],
+            'voices':          ['voice', 'voice library', 'tts', 'speech', 'accent', 'speaker'],
+            'telephony':       ['phone', 'phone numbers', 'calls', 'sip', 'twilio', 'dialer'],
+            'project profile': ['profile', 'project settings', 'company', 'business', 'industry', 'about'],
+            'agents':          ['agent', 'bot agents', 'bots', 'personas'],
+            'skills':          ['skill', 'actions', 'tools', 'functions', 'webhooks'],
+            'flow builder':    ['flows', 'flow', 'builder', 'automation', 'workflow', 'ivr'],
+            'widget':          ['webchat', 'web chat', 'chat widget', 'embed', 'snippet', 'install'],
+            'conversations':   ['sessions', 'session', 'call log', 'transcripts', 'history', 'chat log'],
+            'leads':           ['lead', 'customers', 'customer', 'contacts', 'contact', 'prospects', 'crm'],
+            'members':         ['member', 'team', 'staff', 'users', 'user', 'people'],
+            'roles':           ['role', 'permissions', 'permission', 'access', 'rbac'],
+            'invitations':     ['invite', 'invites', 'invitation', 'onboard'],
+            'verify email':    ['verify', 'verification', 'confirm email', 'otp', 'unlock']
+        };
+
+        // Build the index from the sidebar's own links. Skips collapsible
+        // parents (href="javascript:;") and the veiled/blurred group, so an
+        // unverified user isn't offered pages the middleware will refuse.
+        var index = [];
+        document.querySelectorAll('.side-nav a.side-menu').forEach(function (a) {
+            var href = a.getAttribute('href') || '';
+            if (!href || href.indexOf('javascript:') === 0 || href === '#') return;
+            if (a.closest('.tva-lock__items')) return;
+            var t = a.querySelector('.side-menu__title');
+            if (!t) return;
+            // .side-menu__title also holds the chevron for parents — take the
+            // leading text node only.
+            var label = (t.childNodes[0] && t.childNodes[0].textContent || t.textContent || '').trim();
+            if (!label) return;
+            var keys = ALIASES[label.toLowerCase()] || [];
+            index.push({
+                label: label,
+                href: href,
+                // Pre-lowercased haystack: label plus its aliases.
+                hay: (label + ' ' + keys.join(' ')).toLowerCase()
+            });
+        });
+
+        function render(q) {
+            q = q.trim().toLowerCase();
+            hits.innerHTML = '';
+            if (!q) { panel.classList.remove('show'); return; }
+
+            // Rank label matches above alias-only matches, so typing "lead"
+            // puts Leads first rather than whatever alias happened to match.
+            var starts = [], contains = [], alias = [];
+            index.forEach(function (i) {
+                var l = i.label.toLowerCase();
+                if (l.indexOf(q) === 0)            { starts.push(i); }
+                else if (l.indexOf(q) !== -1)      { contains.push(i); }
+                else if (i.hay.indexOf(q) !== -1)  { alias.push(i); }
+            });
+            var found = starts.concat(contains, alias).slice(0, 8);
+            found.forEach(function (i) {
+                var a = document.createElement('a');
+                a.href = i.href;
+                a.className = 'flex items-center mt-2';
+                a.innerHTML =
+                    '<div class="w-8 h-8 bg-primary/10 text-primary flex items-center justify-center rounded-full">' +
+                    '<i class="w-4 h-4" data-lucide="corner-down-right"></i></div>' +
+                    '<div class="ml-3"></div>';
+                a.querySelector('.ml-3').textContent = i.label;
+                hits.appendChild(a);
+            });
+            empty.classList.toggle('hidden', found.length > 0);
+            panel.classList.add('show');
+            if (window.lucide && window.lucide.createIcons) window.lucide.createIcons();
+        }
+
+        input.addEventListener('input',  function () { render(input.value); });
+        input.addEventListener('focus',  function () { if (input.value) render(input.value); });
+        // Enter opens the first hit.
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                var first = hits.querySelector('a');
+                if (first) { e.preventDefault(); window.location.href = first.href; }
+            } else if (e.key === 'Escape') {
+                input.value = ''; panel.classList.remove('show');
+            }
+        });
+        document.addEventListener('click', function (e) {
+            if (!panel.contains(e.target) && e.target !== input) panel.classList.remove('show');
+        });
+    })();
+    </script>
+    <!-- END: Search -->
     <!-- END: Search -->
     
     <!-- BEGIN: Notifications -->

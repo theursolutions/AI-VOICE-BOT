@@ -18,6 +18,10 @@ Route::post('/send-voice', [ConfigureAgentVoicesController::class, 'process'])->
 Route::post('/api/demo-call', [App\Http\Controllers\PublicLandingController::class, 'demoCall'])
     ->name('demo-call');
 
+// Contact-page form → contact_leads (rate-limited + honeypot, no auth).
+Route::post('/api/contact', [App\Http\Controllers\PublicContactController::class, 'store'])
+    ->name('contact.store');
+
 // ── Public marketing + legal pages (footer links) ───────────────────────
 Route::view('/about',          'pages.about')->name('about');
 Route::view('/contact',        'pages.contact')->name('contact');

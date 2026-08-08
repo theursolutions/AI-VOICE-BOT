@@ -146,8 +146,14 @@
         <a href="{{ url('/') }}#platform">Features</a>
         <a href="{{ url('/') }}#cases">Use cases</a>
         <a href="{{ url('/contact') }}">Contact</a>
-        <a href="{{ route('login') }}">Sign in</a>
-        <a href="{{ url('/register') }}" class="nav__cta">Get started free</a>
+        {{-- Signed in → straight back to the app; /dashboard resolves the
+             active workspace (or the picker). Signed out → sign in / sign up. --}}
+        @auth
+            <a href="{{ url('/dashboard') }}" class="nav__cta">Dashboard</a>
+        @else
+            <a href="{{ route('login') }}">Sign in</a>
+            <a href="{{ url('/register') }}" class="nav__cta">Get started free</a>
+        @endauth
     </div>
 </nav>
 

@@ -65,8 +65,8 @@ return [
         'structured_data'   => true,
         'org_name'          => 'Serve AI',
         'org_logo'          => '/assets/dist/images/logo.svg',
-        'org_phone'         => '',
-        'org_email'         => '',
+        'org_phone'         => '+923491494383',
+        'org_email'         => 'info@serveai.com.pk',
         'social_links'      => [],           // array of profile URLs
 
         // Raw HTML appended to <head> (advanced — verification, extra tags)
@@ -135,12 +135,15 @@ return [
         'channels_eyebrow'  => 'One agent. Every channel.',
         'channels_title'    => 'Your customers reach out everywhere. Now you answer everywhere.',
         'channels_lead'     => 'The same brain — your data, your voice, your rules — picks up the phone, replies on WhatsApp, and chats on your website. No channel left on read.',
-        'channel1_icon' => '📞', 'channel1_title' => 'Voice calls',      'channel1_body' => 'Inbound & outbound phone, answered in a human voice.',
-        'channel2_icon' => '💬', 'channel2_title' => 'Website chat',      'channel2_body' => 'One script tag. Live in minutes on any site.',
-        'channel3_icon' => '🟢', 'channel3_title' => 'WhatsApp',          'channel3_body' => 'Official Cloud API. Templates, media, and flows.',
-        'channel4_icon' => '📸', 'channel4_title' => 'Instagram',         'channel4_body' => 'DMs and story replies handled automatically.',
-        'channel5_icon' => '👍', 'channel5_title' => 'Facebook',          'channel5_body' => 'Messenger conversations, never missed again.',
-        'channel6_icon' => '✉️', 'channel6_title' => 'SMS & more',         'channel6_body' => 'Text fallback and new channels added over time.',
+        // Icons are slugs resolved to inline brand SVGs by App\Support\BrandIcons
+        // (voice, webchat, whatsapp, instagram, facebook, messenger, sms).
+        // Anything else — an emoji, a word — is printed as-is.
+        'channel1_icon' => 'voice',     'channel1_title' => 'Voice calls',   'channel1_body' => 'Inbound & outbound phone, answered in a human voice.',
+        'channel2_icon' => 'webchat',   'channel2_title' => 'Website chat',  'channel2_body' => 'One script tag. Live in minutes on any site.',
+        'channel3_icon' => 'whatsapp',  'channel3_title' => 'WhatsApp',      'channel3_body' => 'Official Cloud API. Templates, media, and flows.',
+        'channel4_icon' => 'instagram', 'channel4_title' => 'Instagram',     'channel4_body' => 'DMs and story replies handled automatically.',
+        'channel5_icon' => 'facebook',  'channel5_title' => 'Facebook',      'channel5_body' => 'Messenger conversations, never missed again.',
+        'channel6_icon' => 'sms',       'channel6_title' => 'SMS & more',    'channel6_body' => 'Text fallback and new channels added over time.',
 
         // ── Platform feature grid (covers every module) ──────────────
         'platform_eyebrow'  => 'The whole platform',
@@ -205,9 +208,9 @@ return [
         // ── Footer / contact (EDIT THESE in /admin/content) ──────────
         // Placeholders below — update with your real business details.
         'footer_tagline'    => 'The AI receptionist and CRM that answers every call, chat and message — 24/7, in your own voice.',
-        'contact_phone'     => '+1 (555) 010-0100',
-        'contact_email'     => 'hello@serveai.com',
-        'contact_address'   => 'Your Company HQ · City, Country',
+        'contact_phone'     => '+92 349 149 4383',
+        'contact_email'     => 'info@serveai.com.pk',
+        'contact_address'   => 'Arfa Software Technology Park, Lahore, Pakistan',
         'social_twitter'    => '',   // full URL, e.g. https://x.com/serveai
         'social_linkedin'   => '',
         'social_facebook'   => '',

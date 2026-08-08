@@ -31,12 +31,16 @@
     // layouts.master view composer (owner = all modules). Default to all
     // so non-client / edge contexts never hide everything.
     $mods = $tvaModules ?? array_keys((array) config('modules', []));
-    $can  = function (string $k) use ($mods, $emailOk) {
-        // Unverified → Ask AI only (and only if the role actually grants it,
-        // so the menu stays in step with module.access).
-        if (!$emailOk) {
-            return $k === 'assistant' && in_array('assistant', $mods, true);
-        }
+
+    // Visibility depends ONLY on the role's module grants. Email verification no
+    // longer hides items: unverified users see the full menu behind a blurred,
+    // non-interactive "verify to unlock" veil (below), so they can tell what
+    // they're unlocking instead of facing a three-item stub that looks broken.
+    //
+    // Safe because the veil is presentation only and the real gate is
+    // server-side (EnsureEmailVerified middleware) — a visible link an
+    // unverified user clicks still gets refused by the route.
+    $can  = function (string $k) use ($mods) {
         return in_array($k, $mods, true);
     };
 
@@ -97,15 +101,24 @@
              This is presentation only — the real enforcement is server-side
              (EnsureEmailVerified middleware). A blurred link is still a link,
              so pointer-events:none here is convenience, not security. --}}
-        @php $tvaVerified = !Auth::check() || Auth::user()->hasVerifiedEmail(); @endphp
-        @unless ($tvaVerified)
+        @unless ($emailOk)
         <style>
-            .tva-lock { position:relative; }
+            /* `display:block` + `position:relative` so the veil's inset:0 has a
+               real box to resolve against. Without an explicit display the div
+               sits inside a <ul> and can collapse, which leaves the veil sized
+               to nothing and its centred content floating at the top. */
+            .tva-lock { position:relative; display:block; }
             .tva-lock__items { filter:blur(3px); opacity:.40; pointer-events:none; user-select:none; }
             .tva-lock__veil {
-                position:absolute; inset:0; z-index:5;
-                display:flex; flex-direction:column; align-items:center; justify-content:center;
+                position:absolute;
+                top:0; left:0; right:0; bottom:0;   /* explicit, not just inset:0 */
+                width:100%; height:100%;
+                z-index:5;
+                display:flex; flex-direction:column;
+                align-items:center;                  /* horizontal centre */
+                justify-content:center;              /* vertical centre   */
                 gap:10px; text-align:center; padding:18px; text-decoration:none;
+                box-sizing:border-box;
             }
             .tva-lock__veil:hover .tva-lock__cta { text-decoration:underline; }
             .tva-lock__icon {
@@ -379,7 +392,7 @@
         </li>
         @endif
 
-        @unless ($tvaVerified)
+        @unless ($emailOk)
             </div>{{-- .tva-lock__items --}}
         </div>{{-- .tva-lock --}}
         @endunless

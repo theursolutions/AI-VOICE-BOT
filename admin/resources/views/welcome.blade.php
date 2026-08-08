@@ -73,9 +73,65 @@
             transition: transform .15s ease, box-shadow .15s ease;
         }
         .nav__cta:hover { transform: translateY(-1px); box-shadow: 0 0 32px rgba(59, 130, 246, .65); }
-        @media (max-width: 720px) {
-            .nav { padding: 12px 16px; }
-            .nav__links { display: none; }
+
+        /* ── Mobile menu ──
+           The links used to be `display:none` under 720px with nothing to open
+           them, so a phone had no way to reach How it works / Channels / FAQ /
+           Sign in. Below 860px they move into a slide-down drawer behind a
+           hamburger; the desktop bar is untouched above that. */
+        .nav__toggle {
+            display: none; margin-left: auto;
+            width: 42px; height: 42px; padding: 0; flex-shrink: 0;
+            align-items: center; justify-content: center;
+            background: rgba(59,130,246,.08); border: 1px solid var(--line-hot);
+            border-radius: 11px; color: var(--text); cursor: pointer;
+        }
+        .nav__toggle span {
+            display: block; position: relative; width: 18px; height: 2px;
+            background: currentColor; border-radius: 2px;
+            transition: background .2s ease;
+        }
+        .nav__toggle span::before, .nav__toggle span::after {
+            content: ''; position: absolute; left: 0; width: 18px; height: 2px;
+            background: currentColor; border-radius: 2px; transition: transform .25s ease;
+        }
+        .nav__toggle span::before { top: -6px; }
+        .nav__toggle span::after  { top:  6px; }
+        /* Hamburger morphs into an X while the drawer is open. */
+        .nav.is-open .nav__toggle span { background: transparent; }
+        .nav.is-open .nav__toggle span::before { transform: translateY(6px) rotate(45deg); }
+        .nav.is-open .nav__toggle span::after  { transform: translateY(-6px) rotate(-45deg); }
+
+        @media (max-width: 860px) {
+            .nav { padding: 12px 16px; flex-wrap: wrap; gap: 10px; row-gap: 0; }
+            .nav__toggle { display: flex; }
+            /* Row 1 stays brand → CTA → hamburger. The CTA keeps its place on
+               the bar because it's the primary conversion action; only the
+               secondary links move into the drawer. */
+            .nav__brand  { order: 1; }
+            .nav__cta    { order: 2; margin-left: auto; }
+            .nav__toggle { order: 3; margin-left: 0; }
+            /* Row 2: the drawer. Collapsed by max-height (not display:none) so
+               it animates, and taken out of the a11y tree + tab order when shut. */
+            .nav__links {
+                order: 4; margin-left: 0;
+                flex-basis: 100%; flex-direction: column; align-items: stretch;
+                gap: 0; font-size: 15px;
+                max-height: 0; overflow: hidden; visibility: hidden;
+                transition: max-height .3s ease, visibility .3s;
+            }
+            .nav__links a {
+                padding: 13px 4px; border-bottom: 1px solid var(--line); color: var(--text);
+            }
+            .nav__links a:last-child { border-bottom: none; }
+            .nav.is-open .nav__links { max-height: 70vh; overflow-y: auto; visibility: visible; }
+            /* The bar is translucent by design, but an open drawer over the
+               hero left the menu text competing with the headline behind it. */
+            .nav.is-open { background: rgba(5, 6, 9, .97); }
+        }
+        @media (max-width: 380px) {
+            .nav__brand { font-size: 15px; }
+            .nav__cta { padding: 7px 11px; font-size: 12px; }
         }
 
         /* ─── Layout container ───────────────────────────────────────── */
@@ -87,6 +143,13 @@
         .hero__grid {
             display: grid; grid-template-columns: 1.05fr .95fr; gap: 60px; align-items: center; width: 100%;
         }
+        /* `.hero` is a flex container, so `.wrap` is a flex item and defaults to
+           `min-width: auto` — it refuses to shrink below the min-content width
+           of the headline / call-bar / 3D scene and silently grows WIDER than
+           the phone, which is what clipped the hero on mobile. These two lines
+           are the actual fix; everything below is polish on top of them. */
+        .hero > .wrap { min-width: 0; max-width: 100%; }
+        .hero__grid > * { min-width: 0; }
         @media (max-width: 980px) {
             .hero { padding: 110px 0 60px; min-height: auto; }
             .hero__grid { grid-template-columns: 1fr; gap: 40px; }
@@ -105,9 +168,13 @@
         @keyframes pulse { 0%,100%{opacity:1; transform:scale(1);} 50%{opacity:.4; transform:scale(.6);} }
 
         .hero h1 {
-            font-size: clamp(34px, 5.4vw, 64px);
-            font-weight: 800; letter-spacing: -0.02em; line-height: 1.04;
+            /* The old 34px floor was wider than a 390px phone once the longest
+               word was laid out. Scale from 26px and allow long words to break
+               so the headline can never run past the screen edge. */
+            font-size: clamp(26px, 7.2vw, 64px);
+            font-weight: 800; letter-spacing: -0.02em; line-height: 1.06;
             margin: 0 0 18px;
+            overflow-wrap: break-word; word-wrap: break-word; hyphens: auto;
         }
         .hero h1 .accent {
             background: linear-gradient(90deg, var(--neon), var(--neon-2) 60%, #dbeafe);
@@ -147,6 +214,17 @@
         .callbar__msg { font-size: 12px; color: var(--text-dim); margin-top: 10px; min-height: 16px; }
         .callbar__msg.is-ok  { color: var(--neon); }
         .callbar__msg.is-err { color: var(--hot); }
+        /* On a phone the icon + input + "Call me now" button can't share one
+           row without the button sliding off the right edge — stack instead. */
+        @media (max-width: 560px) {
+            .callbar { flex-wrap: wrap; max-width: 100%; }
+            /* basis 0, not auto — otherwise the input claims its placeholder's
+               intrinsic width and wraps onto a line of its own below the icon. */
+            .callbar input { flex: 1 1 0; width: auto; min-width: 0; }
+            .callbar button { flex: 1 0 100%; padding: 12px 18px; }
+        }
+        /* 16px keeps iOS/iPadOS from zooming the page on focus. */
+        @media (max-width: 1024px) { .callbar input { font-size: 16px; } }
 
         .hero__meta { display: flex; gap: 18px; margin-top: 28px; flex-wrap: wrap; }
         .hero__meta-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); }
@@ -195,6 +273,20 @@
         .scene-ring__label {
             position: absolute; font-size: 10px; color: var(--neon);
             text-transform: uppercase; letter-spacing: .12em; font-weight: 600;
+            white-space: nowrap;
+        }
+        /* The scene is a square that tracks its column width; on a phone that
+           column is the full screen, so the orb and its orbiting labels spilled
+           past the right edge. Cap it and clip the decoration to its own box. */
+        @media (max-width: 980px) {
+            .hero__scene {
+                min-height: 0; width: 100%;
+                max-width: min(360px, 78vw); margin: 0 auto;
+            }
+            /* The labels are pinned to the ring's outer edge (one at right:-4px),
+               so on a narrow screen they hang off the orb and get sliced. Keep
+               the orbiting dots — they carry the motion — and drop the text. */
+            .scene-ring__label { display: none; }
         }
 
         /* ─── Section frame ───────────────────────────────────────────── */
@@ -390,6 +482,11 @@
         }
         .chan:hover { border-color: var(--line-hot); transform: translateY(-3px); }
         .chan__icon { font-size: 26px; margin-bottom: 10px; line-height: 1; }
+        /* Brand SVG variant: `currentColor` glyphs (voice/chat/SMS) pick up the
+           accent, while WhatsApp/Instagram/Facebook carry their own fill. */
+        .chan__icon--svg { color: var(--neon-2); height: 30px; }
+        .chan__icon--svg svg { display: inline-block; vertical-align: top; transition: transform .3s; }
+        .chan:hover .chan__icon--svg svg { transform: translateY(-2px) scale(1.08); }
         .chan__title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
         .chan__body { font-size: 12px; color: var(--text-dim); line-height: 1.45; }
 
@@ -563,6 +660,9 @@
             opacity: .85;
         }
         .mini-3d canvas { display: block; }
+        /* These float outside the content box on purpose (one sits at left:-60px).
+           There's no room for that on a phone — it just widened the page. */
+        @media (max-width: 980px) { .mini-3d { display: none; } }
 
         /* ════════ Cinematic descent system ════════════════════════════ */
 
@@ -663,20 +763,33 @@
 </div>
 
 <!-- ── Top nav ─────────────────────────────────────────────────────── -->
-<nav class="nav">
+<nav class="nav" id="siteNav">
     <div class="nav__brand">
         <img class="nav__brand-mark" src="{{ serveai_icon() }}" alt="{{ tva_setting('content.brand_name', 'Serve AI') }} logo" width="28" height="28">
         {{ tva_setting('content.brand_name', 'Serve AI') }}
     </div>
-    <div class="nav__links">
+    <button type="button" class="nav__toggle" id="navToggle"
+            aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
+        <span></span>
+    </button>
+    <div class="nav__links" id="navLinks">
         <a href="#how">How it works</a>
         <a href="#channels">Channels</a>
         <a href="#platform">Features</a>
         <a href="#cases">Use cases</a>
         <a href="#faq">FAQ</a>
-        <a href="{{ route('login') }}">Sign in</a>
+        {{-- Signed-in visitors get a way back into the app instead of being
+             asked to sign in again. /dashboard redirects to the active
+             workspace, or to the picker when there's more than one. --}}
+        @guest
+            <a href="{{ route('login') }}">Sign in</a>
+        @endguest
     </div>
-    <a href="{{ url('/register') }}" class="nav__cta" data-cursor="open">Get started free</a>
+    @auth
+        <a href="{{ url('/dashboard') }}" class="nav__cta" data-cursor="open">Dashboard</a>
+    @else
+        <a href="{{ url('/register') }}" class="nav__cta" data-cursor="open">Get started free</a>
+    @endauth
 </nav>
 
 <!-- ── HERO ────────────────────────────────────────────────────────── -->
@@ -831,19 +944,22 @@
         <p class="lead reveal">{{ tva_setting('content.channels_lead', 'The same brain — your data, your voice, your rules — picks up the phone, replies on WhatsApp, and chats on your website. No channel left on read.') }}</p>
 
         @php
+            // Icon slugs are resolved to inline brand SVGs by BrandIcons;
+            // an operator may still type an emoji into the content editor.
             $channels = [
-                ['📞', 'Voice calls', 'Inbound & outbound phone, answered in a human voice.'],
-                ['💬', 'Website chat', 'One script tag. Live in minutes on any site.'],
-                ['🟢', 'WhatsApp', 'Official Cloud API. Templates, media, and flows.'],
-                ['📸', 'Instagram', 'DMs and story replies handled automatically.'],
-                ['👍', 'Facebook', 'Messenger conversations, never missed again.'],
-                ['✉️', 'SMS & more', 'Text fallback and new channels added over time.'],
+                ['voice', 'Voice calls', 'Inbound & outbound phone, answered in a human voice.'],
+                ['webchat', 'Website chat', 'One script tag. Live in minutes on any site.'],
+                ['whatsapp', 'WhatsApp', 'Official Cloud API. Templates, media, and flows.'],
+                ['instagram', 'Instagram', 'DMs and story replies handled automatically.'],
+                ['facebook', 'Facebook', 'Messenger conversations, never missed again.'],
+                ['sms', 'SMS & more', 'Text fallback and new channels added over time.'],
             ];
         @endphp
         <div class="chan-grid">
             @foreach ($channels as $i => $c)
+                @php $chanIcon = (string) tva_setting('content.channel'.($i+1).'_icon', $c[0]); @endphp
                 <div class="chan reveal tilt">
-                    <div class="chan__icon">{{ tva_setting('content.channel'.($i+1).'_icon', $c[0]) }}</div>
+                    <div class="chan__icon {{ \App\Support\BrandIcons::has($chanIcon) ? 'chan__icon--svg' : '' }}">{!! \App\Support\BrandIcons::render($chanIcon, 30) !!}</div>
                     <div class="chan__title">{{ tva_setting('content.channel'.($i+1).'_title', $c[1]) }}</div>
                     <div class="chan__body">{{ tva_setting('content.channel'.($i+1).'_body', $c[2]) }}</div>
                 </div>
@@ -1046,6 +1162,41 @@
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
 
 <script>
+/* ──────────────────────────── Mobile menu ────────────────────────── */
+(function () {
+    var nav    = document.getElementById('siteNav');
+    var toggle = document.getElementById('navToggle');
+    var links  = document.getElementById('navLinks');
+    if (!nav || !toggle || !links) return;
+
+    function setOpen(open) {
+        nav.classList.toggle('is-open', open);
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    }
+
+    toggle.addEventListener('click', function () {
+        setOpen(!nav.classList.contains('is-open'));
+    });
+
+    // Every link is an in-page anchor, so leaving the drawer open would cover
+    // the section the visitor just jumped to.
+    links.addEventListener('click', function (e) {
+        if (e.target.closest('a')) setOpen(false);
+    });
+
+    document.addEventListener('click', function (e) {
+        if (nav.classList.contains('is-open') && !nav.contains(e.target)) setOpen(false);
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') setOpen(false);
+    });
+    // Resizing past the breakpoint leaves `is-open` stuck on the desktop bar.
+    window.addEventListener('resize', function () {
+        if (window.innerWidth > 860) setOpen(false);
+    });
+})();
+
 /* ───────────────────────────── Starfield ─────────────────────────── */
 (function () {
     var canvas = document.getElementById('stars');

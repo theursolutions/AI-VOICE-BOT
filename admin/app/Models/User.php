@@ -26,6 +26,16 @@ class User extends Authenticatable implements MustVerifyEmailContract
         app(\App\Services\Auth\EmailOtpService::class)->send($this);
     }
 
+    /**
+     * Send the branded password-reset email instead of Laravel's default
+     * unbranded notification. Token handling and URL signing are unchanged --
+     * ResetPasswordBranded only swaps the presentation.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new \App\Notifications\ResetPasswordBranded($token));
+    }
+
     protected $fillable = [
         'name',
         'email',
