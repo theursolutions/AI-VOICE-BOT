@@ -21,8 +21,21 @@
         <env name="APP_ENV" value="testing"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_DRIVER" value="array"/>
-        <!-- <env name="DB_CONNECTION" value="sqlite"/> -->
-        <!-- <env name="DB_DATABASE" value=":memory:"/> -->
+        <!--
+            DANGER: with these commented out, `php artisan test` runs
+            RefreshDatabase (migrate:fresh) against whatever DB_DATABASE is in
+            .env — i.e. it DROPS EVERY TABLE IN YOUR DEV DATABASE. That is not
+            hypothetical; it has already happened once.
+
+            Not sqlite (the Breeze default): models pin `protected $connection
+            = 'mysql'` (e.g. App\Models\SiteSetting) and migrations use MySQL
+            types, so the suite must stay on MySQL — just a different schema.
+
+            Create it once:
+              mysql -u root -e "CREATE DATABASE IF NOT EXISTS \`ai-crm-config-testing\`"
+        -->
+        <env name="DB_DATABASE" value="ai-crm-config-testing"/>
+        <env name="TENANT_DB_NAME_PREFIX" value="ai-crm-testing-client-"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

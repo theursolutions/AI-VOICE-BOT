@@ -14,11 +14,11 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
-    // Registration GET/POST + login are provided by Auth::routes()
-    // (laravel/ui → App\Http\Controllers\Auth\RegisterController). Keeping
-    // these here would only create shadowed duplicate named routes.
-    /* Route::get('register', [RegisteredUserController::class, 'create'])
-                ->name('register'); */
+    // These were previously commented out and delegated to Auth::routes()
+    // (laravel/ui). That scaffolding is gone — it collided on five route
+    // names and broke `route:cache` — so registration is served from here.
+    Route::get('register', [RegisteredUserController::class, 'create'])
+                ->name('register');
 
     Route::post('register', [RegisteredUserController::class, 'store']);
 

@@ -3,7 +3,10 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
-use Illuminate\Auth\Notifications\ResetPassword;
+// The app overrides User::sendPasswordResetNotification() to send the branded
+// mail instead of Laravel's default, so that is what these assertions must
+// look for. Token handling is identical — only the presentation differs.
+use App\Notifications\ResetPasswordBranded as ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Tests\TestCase;

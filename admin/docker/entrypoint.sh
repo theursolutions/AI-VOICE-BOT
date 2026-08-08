@@ -37,8 +37,17 @@ php artisan package:discover --ansi || true
 # Run as root, then hand ownership to www-data below so every role (and the
 # php-fpm workers) can read the caches and write to storage.
 php artisan config:cache
-php artisan route:cache || true   # tolerate closure routes
-php artisan view:cache  || true
+# NOT `|| true`. That is what hid the duplicate-route-name collision between
+# the Breeze and laravel/ui scaffoldings for so long: route:cache threw on
+# every boot, the failure was swallowed, and the app quietly served uncached
+# routes forever. Laravel 9+ serialises closure routes fine, so a failure here
+# is a real routing defect and must stop the boot.
+if ! php artisan route:cache; then
+  echo "FATAL: route:cache failed — duplicate route names or an unserialisable route." >&2
+  echo "       Reproduce locally with: php artisan route:cache" >&2
+  exit 1
+fi
+php artisan view:cache  || true   # views also compile lazily; non-fatal
 
 if [ "$ROLE" = "web" ]; then
   # storage/app is an empty named volume on first boot — make the symlink
@@ -64,7 +73,30 @@ if [ "$ROLE" = "web" ]; then
 fi
 
 # --- Make runtime state owned by www-data -----------------------------------
-chown -R www-data:www-data storage bootstrap/cache 2>/dev/null || true
+# This was `2>/dev/null || true`, which hid both the message and the exit code.
+# php-fpm runs as www-data: if it can't write storage/, uploads are written
+# nowhere and logs vanish, while the container still reports healthy. That is
+# how the voice-upload breakage stayed invisible — the only symptom was a
+# zero-byte audio file long after boot.
+#
+# chown itself is allowed to fail (some volume drivers reject it while the
+# mount is already world-writable) — what must hold is that www-data can
+# actually WRITE. That is the condition we check, and it is fatal.
+if ! chown -R www-data:www-data storage bootstrap/cache; then
+  echo "[entrypoint] WARNING: chown of storage/ + bootstrap/cache failed;" >&2
+  echo "                      verifying www-data can write anyway ..." >&2
+fi
+
+for d in storage storage/app storage/framework storage/logs bootstrap/cache; do
+  if ! su -s /bin/sh www-data -c "test -w '$d'"; then
+    echo "FATAL: www-data cannot write to $d." >&2
+    echo "       php-fpm runs as www-data — booting now means uploads (voice" >&2
+    echo "       clips, documents) and logs fail silently at runtime." >&2
+    echo "       Check volume ownership on the host:  ls -ln $(pwd)/$d" >&2
+    exit 1
+  fi
+done
+echo "[entrypoint] storage + bootstrap/cache writable by www-data."
 
 # --- Launch -----------------------------------------------------------------
 case "$ROLE" in
