@@ -9,11 +9,13 @@ relative to the FastAPI process.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import require_internal_secret
 from app.config import get_settings
@@ -70,4 +72,44 @@ async def llm_respond(req: LLMRequest, request: Request) -> LLMResponse:
         tokens_out=result.tokens_out,
         model=result.model,
         metadata=metadata,
+    )
+
+
+@router.post("/llm/stream")
+async def llm_stream(req: LLMRequest, request: Request):
+    """Server-Sent Events variant of ``/llm/respond`` — text only.
+
+    Exists because the LLM may be self-hosted on CPU, where a single reply can
+    take 30-60s. Buffering that into one JSON response means the user watches a
+    spinner the whole time; streaming shows the first words in a second or two.
+    Total time is unchanged — only the perceived latency.
+
+    Frame format (one JSON object per SSE ``data:`` line):
+        {"type":"delta","text":"..."}                      incremental token(s)
+        {"type":"final","text":"...","tokens_in":N,...}    complete reply
+        {"type":"error","message":"..."}                   generation failed
+
+    Audio is deliberately NOT synthesised here: XTTS needs the full sentence,
+    so callers that want speech should use /llm/respond or the WS pipeline.
+    """
+    llm = request.app.state.llm_service
+
+    async def events():
+        try:
+            async for frame in llm.stream_chat(req.messages, temperature=req.temperature):
+                yield f"data: {json.dumps(frame, ensure_ascii=False)}\n\n"
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("llm.stream_chat failed")
+            yield "data: " + json.dumps({"type": "error", "message": str(exc)}) + "\n\n"
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            # Tells nginx (and any Caddy/HAProxy hop) not to buffer the body —
+            # without it the whole point of streaming is lost at the proxy.
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )

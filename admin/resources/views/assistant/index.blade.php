@@ -869,11 +869,9 @@
         // No spoken "please wait" — it would play WHILE we're listening during
         // generation (and be heard as input). The visual thinking cue + tone cover it.
         curAbort=('AbortController' in window)?new AbortController():null;   // so barge-in can cancel this reply
-        fetch(askUrl,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'application/json'},
-            signal:curAbort?curAbort.signal:undefined,
-            body:JSON.stringify({project_id:pid,question:q,history:history,conversation_id:(t&&t.id)?t.id:'',language:selectedLang,mode:convMode})})
-        .then(function(r){return r.json();})
-        .then(function(d){
+        /* Post-processing for a completed answer — shared by the streaming
+           `final` frame and the non-streaming fallback. */
+        function handleAnswer(d){
             clearTimeout(slowAck); stopProc();
             var tz=tableizeAnswer(d);                 // convert any markdown table → exportable widget
             var answer=tz.answer||L('noans');
@@ -891,8 +889,67 @@
             if(convMode!=='discussion' && (tables.length || wordCount(answer)>50)){ spoken=L('onscreen'); }
             busy=false;
             if(voiceOn){ speak(spoken); } else if(mode==='voice'){ startMic(); }
+        }
+
+        function failAnswer(){
+            clearTimeout(slowAck); stopProc();
+            t.messages.push({role:'assistant',content:L('connerr'),at:Date.now()}); persist();
+            if(mode==='text')renderText(); else if(convMode!=='discussion')renderRight();
+            busy=false; if(mode==='voice'&&voiceOn===false)startMic();
+        }
+
+        /* STREAMING: the reply arrives as Server-Sent Events so the first words
+           appear in ~1-2s even when the model itself takes 30s+ to finish. The
+           closing `final` frame carries the authoritative envelope (answer +
+           tables + sources), so rendering is identical to the buffered path. */
+        var streamed='', ph=null;
+        function dropPlaceholder(){
+            if(!ph) return;
+            var i=t.messages.indexOf(ph); if(i>-1) t.messages.splice(i,1);
+            ph=null;
+        }
+
+        fetch(askUrl,{method:'POST',credentials:'same-origin',
+            headers:{'Content-Type':'application/json','X-CSRF-TOKEN':csrf,'Accept':'text/event-stream'},
+            signal:curAbort?curAbort.signal:undefined,
+            body:JSON.stringify({project_id:pid,question:q,history:history,conversation_id:(t&&t.id)?t.id:'',language:selectedLang,mode:convMode,stream:true})})
+        .then(function(r){
+            if(!r.ok || !r.body || !r.body.getReader){ throw new Error('stream unavailable'); }
+            var reader=r.body.getReader(), dec=new TextDecoder(), buf='';
+            function pump(){
+                return reader.read().then(function(res){
+                    if(res.done) return;
+                    buf+=dec.decode(res.value,{stream:true});
+                    var i;
+                    while((i=buf.indexOf('\n\n'))!==-1){
+                        var rec=buf.slice(0,i); buf=buf.slice(i+2);
+                        rec.split('\n').forEach(function(line){
+                            if(line.indexOf('data:')!==0) return;
+                            var f; try{ f=JSON.parse(line.slice(5).trim()); }catch(e){ return; }
+                            if(f.type==='delta'){
+                                if(!ph){
+                                    // First token: stop the spinner and start a live bubble.
+                                    clearTimeout(slowAck); stopProc();
+                                    ph={role:'assistant',content:'',at:Date.now(),streaming:true};
+                                    t.messages.push(ph);
+                                }
+                                streamed+=(f.text||''); ph.content=streamed;
+                                if(mode==='text') renderText();
+                            } else if(f.type==='final'){
+                                dropPlaceholder();
+                                handleAnswer(f);
+                            } else if(f.type==='error'){
+                                dropPlaceholder();
+                                handleAnswer({answer:f.message||L('connerr'),tables:[],sources:[]});
+                            }
+                        });
+                    }
+                    return pump();
+                });
+            }
+            return pump();
         })
-        .catch(function(err){ if(err&&err.name==='AbortError')return; clearTimeout(slowAck); stopProc(); t.messages.push({role:'assistant',content:L('connerr'),at:Date.now()}); persist(); if(mode==='text')renderText(); else if(convMode!=='discussion')renderRight(); busy=false; if(mode==='voice'&&voiceOn===false)startMic(); });
+        .catch(function(err){ if(err&&err.name==='AbortError')return; dropPlaceholder(); failAnswer(); });
     }
 
     /* voice input field: allow typing + Enter to send */

@@ -138,7 +138,11 @@ class _AnthropicBackend:
             model=response.model,
         )
 
-    async def stream_chat(self, messages: List[ChatMessage]) -> AsyncIterator[Dict[str, Any]]:
+    async def stream_chat(
+        self,
+        messages: List[ChatMessage],
+        temperature: Optional[float] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
         system_blocks, chat = _split_for_anthropic(messages)
         if not chat:
             yield {"type": "final", "text": "", "tokens_in": 0, "tokens_out": 0, "model": self.model}
@@ -151,6 +155,10 @@ class _AnthropicBackend:
         }
         if system_blocks:
             kwargs["system"] = system_blocks
+        # Callers need the same determinism knob the non-streaming path has:
+        # grounded Q&A runs at ~0.2, free conversation at ~0.85.
+        if temperature is not None:
+            kwargs["temperature"] = temperature
 
         async with self._client.messages.stream(**kwargs) as stream:
             async for text in stream.text_stream:
@@ -244,7 +252,11 @@ class _GroqBackend:
             model=resp.model,
         )
 
-    async def stream_chat(self, messages: List[ChatMessage]) -> AsyncIterator[Dict[str, Any]]:
+    async def stream_chat(
+        self,
+        messages: List[ChatMessage],
+        temperature: Optional[float] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
         msgs = _to_openai_messages(messages)
         if not msgs:
             yield {"type": "final", "text": "", "tokens_in": 0, "tokens_out": 0, "model": self.model}
@@ -255,12 +267,18 @@ class _GroqBackend:
         tokens_out = 0
         final_model = self.model
 
+        extra: Dict[str, Any] = {}
+        # Same determinism knob as the non-streaming path (see chat()).
+        if temperature is not None:
+            extra["temperature"] = temperature
+
         stream = await self._client.chat.completions.create(
             model=self.model,
             messages=msgs,
             max_tokens=self.max_tokens,
             stream=True,
             stream_options={"include_usage": True},
+            **extra,
         )
         async for chunk in stream:
             final_model = chunk.model or final_model
@@ -471,7 +489,12 @@ class LLMService:
     async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
         return await self._resilient(lambda b: b.extract(prompt, response_schema), "extract")
 
-    async def stream_chat(self, messages: List[ChatMessage], generation_config=None) -> AsyncIterator[Dict[str, Any]]:
+    async def stream_chat(
+        self,
+        messages: List[ChatMessage],
+        generation_config=None,
+        temperature: Optional[float] = None,
+    ) -> AsyncIterator[Dict[str, Any]]:
         # Retry / fail over only BEFORE the first token is emitted — once we've
         # streamed text we can't safely restart without duplicating output.
         backend = self._backend
@@ -480,7 +503,7 @@ class LLMService:
         while True:
             started = False
             try:
-                async for frame in backend.stream_chat(messages):
+                async for frame in backend.stream_chat(messages, temperature=temperature):
                     started = True
                     yield frame
                 return
