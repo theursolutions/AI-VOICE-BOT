@@ -29,17 +29,16 @@ services:
     image: ollama/ollama:latest
     restart: unless-stopped
     environment:
-      # Keep the model resident instead of unloading after ~5 min idle.
-      # Measured on this box: a cold call costs ~16s of pure load time before a
-      # single token is generated, so with the default every conversation that
-      # starts after a quiet period feels broken. -1 = never unload.
+      # How long the model stays resident after a request. Tune to Ollama's ROLE:
       #
-      # Cost: the model's ~6GB stays resident permanently. That is the right
-      # trade when Ollama is the ONLY provider (LLM_PROVIDER=ollama) — it is on
-      # the critical path of every reply. If you switch to Groq-primary with
-      # Ollama as a rarely-used fallback, set this back to a short duration
-      # (e.g. 5m) so the idle RAM is reclaimed.
-      OLLAMA_KEEP_ALIVE: "-1"
+      #   FALLBACK behind Groq (default, 5m) — Ollama is idle almost always, so
+      #     holding ~6GB permanently wastes RAM. A cold load costs ~16s, but it
+      #     only ever happens on the rare occasion Groq is rate-limited or down.
+      #
+      #   PRIMARY (LLM_PROVIDER=ollama) — set to "-1" (never unload). Otherwise
+      #     every conversation starting after a quiet period pays that ~16s
+      #     before its first token, which reads as broken.
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       # One model, one request at a time — this box has no GPU and 8 shared
       # vCPUs, so parallel decoding just makes every request slower.
       OLLAMA_NUM_PARALLEL: "1"
@@ -52,7 +51,14 @@ services:
       options: { max-size: "10m", max-file: "3" }
     deploy:
       resources:
-        limits: { cpus: "6", memory: 10240M }
+        # Sized for the FALLBACK role: a small model (qwen2.5:3b ≈ 3GB) that runs
+        # only while the cloud provider is unavailable. 6 of 8 cores was right
+        # when Ollama served every reply, but it starved the app tier — measured
+        # 83-87% host CPU on a single conversational question, which risks
+        # HAProxy ejecting app replicas mid-request. 3 cores keeps a degraded
+        # fallback usable while leaving the rest of the stack responsive.
+        # If you ever make Ollama primary again, raise these back to 6 / 10240M.
+        limits: { cpus: "3", memory: 4096M }
 
   # Groq primary + Ollama fallback. The voice-engine retries Groq, then fails
   # over to the local model. (fallback must differ from the primary.)

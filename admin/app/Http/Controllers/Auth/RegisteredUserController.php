@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Auth;
+use App\Rules\Turnstile as TurnstileRule;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
@@ -31,6 +32,8 @@ class RegisteredUserController extends Controller
             'password'   => ['required', 'confirmed', Rules\Password::defaults()],
             'client_id'  => ['nullable', 'integer', 'exists:clients,id'],
             'project_id' => ['nullable', 'integer', 'exists:projects,id'],
+            // CAPTCHA. Passes automatically when Turnstile isn't configured.
+            'cf-turnstile-response' => ['required', new TurnstileRule()],
         ]);
 
         $existing = User::where('email', $request->email)->first();

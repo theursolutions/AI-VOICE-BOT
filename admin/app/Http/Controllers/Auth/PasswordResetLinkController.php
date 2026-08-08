@@ -1,6 +1,7 @@
 <?php
 
 namespace App\Http\Controllers\Auth;
+use App\Rules\Turnstile as TurnstileRule;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
@@ -27,6 +28,8 @@ class PasswordResetLinkController extends Controller
     {
         $request->validate([
             'email' => ['required', 'email'],
+            // CAPTCHA. Passes automatically when Turnstile isn't configured.
+            'cf-turnstile-response' => ['required', new TurnstileRule()],
         ]);
 
         // We will send the password reset link to this user. Once we have attempted
