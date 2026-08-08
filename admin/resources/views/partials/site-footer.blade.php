@@ -66,14 +66,24 @@
                     <a href="{{ url('/') }}#cases">Who it's for</a>
                     <a href="{{ url('/security') }}">Security</a>
                     <a href="{{ url('/') }}#faq">FAQ</a>
-                    <a href="{{ url('/register') }}">Get started free</a>
+                    @auth
+                        <a href="{{ url('/dashboard') }}">Dashboard</a>
+                    @else
+                        <a href="{{ url('/register') }}">Get started free</a>
+                    @endauth
                 </div>
                 <div class="site-footer__col">
                     <h4>Company</h4>
                     <a href="{{ url('/about') }}">About us</a>
                     <a href="{{ url('/contact') }}">Contact</a>
-                    <a href="{{ route('login') }}">Sign in</a>
-                    <a href="{{ url('/register') }}">Create account</a>
+                    {{-- Signed in → back into the app; no point offering a
+                         second account to someone who already has one. --}}
+                    @auth
+                        <a href="{{ url('/dashboard') }}">Dashboard</a>
+                    @else
+                        <a href="{{ route('login') }}">Sign in</a>
+                        <a href="{{ url('/register') }}">Create account</a>
+                    @endauth
                 </div>
                 <div class="site-footer__col">
                     <h4>Legal</h4>

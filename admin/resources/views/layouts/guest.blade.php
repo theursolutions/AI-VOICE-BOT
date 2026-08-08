@@ -15,7 +15,28 @@
         <link href="https://fonts.bunny.net/css?family=figtree:400,500,600&display=swap" rel="stylesheet" />
 
         <!-- Scripts -->
-        @vite(['resources/css/app.css', 'resources/js/app.js'])
+        {{-- Was: @vite(['resources/css/app.css', 'resources/js/app.js'])
+             `resources/css/app.css` is NOT a Vite input (see vite.config.js —
+             the stylesheet entry is resources/sass/app.scss), so it never lands
+             in public/build/manifest.json and @vite threw "Unable to locate file
+             in Vite manifest" while rendering this component.
+
+             That was the 500 on /verify-email: the controller and the OTP
+             creation both succeeded, then the response blew up mid-render — so
+             the failure looked like a mail/OTP bug when it was purely an asset
+             reference. The remaining views avoid @vite for the same reason
+             (layouts/app.blade.php has it commented out); the Midone theme
+             ships prebuilt CSS/JS under public/assets/dist instead. --}}
+        @vite(['resources/sass/app.scss', 'resources/js/app.js'])
+        {{-- Same iOS rule as layouts/auth.blade.php: Safari zooms the page when
+             a focused input is under 16px, which reads to the user as the page
+             "opening zoomed". Applies to reset-password / verify-email, the two
+             screens that render through this layout. --}}
+        <style>
+            @media (max-width: 1024px) {
+                input, select, textarea { font-size: 16px; }
+            }
+        </style>
         @include('partials.sweet-alert')
 </head>
     <body class="font-sans text-gray-900 antialiased">

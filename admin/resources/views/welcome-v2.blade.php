@@ -821,9 +821,17 @@
         <a href="#pricing">Pricing</a>
         <a href="#testimonials">Reviews</a>
         <a href="#contact">Contact</a>
-        <a href="{{ route('login') }}">Sign in</a>
+        @guest
+            <a href="{{ route('login') }}">Sign in</a>
+        @endguest
     </div>
-    <a href="{{ url('/register') }}" class="nav__cta">Get started</a>
+    {{-- Signed in → back into the app (/dashboard resolves the active
+         workspace, or the picker); signed out → sign up. --}}
+    @auth
+        <a href="{{ url('/dashboard') }}" class="nav__cta">Dashboard</a>
+    @else
+        <a href="{{ url('/register') }}" class="nav__cta">Get started</a>
+    @endauth
 </nav>
 
 <!-- ── HERO ───────────────────────────────────────────────────────── -->
@@ -1470,8 +1478,12 @@
                 <ul>
                     <li><a href="#features">Features</a></li>
                     <li><a href="#pricing">Pricing</a></li>
-                    <li><a href="{{ route('login') }}">Sign in</a></li>
-                    <li><a href="{{ url('/register') }}">Get started</a></li>
+                    @auth
+                        <li><a href="{{ url('/dashboard') }}">Dashboard</a></li>
+                    @else
+                        <li><a href="{{ route('login') }}">Sign in</a></li>
+                        <li><a href="{{ url('/register') }}">Get started</a></li>
+                    @endauth
                 </ul>
             </div>
             <div>

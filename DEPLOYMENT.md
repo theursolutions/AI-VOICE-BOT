@@ -114,6 +114,8 @@ Edit `.env` and set, at minimum:
 | `DB_PASSWORD`, `DB_ROOT_PASSWORD`, `REDIS_PASSWORD` | Strong, unique secrets |
 | `PYTHON_INTERNAL_SECRET`, `PYTHON_JWT_SECRET` | Strong secrets — **must be identical** for app & voice-engine (they already are, since both read the same `.env`) |
 | `GROQ_API_KEY` (or `GEMINI_API_KEY`/`ANTHROPIC_API_KEY`) | Your LLM provider key |
+| `MAIL_*` | Outbound mail — see [Email delivery](#41-email-delivery-resend) below. Without it, signup dead-ends at "verify your email" |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile bot check on the auth forms. Blank = disabled |
 
 Generate the Laravel app key and paste the output into `APP_KEY=`:
 
@@ -123,6 +125,61 @@ docker compose run --rm app php artisan key:generate --show
 ```
 
 > Generate strong secrets quickly: `openssl rand -base64 32`
+
+### 4.1 Email delivery (Resend)
+
+Email verification, password resets and team invites all go out through the
+`smtp` mailer. Resend is wired over plain SMTP, so there is no composer
+package to install and nothing to change in `config/mail.php`.
+
+1. **Verify the sending domain** — <https://resend.com/domains> → add
+   `serveai.com.pk`, publish the DKIM/SPF/MX records it prints, wait for the
+   status to flip to *Verified*. Mail from an unverified domain is rejected
+   with a `403`.
+2. **Create an API key** — <https://resend.com/api-keys>, Sending access.
+3. **Set these in `.env`:**
+
+   ```ini
+   APP_NAME="Serve AI"          # appears in the email body and the From name
+   MAIL_MAILER=smtp
+   MAIL_HOST=smtp.resend.com
+   MAIL_PORT=587                # STARTTLS. 2587 also works; 465/2465 need MAIL_ENCRYPTION=ssl
+   MAIL_USERNAME=resend         # literally the word "resend"
+   MAIL_PASSWORD=re_xxxxxxxx    # the API key
+   MAIL_ENCRYPTION=tls
+   MAIL_FROM_ADDRESS="no-reply@serveai.com.pk"   # must be on the verified domain
+   ```
+
+4. **Check `APP_URL`** — verification links are built from it, so it must be
+   the public HTTPS origin (`https://serveai.com.pk`), not `localhost`.
+   A wrong `APP_URL` produces links that 404 for the recipient.
+5. **Send a test:**
+
+   ```bash
+   docker compose exec app php artisan tinker \
+     --execute="Mail::raw('ping', fn(\$m) => \$m->to('you@example.com')->subject('Serve AI mail test'));"
+   ```
+
+   Delivery shows up under *Logs* in the Resend dashboard; SMTP auth failures
+   surface in `storage/logs/laravel.log`.
+
+### 4.2 Cloudflare Turnstile hostnames
+
+The widget only validates tokens for hostnames on its allow-list. In
+<https://dash.cloudflare.com> → **Turnstile** → the widget → **Hostname
+Management**, list every domain the auth forms are served from — including
+the apex *and* the `www.` variant if both resolve:
+
+```
+serveai.com.pk
+www.serveai.com.pk
+```
+
+A hostname that isn't listed fails server-side verification with
+`invalid-input-response`, which surfaces to the user as "Please complete the
+security check" on an otherwise-correct login. With `TURNSTILE_SECRET_KEY`
+blank the check is skipped entirely (see `App\Rules\Turnstile`), so an
+unconfigured environment never locks anyone out.
 
 ---
 
