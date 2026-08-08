@@ -12,10 +12,16 @@ class PythonClient
     {
         $this->http = new Client([
             'base_uri' => rtrim(config('services.python.base_url'), '/').'/',
-            // 120s: CPU TTS (XTTS-v2) synthesis can take well over 30s for a
-            // full reply. A shorter timeout surfaces to the widget as a
-            // generic "Upstream API error".
-            'timeout'  => 120,
+            // 280s. Both halves of a turn run on CPU on this host and are slow:
+            //   • local LLM (Ollama, qwen2.5:7b) ~0.6 tok/s  → 60-120s per reply
+            //   • CPU XTTS-v2 synthesis          ~0.8s/char  → 25s+ per sentence
+            // A shorter timeout aborts a generation that would have succeeded
+            // and surfaces to the widget as a generic "Upstream API error".
+            //
+            // Deliberately BELOW php.ini's max_execution_time (300s) so Guzzle
+            // times out first and Laravel can return a real error page, rather
+            // than PHP fatally killing the worker mid-request.
+            'timeout'  => 280,
             'headers'  => [
                 'X-Internal-Secret' => config('services.python.internal_secret'),
                 'Accept'            => 'application/json',
