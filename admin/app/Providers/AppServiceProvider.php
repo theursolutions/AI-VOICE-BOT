@@ -90,6 +90,42 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // ── Plans section ($pricing) ─────────────────────────────────
+        //
+        // partials/pricing-plans is included by the HOMEPAGE (#pricing) and by
+        // /pricing, and needs a fully-built view model (plans, prices, the
+        // visitor's approximate local currency, the comparison matrix).
+        //
+        // A composer rather than route-level injection: the homepage route is
+        // a plain closure that several things render, and the partial should
+        // work wherever it is dropped in without every caller remembering to
+        // pass data. It also keeps all pricing lookups in ONE place, so the
+        // homepage and /pricing can never show different numbers.
+        //
+        // Costs nothing on pages that don't include the partial — a composer
+        // only fires for the views it is bound to. Degrades to rendering
+        // nothing if the plan tables are missing or empty (a fresh install
+        // before BillingSeeder), so the homepage can never 500 on billing.
+        View::composer(['welcome', 'welcome-v2', 'pages.pricing'], function ($view) {
+            if (array_key_exists('pricing', $view->getData())) {
+                return;   // an explicit value from the controller wins
+            }
+
+            try {
+                $view->with(
+                    'pricing',
+                    app(\App\Services\Billing\PricingPresenter::class)
+                        ->build(request(), request()->query('billing'))
+                );
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('pricing.section.unavailable', [
+                    'error' => $e->getMessage(),
+                ]);
+
+                $view->with('pricing', null);
+            }
+        });
+
         // Share the active client's widget config (colors + branding)
         // with EVERY view so the admin layout can apply the same theme
         // across dashboard, sessions, leads, voices, etc.
@@ -141,6 +177,40 @@ class AppServiceProvider extends ServiceProvider
                 $tvaModules,
                 \App\Support\Modules::enabledKeys(),
             ));
+
+            // Finally drop anything the workspace's PLAN doesn't include, so the
+            // menu matches what they actually bought. Without this a Free
+            // workspace sees Telephony, Channels and Flow Builder in the
+            // sidebar and only discovers they aren't included by clicking and
+            // hitting the 402 upsell page — a menu full of dead ends.
+            //
+            // This mirrors EnsurePlanFeature exactly (same clientHasModule
+            // call, same config/modules.php keys), so the sidebar and the route
+            // gate can never disagree about what is reachable.
+            //
+            // Fails OPEN on a module no feature declares, and on a workspace
+            // with no plan resolved (pre-billing / grandfathered) — the same
+            // direction the middleware fails, so nothing an existing customer
+            // could see yesterday disappears today.
+            //
+            // Set billing.settings.hide_locked_modules = false to keep locked
+            // sections visible instead and let the upsell page do the selling.
+            if ($client && config('billing.settings.hide_locked_modules', true)) {
+                try {
+                    $planFeatures = app(\App\Services\Billing\PlanFeatureService::class);
+
+                    $tvaModules = array_values(array_filter(
+                        $tvaModules,
+                        fn (string $key) => $planFeatures->clientHasModule($client, $key),
+                    ));
+                } catch (\Throwable $e) {
+                    // Billing tables missing (fresh install) — leave the menu
+                    // exactly as RBAC left it rather than hiding the product.
+                    \Illuminate\Support\Facades\Log::warning('sidebar.plan_filter_skipped', [
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
 
             // Has this workspace been provisioned yet? Mirrors the check in
             // Admin\SetupController::show. The sidebar needs it because every

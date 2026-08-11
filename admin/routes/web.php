@@ -16,6 +16,10 @@ Route::post('/send-voice', [ConfigureAgentVoicesController::class, 'process'])->
 // Landing "Call me now" capture (rate-limited, no auth).
 Route::post('/api/demo-call', [App\Http\Controllers\PublicLandingController::class, 'demoCall'])
     ->name('demo-call');
+// Remaining demo-call allowance for this IP, so the page can render the
+// button already disabled instead of only failing on submit.
+Route::get('/api/demo-call/status', [App\Http\Controllers\PublicLandingController::class, 'demoCallStatus'])
+    ->name('demo-call.status');
 
 // Contact-page form → contact_leads (rate-limited + honeypot, no auth).
 Route::post('/api/contact', [App\Http\Controllers\PublicContactController::class, 'store'])
@@ -33,6 +37,15 @@ Route::view('/terms',          'pages.terms')->name('terms');
 Route::view('/refund-policy',  'pages.refund')->name('refund-policy');
 Route::view('/cookies',        'pages.cookies')->name('cookies');
 Route::view('/security',       'pages.security')->name('security.page');
+
+// ── Blog (public) ───────────────────────────────────────────────────────
+// The site's compounding SEO layer. Posts are managed at /admin/blog and
+// appear in /sitemap.xml automatically (App\Models\BlogPost::sitemapEntries).
+Route::get('/blog',         [App\Http\Controllers\BlogController::class, 'index'])->name('blog.index');
+// Slug pattern excludes slashes and dots so it can never shadow a real file
+// or swallow a deeper path.
+Route::get('/blog/{slug}',  [App\Http\Controllers\BlogController::class, 'show'])
+    ->where('slug', '[A-Za-z0-9\-_]+')->name('blog.show');
 
 // ── QR channel handoff (public, but signed + short-lived) ───────────────
 // Scanned from the Channels page on desktop and finished on the phone, which
@@ -64,6 +77,10 @@ Route::middleware('auth')->group(function () {
 require __DIR__.'/auth.php';
 require __DIR__.'/oauth.php';
 require __DIR__.'/invitations.php';
+// Public /pricing, the workspace billing area, and Super Admin → Billing.
+// The Stripe webhook is NOT here — it needs no session or CSRF, so it lives
+// in routes/stripe.php with no middleware group (see RouteServiceProvider).
+require __DIR__.'/billing.php';
 
 // ── Super-admin Ops Console (internal staff only) ────────────────────────
 Route::middleware(['auth', 'super-admin'])
@@ -127,6 +144,21 @@ Route::middleware(['auth', 'super-admin'])
         // Homepage testimonial carousel — rows, so a CRUD screen of its own
         // rather than more content.* keys. The section heading/lead still
         // live in /admin/content.
+        // Passive visitor analytics for the public site.
+        Route::get ('/visitors',          [App\Http\Controllers\SuperAdmin\VisitorsController::class, 'index'])->name('visitors.index');
+        Route::get ('/visitors/{id}',     [App\Http\Controllers\SuperAdmin\VisitorsController::class, 'show'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('visitors.show');
+        Route::post('/visitors/geo',      [App\Http\Controllers\SuperAdmin\VisitorsController::class, 'resolveGeo'])->name('visitors.geo');
+
+        // ── Blog / articles: the public /blog section ──────────────────────
+        Route::get ('/blog',                      [App\Http\Controllers\SuperAdmin\BlogController::class, 'index'])->name('blog.index');
+        Route::get ('/blog/create',               [App\Http\Controllers\SuperAdmin\BlogController::class, 'create'])->name('blog.create');
+        Route::post('/blog',                      [App\Http\Controllers\SuperAdmin\BlogController::class, 'store'])->name('blog.store');
+        Route::get ('/blog/{id}/edit',            [App\Http\Controllers\SuperAdmin\BlogController::class, 'edit'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('blog.edit');
+        Route::post('/blog/{id}',                 [App\Http\Controllers\SuperAdmin\BlogController::class, 'update'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('blog.update');
+        Route::post('/blog/{id}/toggle',          [App\Http\Controllers\SuperAdmin\BlogController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('blog.toggle');
+        Route::post('/blog/{id}/feature',         [App\Http\Controllers\SuperAdmin\BlogController::class, 'feature'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('blog.feature');
+        Route::post('/blog/{id}/delete',          [App\Http\Controllers\SuperAdmin\BlogController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('blog.delete');
+
         Route::get ('/testimonials',              [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'index'])->name('testimonials.index');
         Route::post('/testimonials',              [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'store'])->name('testimonials.store');
         Route::post('/testimonials/{id}',         [App\Http\Controllers\SuperAdmin\TestimonialsController::class, 'update'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('testimonials.update');
@@ -176,11 +208,25 @@ Route::middleware(['auth', 'active.client'])
         Route::post('/setup', [App\Http\Controllers\Admin\SetupController::class, 'store'])->name('setup.store');
 
         // ── Everything below requires a provisioned workspace, then passes
-        //    two module gates: `module.enabled` (platform-wide super-admin
-        //    switch — off → "under development" page for everyone) runs
-        //    first, then `module.access` (per-role RBAC; owners bypass).
-        //    See config/modules.php + App\Support\Modules.
-        Route::middleware(['workspace.provisioned', 'module.enabled', 'module.access', 'email.verified.gate'])->group(function () {
+        //    four gates, in this order:
+        //
+        //      module.enabled — platform-wide super-admin switch. Off → the
+        //                       "under development" page, for everyone.
+        //      subscribed     — is this workspace paid up? A lapsed free week
+        //                       or exhausted dunning degrades to READ-ONLY
+        //                       (reads pass, writes redirect to /billing) so
+        //                       nobody is ever locked away from their own data.
+        //      plan.feature   — does their PLAN include this module? Owners do
+        //                       NOT bypass: being the owner says nothing about
+        //                       what the workspace paid for.
+        //      module.access  — does this MEMBER's role allow it? Owners bypass.
+        //
+        //    The last two share config/modules.php's route→module mapping via
+        //    App\Support\Modules, so entitlements and permissions can't drift.
+        //
+        //    Note /billing itself is registered in routes/billing.php OUTSIDE
+        //    this group: a paywall you cannot pay through is just an outage.
+        Route::middleware(['workspace.provisioned', 'module.enabled', 'subscribed', 'plan.feature', 'module.access', 'email.verified.gate'])->group(function () {
 
         Route::get('/dashboard', [App\Http\Controllers\HomeController::class, 'index'])
             ->name('dashboard');

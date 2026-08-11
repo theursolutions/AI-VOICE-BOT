@@ -126,6 +126,21 @@ return [
     // outbound-call wiring is finished.
     'demo_call' => [
         'enabled' => env('DEMO_CALL_ENABLED', false),
+
+        // Hard cap on a single demo call. Passed to Twilio as `TimeLimit`,
+        // so the carrier hangs up on us — a bug in our own code can't run
+        // the bill up past this.
+        'max_seconds' => (int) env('DEMO_CALL_MAX_SECONDS', 30),
+        // How long we let the visitor's phone ring before giving up.
+        'ring_seconds' => (int) env('DEMO_CALL_RING_SECONDS', 20),
+
+        // Demo calls a visitor may trigger per IP per calendar day.
+        'max_per_day' => (int) env('DEMO_CALL_MAX_PER_DAY', 2),
+
+        // Which project's agent answers the demo. Outbound calls can't be
+        // routed by dialed number (that's the visitor), so it's named here
+        // rather than guessed. Blank = lowest-id project.
+        'project_id' => env('DEMO_CALL_PROJECT_ID'),
     ],
 
     // Public landing page — embed the real production widget via the

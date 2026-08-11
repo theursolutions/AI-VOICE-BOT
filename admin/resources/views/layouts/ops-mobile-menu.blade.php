@@ -74,6 +74,10 @@
                 <div class="menu__icon"><i data-lucide="layout-template"></i></div>
                 <div class="menu__title">Page Content</div>
             </a></li>
+            <li><a href="{{ route('ops.blog.index') }}" class="menu {{ $is('ops.blog.*') ? 'menu--active' : '' }}">
+                <div class="menu__icon"><i data-lucide="newspaper"></i></div>
+                <div class="menu__title">Articles</div>
+            </a></li>
             <li class="menu__devider my-4"></li>
             <li><a href="{{ route('ops.audit.index') }}" class="menu {{ $is('ops.audit.*') ? 'menu--active' : '' }}">
                 <div class="menu__icon"><i data-lucide="file-text"></i></div>

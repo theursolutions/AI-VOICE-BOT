@@ -38,6 +38,13 @@ class RouteServiceProvider extends ServiceProvider
             // them makes the responses uncacheable by any shared cache.
             Route::group([], base_path('routes/crawler.php'));
 
+            // Stripe webhook — same treatment, same reasons: no session, no
+            // CSRF token to present, nothing to bind. Authentication is the
+            // Stripe signature, verified inside the controller. Inside the
+            // `web` group every delivery would 419 and Stripe would retry
+            // it for days.
+            Route::group([], base_path('routes/stripe.php'));
+
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
         });

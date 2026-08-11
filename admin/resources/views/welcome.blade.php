@@ -288,6 +288,13 @@
             transition: transform .15s, box-shadow .15s;
         }
         .callbar button:hover { transform: translateY(-1px); box-shadow: 0 0 32px rgba(59, 130, 246, .55); }
+        .callbar button:disabled {
+            opacity: .45; cursor: not-allowed; transform: none; box-shadow: none;
+        }
+        /* Daily test-call allowance spent — the bar reads as switched off
+           rather than merely unresponsive. */
+        .callbar.is-locked { opacity: .6; border-style: dashed; }
+        .callbar.is-locked input { cursor: not-allowed; }
         .callbar__msg { font-size: 12px; color: var(--text-dim); margin-top: 10px; min-height: 16px; }
         .callbar__msg.is-ok  { color: var(--neon); }
         .callbar__msg.is-err { color: var(--hot); }
@@ -980,17 +987,21 @@
             aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
         <span></span>
     </button>
+    {{-- Kept deliberately short. Reviews, FAQ, Insights and Security all live
+         in the sitewide footer, and a nav with eleven items is one nobody
+         reads — the fewer choices here, the more each one gets clicked. --}}
     <div class="nav__links" id="navLinks">
+        {{-- Back to the top of the page. href="#" would append a bare fragment
+             to the URL and leave it there; this scrolls smoothly and keeps the
+             address bar clean. --}}
+        <a href="{{ url('/') }}" id="navHome">Home</a>
         <a href="#how">How it works</a>
         <a href="#channels">Channels</a>
         <a href="#platform">Features</a>
         <a href="#cases">Use cases</a>
-        <a href="#testimonials">Reviews</a>
-        <a href="#faq">FAQ</a>
-        {{-- Real pages, not anchors: these are the only crawlable links from
-             the homepage into /security and /about, which otherwise hang off
-             the footer alone. --}}
-        <a href="{{ url('/security') }}">Security</a>
+        @if (! empty($pricing['plans'] ?? []))
+            <a href="#pricing">Pricing</a>
+        @endif
         <a href="{{ url('/contact') }}">Contact</a>
         {{-- Signed-in visitors get a way back into the app instead of being
              asked to sign in again. /dashboard redirects to the active
@@ -1025,10 +1036,11 @@
                 <div class="callbar__icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.86 19.86 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 </div>
-                <input type="tel" name="phone" placeholder="+1 (555) 010-0100" required data-cursor="call">
-                <button type="submit" data-cursor="call">{{ tva_setting('content.hero_cta_label', 'Call me now →') }}</button>
+                <input type="tel" name="phone" placeholder="Enter your phone number" required
+                       aria-label="Your phone number" data-cursor="call">
+                <button type="submit" data-cursor="call">{{ tva_setting('content.hero_cta_label', 'Reach out →') }}</button>
             </form>
-            <div id="callMsg" class="callbar__msg">{{ tva_setting('content.hero_callbar_msg', 'Our AI agent will call you in under 10 seconds.') }}</div>
+            <div id="callMsg" class="callbar__msg" role="status" aria-live="polite">{{ tva_setting('content.hero_callbar_msg', 'Leave your number — our agent will call you back soon.') }}</div>
 
             <div class="hero__meta">
                 <div class="hero__meta-item">
@@ -1252,6 +1264,24 @@
         </div>
     </div>
 </section>
+
+<!-- ── PLANS ──────────────────────────────────────────────────────── -->
+{{-- Everything here is database-driven: plans, prices, limits and features all
+     come from the tables a super-admin edits at /admin/billing/plans. There are
+     no hardcoded numbers in the markup, so changing a price never touches this
+     file. The section renders nothing at all if no plans are configured, so the
+     homepage can't break on a fresh install. --}}
+@if (! empty($pricing['plans'] ?? []))
+<section class="section" id="pricing" style="position: relative;">
+    <div class="wrap">
+        <div class="section__eyebrow reveal">{{ tva_setting('content.pricing_eyebrow', 'Simple, honest pricing') }}</div>
+        <h2 class="reveal">{{ tva_setting('content.pricing_title', 'Pick a plan. Change it whenever you like.') }}</h2>
+        <p class="lead reveal">{{ tva_setting('content.pricing_lead', 'Start free for 7 days — no credit card. Every plan includes voice cloning, 13 languages and automatic lead capture. You only pay more for volume and the power features.') }}</p>
+
+        @include('partials.pricing-plans')
+    </div>
+</section>
+@endif
 
 <!-- ── TESTIMONIALS ───────────────────────────────────────────────── -->
 @php
@@ -1543,6 +1573,36 @@ var WANTS_WEBGL = !window.matchMedia('(max-width: 720px)').matches
     });
 })();
 
+/* ─────────────────────── "Home" → back to the top ─────────────────────
+   The link's href is the real homepage URL, so it works with JavaScript
+   off, opens in a new tab correctly, and is a proper crawlable link. When
+   we are ALREADY on the homepage, reloading to get to the top is wasteful
+   and loses scroll animations — so intercept and scroll instead. */
+(function () {
+    var home = document.getElementById('navHome');
+    if (!home) return;
+
+    home.addEventListener('click', function (e) {
+        // Let modified clicks (new tab/window) behave normally.
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+
+        // Only hijack when this IS the homepage.
+        if (window.location.pathname !== '/' && window.location.pathname !== '') return;
+
+        e.preventDefault();
+
+        // Honour a reduced-motion preference: jump rather than animate.
+        var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        window.scrollTo({ top: 0, behavior: reduce ? 'auto' : 'smooth' });
+
+        // Drop any leftover #section fragment so the URL matches what is on
+        // screen and a refresh doesn't bounce back down the page.
+        if (window.location.hash && window.history.replaceState) {
+            window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        }
+    });
+})();
+
 /* ───────────────────────────── Starfield ─────────────────────────── */
 (function () {
     var canvas = document.getElementById('stars');
@@ -1759,16 +1819,53 @@ WEBGL_INITS.push(function () {
     io.observe(box);
 })();
 
-/* ───────────────────── Call-me-now form (capture stub) ──────────── */
+/* ─────────────────────── Reach-out form (hero bar) ──────────────── */
+/* Posts the number to /api/demo-call, which logs it to contact_leads like
+   the /contact form does. That endpoint can also place a demo call back,
+   but that path is switched off — see PublicLandingController. The
+   lock-out branch below only fires when it's on and the visitor has used
+   their daily allowance; today the server always answers `allowed: true`. */
 (function () {
     var f = document.getElementById('callForm');
     var msg = document.getElementById('callMsg');
     if (!f) return;
+
+    var input  = f.querySelector('input[name="phone"]');
+    var button = f.querySelector('button');
+    var busy   = false;
+
+    // Lock the bar for a visitor who has used their daily allowance. The
+    // server enforces this too — this only saves them typing a number to be
+    // told no.
+    function lock(text) {
+        f.classList.add('is-locked');
+        button.disabled = true;
+        input.disabled  = true;
+        msg.textContent = text;
+        msg.className   = 'callbar__msg is-err';
+    }
+
+    // The quota is per IP, so it can't be read from this page's markup —
+    // a cached HTML response would hand one visitor another's allowance.
+    fetch('{{ url('/api/demo-call/status') }}', { headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.json(); })
+        .then(function (q) {
+            if (q && q.allowed === false) {
+                lock(q.limit_message || 'Daily test-call limit reached. Try again tomorrow.');
+            }
+        })
+        .catch(function () { /* status is an optimisation — never block the form on it */ });
+
     f.addEventListener('submit', function (e) {
         e.preventDefault();
-        var phone = f.querySelector('input[name="phone"]').value.trim();
+        if (busy || button.disabled) return;
+
+        var phone = input.value.trim();
         if (!phone) return;
-        msg.textContent = 'Connecting…';
+
+        busy = true;
+        button.disabled = true;
+        msg.textContent = 'Sending…';
         msg.className = 'callbar__msg';
 
         fetch('{{ url('/api/demo-call') }}', {
@@ -1782,11 +1879,28 @@ WEBGL_INITS.push(function () {
         })
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (body) {
-            msg.textContent = body.message || 'Thanks — we\'ll call you shortly.';
-            msg.className = 'callbar__msg is-ok';
-            f.querySelector('input').value = '';
+            busy = false;
+
+            if (body.ok) {
+                msg.textContent = body.message
+                    || 'Thank you for reaching out! Your request has been logged — our agent will call you back soon.';
+                msg.className = 'callbar__msg is-ok';
+                input.value = '';
+            } else {
+                msg.textContent = body.message || 'Couldn\'t send that just now. Try again in a moment.';
+                msg.className = 'callbar__msg is-err';
+            }
+
+            // Only reachable once demo calling is switched back on.
+            if (body.allowed === false) {
+                lock(body.limit_message || body.message || 'Daily limit reached.');
+            } else {
+                button.disabled = false;
+            }
         })
         .catch(function () {
+            busy = false;
+            button.disabled = false;
             msg.textContent = 'Couldn\'t reach our servers. Try again in a moment.';
             msg.className = 'callbar__msg is-err';
         });

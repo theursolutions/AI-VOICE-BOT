@@ -65,7 +65,15 @@ class TelephonyController extends Controller
             'from' => $from, 'to' => $to, 'call_sid' => $callSid,
         ]);
 
-        $resolved = $this->resolveProjectForNumber($to);
+        // Outbound demo call from the landing page. `To` is the visitor, so
+        // the usual dialed-number lookup would match nothing (and fall
+        // through to "first project"); the demo project is named in config
+        // instead. Only trusted because this route sits behind Twilio's
+        // request-signature check, which covers the query string.
+        $resolved = $request->boolean('demo')
+            ? $this->resolveDemoProject()
+            : $this->resolveProjectForNumber($to);
+
         if (!$resolved) {
             Log::warning('Twilio: no project bound to number', ['to' => $to]);
             return $this->twimlResponse(
@@ -182,6 +190,19 @@ class TelephonyController extends Controller
 
         $welcomeText = (string) ($project->json_data['widget']['welcome_message']
             ?? 'Hi! Thanks for calling. One moment please.');
+
+        // A demo call is OUTBOUND — the project's inbound greeting ("thanks
+        // for calling") is simply untrue when we're the ones ringing. Use the
+        // demo greeting instead, and tell them up front that the line cuts
+        // off, so a hard hang-up mid-sentence doesn't read as a fault.
+        if ($request->boolean('demo')) {
+            $secs = max(5, (int) config('services.demo_call.max_seconds', 30));
+            $welcomeText = (string) tva_setting(
+                'content.demo_call_greeting',
+                'Hi! This is the Serve AI demo agent calling you back from our website. '
+                . 'Ask me anything about what we do — this test call lasts about ' . $secs . ' seconds.'
+            );
+        }
 
         // Try the cloned-voice welcome first — that's the "everything
         // in your voice" experience the user wants. The service lazily
@@ -388,6 +409,32 @@ XML;
      * and no fallback is appropriate. The numberConfig is null for
      * legacy single-field matches (no routing info available).
      */
+    /**
+     * Project that answers landing-page demo calls. Named in config because
+     * an outbound call has no dialed number of ours to route by.
+     *
+     * @return array{0:Project,1:null}|null
+     */
+    private function resolveDemoProject(): ?array
+    {
+        $id = (int) config('services.demo_call.project_id', 0);
+
+        $project = $id > 0
+            ? Project::find($id)
+            : Project::orderBy('id')->first();
+
+        if (! $project) {
+            Log::warning('Telephony: demo call but no project available', ['configured_id' => $id]);
+            return null;
+        }
+
+        if ($id > 0 && $project->id !== $id) {
+            Log::warning('Telephony: DEMO_CALL_PROJECT_ID not found', ['configured_id' => $id]);
+        }
+
+        return [$project, null];
+    }
+
     private function resolveProjectForNumber(string $number): ?array
     {
         $number = trim($number);

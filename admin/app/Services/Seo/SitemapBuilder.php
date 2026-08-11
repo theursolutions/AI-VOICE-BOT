@@ -50,6 +50,7 @@ class SitemapBuilder
             if (trim($loc) === '') {
                 continue;
             }
+            $entry = is_array($entry) ? $entry : [];
 
             // Accept absolute URLs, but only for our own origin — an entry
             // pointing somewhere else is a mistake, not a redirect target.
@@ -74,12 +75,61 @@ class SitemapBuilder
                 'loc'        => Seo::canonical($path),
                 'path'       => $path,
                 'lastmod'    => $this->lastmod($views[$path] ?? null),
-                'changefreq' => trim((string) (is_array($entry) ? ($entry['changefreq'] ?? '') : '')) ?: 'monthly',
-                'priority'   => trim((string) (is_array($entry) ? ($entry['priority'] ?? '') : '')) ?: '0.5',
+                'changefreq' => trim((string) ($entry['changefreq'] ?? '')) ?: 'monthly',
+                'priority'   => trim((string) ($entry['priority'] ?? '')) ?: '0.5',
+            ];
+        }
+
+        // ── Database-backed URLs (blog posts, and anything added later) ──
+        // These are NOT route-checked: they come from the same query that
+        // decides what the public pages render, so a stale entry is
+        // impossible by construction. They carry their own lastmod, which is
+        // the whole point — a corrected article should invite a re-crawl.
+        foreach ($this->dynamicEntries() as $entry) {
+            $path = Seo::path((string) ($entry['loc'] ?? ''));
+
+            if ($path === '/' || in_array($path, $noindex, true) || isset($out[$path])) {
+                continue;
+            }
+
+            $out[$path] = [
+                'loc'        => Seo::canonical($path),
+                'path'       => $path,
+                'lastmod'    => trim((string) ($entry['lastmod'] ?? '')) ?: date('Y-m-d'),
+                'changefreq' => trim((string) ($entry['changefreq'] ?? '')) ?: 'monthly',
+                'priority'   => trim((string) ($entry['priority'] ?? '')) ?: '0.5',
             ];
         }
 
         return array_values($out);
+    }
+
+    /**
+     * URLs contributed by the database, gathered from the providers listed in
+     * `config('site.seo.sitemap_providers')` as [Class::class, 'method'].
+     *
+     * A provider that throws is skipped rather than allowed to take the
+     * sitemap down: a missing blog section is recoverable, a 500 on
+     * /sitemap.xml silently stops Google re-crawling the entire site.
+     *
+     * @return array<int,array{loc:string,lastmod?:string,changefreq?:string,priority?:string}>
+     */
+    protected function dynamicEntries(): array
+    {
+        $entries = [];
+
+        foreach ((array) config('site.seo.sitemap_providers', []) as $provider) {
+            try {
+                $rows = is_callable($provider) ? $provider() : null;
+                if (is_array($rows)) {
+                    $entries = array_merge($entries, $rows);
+                }
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+
+        return $entries;
     }
 
     /** Paths that must never be indexed (and so never appear in a sitemap). */

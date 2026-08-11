@@ -75,6 +75,9 @@ class PublicContactController extends Controller
                 'ip'         => $ip,
                 'user_agent' => substr((string) $request->userAgent(), 0, 255),
                 'referrer'   => substr((string) $request->headers->get('referer'), 0, 255),
+                // Joins this lead to its visitor row — see the visitor_key
+                // migration for why this is how we identify a contact.
+                'visitor_key' => \App\Support\VisitorIdentity::key($request),
             ]);
         } catch (\Throwable $e) {
             // Never show a visitor a stack trace over a contact form. Log it

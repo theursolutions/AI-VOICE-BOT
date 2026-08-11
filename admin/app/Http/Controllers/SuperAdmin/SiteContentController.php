@@ -41,8 +41,12 @@ class SiteContentController extends Controller
                 $t('hero_title', 'Headline (plain part)'),
                 $t('hero_title_accent', 'Headline (highlighted part)'),
                 $a('hero_subtitle', 'Sub-headline'),
-                $t('hero_cta_label', 'Call-bar button label'),
-                $t('hero_callbar_msg', 'Call-bar helper text'),
+                $t('hero_cta_label', 'Reach-out button label'),
+                $t('hero_callbar_msg', 'Reach-out helper text (under the bar)'),
+                // Spoken aloud on the demo call — dormant until DEMO_CALL_ENABLED
+                // is switched on, so flag that rather than let an operator edit
+                // it and wonder why nothing changed.
+                $a('demo_call_greeting', 'Demo call greeting — spoken when the visitor picks up (inactive: demo calling is off)'),
                 $t('hero_meta1', 'Trust point #1'),
                 $t('hero_meta2', 'Trust point #2'),
                 $t('hero_meta3', 'Trust point #3'),

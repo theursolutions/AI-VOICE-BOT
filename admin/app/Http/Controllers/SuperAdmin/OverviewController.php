@@ -43,6 +43,17 @@ class OverviewController extends Controller
             'audit_today'     => AuditLog::where('created_at', '>=', strtotime('today'))->count(),
         ];
 
+        // Marketing-site traffic. Wrapped because the visitors tables arrive in
+        // a later migration than the rest of this dashboard — an un-migrated
+        // deploy should lose one tile, not the whole overview.
+        try {
+            $stats['visitors']       = \App\Models\Visitor::humans()->count();
+            $stats['visitors_today'] = \App\Models\Visitor::humans()
+                ->where('last_seen_at', '>=', now()->startOfDay())->count();
+        } catch (Throwable $e) {
+            $stats['visitors'] = $stats['visitors_today'] = 0;
+        }
+
         // ── Chart-data buckets ────────────────────────────────────
         $now           = time();
         $dayCount      = 14;

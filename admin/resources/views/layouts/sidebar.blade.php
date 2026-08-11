@@ -411,6 +411,33 @@
         </li>
         @endif
 
+        {{-- ── Billing ──────────────────────────────────────────────────
+             Deliberately NOT behind a module key: /billing has to stay
+             reachable when the workspace is read-only, otherwise the
+             paywall has no way through it. Owner-only, since only the
+             owner can change what the workspace pays. --}}
+        @if ($clientSlug && auth()->user()?->isOwnerOf(auth()->user()->active_client_id ?? 0))
+        @php
+            $billingSub = auth()->user()?->activeClient?->currentSubscription();
+            $billingDue = $billingSub && ! $billingSub->grantsAccess();
+            $freeLeft   = $billingSub?->isFree() ? $billingSub->freeDaysRemaining() : null;
+        @endphp
+        <li>
+            <a href="{{ route('billing.index', ['client' => $clientSlug]) }}"
+               class="side-menu {{ $is('billing.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="credit-card"></i></div>
+                <div class="side-menu__title">
+                    Billing
+                    @if ($billingDue)
+                        <span class="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-red-500 text-white">Action needed</span>
+                    @elseif ($freeLeft !== null && $freeLeft <= 3)
+                        <span class="ml-2 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-amber-400 text-amber-950">{{ $freeLeft }}d left</span>
+                    @endif
+                </div>
+            </a>
+        </li>
+        @endif
+
         @if ($lock)
             </div>{{-- .tva-lock__items --}}
         </div>{{-- .tva-lock --}}
