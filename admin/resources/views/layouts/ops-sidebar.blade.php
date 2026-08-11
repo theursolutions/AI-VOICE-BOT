@@ -98,7 +98,36 @@
 
         <li class="side-nav__devider my-4"></li>
         <li class="side-menu__title-section">
+            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Billing</div>
+        </li>
+        <li>
+            <a href="{{ route('ops.billing.plans.index') }}" class="side-menu {{ $is('ops.billing.plans.*', 'ops.billing.prices.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="credit-card"></i></div>
+                <div class="side-menu__title">Plans &amp; Pricing</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.billing.features.index') }}" class="side-menu {{ $is('ops.billing.features.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="sliders"></i></div>
+                <div class="side-menu__title">Features &amp; Limits</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.billing.subscriptions.index') }}" class="side-menu {{ $is('ops.billing.subscriptions.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="repeat"></i></div>
+                <div class="side-menu__title">Subscriptions</div>
+            </a>
+        </li>
+
+        <li class="side-nav__devider my-4"></li>
+        <li class="side-menu__title-section">
             <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Marketing Site</div>
+        </li>
+        <li>
+            <a href="{{ route('ops.visitors.index') }}" class="side-menu {{ $is('ops.visitors.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="globe"></i></div>
+                <div class="side-menu__title">Visitors</div>
+            </a>
         </li>
         <li>
             <a href="{{ route('ops.contacts.index') }}" class="side-menu {{ $is('ops.contacts.*') ? 'side-menu--active' : '' }}">
@@ -122,6 +151,12 @@
             <a href="{{ route('ops.testimonials.index') }}" class="side-menu {{ $is('ops.testimonials.*') ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="quote"></i></div>
                 <div class="side-menu__title">Testimonials</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.blog.index') }}" class="side-menu {{ $is('ops.blog.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="newspaper"></i></div>
+                <div class="side-menu__title">Articles</div>
             </a>
         </li>
 

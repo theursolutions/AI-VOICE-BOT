@@ -70,8 +70,12 @@
 @endphp
 <title>{{ $pageTitle }}</title>
 <meta name="description" content="{{ $pageDesc }}">
-@if (!empty($seo['meta_keywords']))
-<meta name="keywords" content="{{ $seo['meta_keywords'] }}">
+{{-- A page may override the site-wide keywords ($metaKeywords). Worth being
+     honest about: Google has ignored this tag since 2009, so it is here for
+     consistency and for other engines, not as a ranking lever. --}}
+@php $keywords = trim((string) ($metaKeywords ?? '')) ?: (string) ($seo['meta_keywords'] ?? ''); @endphp
+@if ($keywords !== '')
+<meta name="keywords" content="{{ $keywords }}">
 @endif
 @if (!empty($seo['author']))
 <meta name="author" content="{{ $seo['author'] }}">

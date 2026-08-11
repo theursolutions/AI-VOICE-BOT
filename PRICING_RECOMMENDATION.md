@@ -1,158 +1,147 @@
-# Recommended Pricing — Serve AI (Phase 6)
+# Recommended Pricing & Feature Allocation — Serve AI (Phase 6)
 
 **Status: RECOMMENDATION ONLY. Nothing below has been implemented.**
 No migrations written, no Stripe Products or Prices created, no production code changed.
 
-**Revision 2 (2026-08-09)** — prices reduced from r1 at your request. r1 was $39 / $129 / $299 (market-median matching). r2 below is **~50% lower**, positioning us as the price leader rather than the median. The reasoning for every change, and the margin consequence, is in §2 and §11.
+**Revision history**
+- **r1** — $39 / $129 / $299, monthly + quarterly + annual, 5 plan cards. (Market-median matching.)
+- **r2** — prices cut ~50% to $19 / $59 / $149. (Price-leader positioning.)
+- **r3 (current, 2026-08-09)** — per your direction: **monthly + annual only** (quarterly dropped from the offer, kept in the architecture), **4 plan cards** (Free + 3 paid), and a decided answer on **feature allocation** (§3).
 
 Derived from [COMPETITOR_PRICING_COMPARISON.md](COMPETITOR_PRICING_COMPARISON.md) (17 competitors, checked 2026-08-09) and the shipped capabilities in [SUBSCRIPTION_REQUIREMENTS_ANALYSIS.md](SUBSCRIPTION_REQUIREMENTS_ANALYSIS.md).
 
 ---
 
-## 1. Shape of the offer
+## 1. The offer — 4 plans, 2 billing intervals
 
-**Free + 3 paid tiers + Enterprise** — the market's modal structure (8 of 17 competitors).
+| | **FREE** | **STARTER** | **GROWTH** ★ | **SCALE** |
+|---|---|---|---|---|
+| **Monthly** | **$0** | **$19** | **$59** | **$149** |
+| **Annual** | — | **$190** *(2 months free — $15.83/mo)* | **$590** *(2 months free — $49.17/mo)* | **$1,490** *(2 months free — $124.17/mo)* |
+| **7-day trial** | n/a (permanent) | ✅ | ✅ | ✅ |
+| **Badge** | — | — | **Most popular** | — |
 
-| | **FREE** | **STARTER** | **GROWTH** ★ | **SCALE** | **ENTERPRISE** |
-|---|---|---|---|---|---|
-| **Monthly** | **$0** | **$19** | **$59** | **$149** | From $499 |
-| **Quarterly** | — | **$51** *(save 10% — $17/mo)* | **$159** *(save 10% — $53/mo)* | **$399** *(save 11% — $133/mo)* | Annual contract |
-| **Annual** | — | **$179** *(save 21% — $14.92/mo)* | **$569** *(save 20% — $47.42/mo)* | **$1,429** *(save 20% — $119.08/mo)* | Custom |
-| **7-day trial** | n/a (permanent) | ✅ | ✅ | ✅ | n/a (pilot) |
-| **Badge** | — | — | **Most popular** | — | — |
+Below the cards, a slim band — not a fifth pricing card:
 
-★ = recommended/popular plan.
+> **Need more?** Unlimited projects, SSO, dedicated infrastructure, custom SLA. **Talk to us →**
 
-Prices are stored as **absolute integer cent amounts per interval** (`1900`, `5100`, `17900`, …), not computed from a discount rule — so the Super Admin can set any number without the code deriving it.
+### Annual discount: "2 months free" (16.7%)
 
-### What changed from r1
+Changed from r2's flat 20%. Reasons:
 
-| Plan | r1 monthly | **r2 monthly** | Cut |
-|---|---|---|---|
-| Starter | $39 | **$19** | −51% |
-| Growth | $129 | **$59** | −54% |
-| Scale | $299 | **$149** | −50% |
-| Enterprise floor | ~$1,000 | **$499** | −50% |
+- **The numbers are clean**: $19 → $190, $59 → $590, $149 → $1,490. On a pricing page that legibility is worth more than 3.3 percentage points.
+- **It is the market's most common formulation** — Tidio, Rosie and Zoho SalesIQ all express annual as "2 months free" rather than a percentage. Buyers parse it instantly.
+- 16.7% sits inside the market's 15–25% band (Goodcall 15%, Chatbase 20%, respond.io 20%, Wati ≈25%).
 
----
+If you prefer the bigger headline number, 20% would be **$179 / $569 / $1,429** — same architecture, one Super-Admin edit. I recommend the round numbers.
 
-## 2. Why each price
+### Quarterly: dropped from the offer, kept in the architecture
 
-### The strategic shift in r2
+You're right that monthly + annual is the simpler offer, and the research backs it: **zero of 17 competitors publish a quarterly price.** Two intervals is what buyers expect and what the toggle should show.
 
-r1 priced **at** the market. r2 prices **under** it — deliberately, and we are one of very few vendors who structurally can:
-
-- **Our marginal cost is genuinely lower.** Local XTTS voice and local/self-hosted LLM options mean we don't pay OpenAI + ElevenLabs + platform margin on every conversation the way Rosie, Chatbase, or Synthflow do. Competitors *can't* follow us down without losing money; we can sit here on purpose.
-- **Our starting market is price-sensitive.** Pakistan, MENA, South Asia. A $129/month USD charge is not a decision an SMB there makes casually; **$59 is.**
-- **Nobody occupies the floor with a real product.** The cheapest genuine entry tiers in the set are ManyChat $15 (one channel, and AI is a **+$29/mo** add-on), Tidio $24.17 (chat only), Dialzara $29 (60 voice minutes only). At **$19 with voice + web chat + WhatsApp included**, we are the cheapest complete product in the category by a wide margin.
-
-### Starter — $19/month
-Undercuts every real entry tier in the comparison set: Tidio $24.17, Dialzara $29, Chatbase $32, Wati $39, Rosie $49, Goodcall $79. Only ManyChat's $15 is lower, and ManyChat gives you no voice, no web widget, and charges $29/month extra for the AI.
-
-**$19 is the "just say yes" price.** For an SMB owner it is below the threshold where a purchase needs justifying to anyone. That matters far more than the $20 we give up versus r1, because our real problem at launch is not extracting revenue per customer — it is getting the first few hundred workspaces live and generating conversation data.
-
-### Growth — $59/month — the plan we want people to buy
-The market's badged mid-tier band is $99–$159 (median $129). **$59 sits at 46% of the market median for the equivalent tier**, and the substitution line on the pricing card becomes very hard to argue with:
-
-> Rosie $49 (voice) + Chatbase $32 (web chat) + Wati $39 (WhatsApp) = **$120/month for three disconnected tools, three knowledge bases, three inboxes.**
-> Growth is **$59** for all of it in one product, with one knowledge base, one inbox, one lead list.
-
-That is **half the price of the parts** — a much stronger claim than r1's "same price as the parts."
-
-$59 is 3.1× Starter, at the top of the observed 2–3× band. Deliberate: the mid tier must look like the obvious choice. It gives **5× the chat volume and 5× the voice minutes** for 3.1× the price, mirroring how Rosie (3× price → 4× minutes) and Chatbase (3.75× → 5.7× credits) engineer their popular tier.
-
-### Scale — $149/month
-The market's top self-serve cluster is $249–$400 (median $299). **$149 is half of that** — and it happens to equal Rosie's *middle* tier price while including channels, flows, RBAC, API, white-label and BYO-LLM that Rosie does not sell at any price.
-
-2.5× Growth, inside the observed 1.75×–3.3× band. This tier holds our four uncontested differentiators (live database connector, per-table AI access control, BYO/local LLM, white-label + custom domain), so it has the least price pressure of the three — nobody in the comparison set sells these at all.
-
-### Enterprise — custom, from $499/month
-Halved from r1 so the step up from Scale ($149) is 3.3× rather than 6.7×. Still positioned far below Synthflow's $30,000/year floor, keeping the lower-mid-market they abandoned.
+But your original brief asked that "the architecture should allow additional intervals later," and that costs nothing to honour: `plan_prices` stores one row per interval, so quarterly is a **row, not a code path**. If cash-flow feedback from Pakistan/MENA customers later says annual-in-USD is too big a jump, you add a quarterly price from the admin panel and the toggle grows a third button — **no migration, no deploy**. The interval enum ships with `monthly | quarterly | annually` from day one; only monthly and annual get rows.
 
 ---
 
-## 3. Discounts (unchanged from r1)
+## 2. Why these prices (unchanged from r2)
 
-### Annual — 20%
-Market median is 17–20%. Chatbase and respond.io run exactly 20%; Wati ≈25%; Goodcall 15%; Smith.ai 10%. Twenty percent beats the majority, is trivially explainable, and is a clear 10 points ahead of quarterly.
+| Plan | Price | Positioning |
+|---|---|---|
+| **Starter $19** | Undercuts every real entry tier: Tidio $24, Dialzara $29, Chatbase $32, Wati $39, Rosie $49, Goodcall $79. Only ManyChat's $15 is lower — and it has no voice, no web widget, and charges **+$29/mo for the AI**. $19 is below the threshold where an SMB owner has to justify a purchase to anyone. |
+| **Growth $59** | The market's badged mid-tier median is $129. At $59 the substitution line becomes: *Rosie $49 (voice) + Chatbase $32 (chat) + Wati $39 (WhatsApp) = $120/mo for three disconnected tools with three knowledge bases* — **we are half the price of the parts, in one product.** 3.1× Starter, at the top of the observed 2–3× step band, so the middle tier looks like the obvious choice. |
+| **Scale $149** | Half the top-tier market median ($299 across Goodcall/respond.io/Wati/Rosie/Tidio/Dialzara/Chatbase). Equals Rosie's *middle* tier while including flows, RBAC, API, white-label and BYO-LLM that Rosie doesn't sell at any price. 2.5× Growth. |
+| **Enterprise from $499** | Far below Synthflow's $30,000/year floor, keeping the lower-mid-market they abandoned. |
 
-> Starter's annual lands at 21% rather than 20% purely so the price reads **$179** instead of $182. Prices are absolute values in the database; the percentage is a consequence, not a rule.
-
-At **$14.92/month effective**, annual Starter is the cheapest complete AI receptionist + omnichannel product in the comparison set, full stop.
-
-### Quarterly — 10%
-**No competitor in the entire set of 17 publishes a quarterly price.** The one structurally empty position we found.
-
-It matters most in exactly the markets we start in. **$569 annual on a card** is a real barrier for a Lahore or Dubai SMB; **$159 a quarter** is not. It also cuts churn and card-failure exposure by two-thirds versus monthly without asking for a year's commitment. 10% is calibrated to beat monthly while leaving annual clearly the best deal.
+We can hold this floor because our marginal cost is structurally lower — local XTTS voice and local/self-hosted LLM, versus competitors paying OpenAI + ElevenLabs + platform margin on every conversation. **Competitors can't follow us down without losing money.**
 
 ---
 
-## 4. Plan contents
+## 3. Feature allocation — the direct answer
 
-### Metering
-Two metered units, matching how the product actually consumes money:
+> **Should all features go to all customers? No — but all *core* features should.**
 
-- **AI conversations/month** — one conversation = one session with at least one AI reply, on any text channel (web, WhatsApp, Instagram, Facebook, SMS). Tidio's "billable conversation" model, which buyers already understand.
-- **Voice minutes/month** — the honest cost meter every voice vendor uses; buyers benchmark against $0.05–$0.31/min.
+The failure mode to avoid is gating things that make the product feel incomplete. The research has a clear cautionary example: ManyChat charges **+$29/month for AI on an AI product**, and it is written up in every third-party review as a hidden fee. Slang charges **$99/month for Spanish**. Chatbase charges **$1,188/year to remove a badge**. Each of those makes the entry plan feel like a demo.
 
-Everything else (seats, projects, agents, data sources) is a **soft structural limit**, not a cost meter.
+So every capability in the product falls into exactly one of three buckets, and the bucket decides how it is sold.
 
-### Allowances have been reduced with the prices
+### Bucket 1 — Never gated. Every plan, including Free.
 
-This is the part that must move together with price. Voice minutes are our one genuinely expensive unit (telephony + STT + TTS + LLM), so halving the price while keeping r1's minute allowances would push Growth to negative gross margin. r2 rebalances so the **effective cost per minute stays healthy**:
+These are what make Serve AI *Serve AI*. Gating any of them makes us look worse than a $29 competitor and destroys the reason someone chooses us.
 
-| | r1 | **r2** | Implied $/min |
-|---|---|---|---|
-| Starter | $39 / 120 min | **$19 / 60 min** | $0.317 |
-| Growth | $129 / 750 min | **$59 / 300 min** | $0.197 |
-| Scale | $299 / 3,000 min | **$149 / 1,200 min** | $0.124 |
+| Capability | Why it's never gated |
+|---|---|
+| **Voice cloning** (own voice from a 10s sample) + 30 stock voices | Our headline differentiator. Rosie offers 10 stock voices and no cloning **at any price** |
+| **Multi-language auto-detect & reply** (13 languages) | Slang charges **$99/mo** for Spanish alone. It costs us nothing — the model already detects |
+| **Automatic lead capture → CRM** | This is the product's whole purpose |
+| **Website chat widget** | The zero-friction entry point; must work on Free |
+| **RAG over website + uploaded documents** | Without it the agent has nothing to say |
+| **Transcripts, call/chat summaries, notifications** | Table stakes; every competitor includes these at entry |
+| Dashboard, conversations, leads views | Basic app |
 
-For reference: Dialzara charges $29 for 60 min ($0.483/min) and $99 for 220 min ($0.450/min); Rosie charges $49 for 250 min ($0.196/min) and $149 for 1,000 min ($0.149/min). **We are cheaper per minute than Dialzara at every tier and at or below Rosie at every tier — while also including web chat, WhatsApp, Instagram, Facebook, flows and CRM that neither of them sells.**
+### Bucket 2 — Metered, not gated. Same feature everywhere, different volume.
 
-### Full allocation
+These cost us real money per unit, so **every tier gets the feature and pays for the volume**. This is where the tiers actually differentiate, and it's the model buyers already understand from Rosie, Dialzara, Tidio and Chatbase.
 
-| | FREE | STARTER $19 | GROWTH $59 ★ | SCALE $149 | ENTERPRISE |
-|---|---|---|---|---|---|
-| **AI conversations / month** | 100 | 1,000 | 5,000 | 20,000 | Custom |
-| **Voice minutes / month** | **0** | 60 | 300 | 1,200 | Custom |
-| **Voice overage** | — | $0.35/min | $0.30/min | $0.25/min | Contract rate |
-| **Conversation overage** | hard stop | $0.02 each | $0.015 each | $0.01 each | Contract rate |
-| Projects (isolated DBs) | 1 | 1 | 3 | 10 | Unlimited |
-| Team seats | 2 | 3 | 10 | 25 | Unlimited |
-| AI agents / personas | 1 | 2 | 10 | Unlimited | Unlimited |
-| Phone numbers | 0 | 1 | 3 | 10 | Custom |
-| **Channels** | Web chat only | Web + WhatsApp + **1** of IG/FB/SMS | **All** channels | All channels | All channels |
-| Voice cloning | ✗ | 1 cloned voice + 30 stock | 5 cloned + 30 stock | Unlimited | Unlimited |
-| Data sources | 1 | 3 | Unlimited | Unlimited | Unlimited |
-| Indexed content | 50 pages / 20 MB | 500 pages / 100 MB | 5,000 pages / 1 GB | 25,000 pages / 5 GB | Custom |
-| **Live database connector** | ✗ | ✗ | ✅ | ✅ | ✅ |
-| **Per-table / per-column AI access control** | ✗ | ✗ | ✅ | ✅ | ✅ |
-| Flow builder | ✗ | 1 flow | Unlimited | Unlimited | Unlimited |
-| Skills / multi-agent routing | ✗ | ✗ | ✅ | ✅ | ✅ |
-| Custom roles & permissions | ✗ | ✗ | ✅ | ✅ | ✅ |
-| API access + webhooks | ✗ | ✗ | ✅ | ✅ | ✅ |
-| Remove "Powered by Serve AI" | ✗ | +$9/mo add-on | ✅ | ✅ | ✅ |
-| **White-label + custom domain** | ✗ | ✗ | ✗ | ✅ | ✅ |
-| **BYO LLM key / local model** | ✗ | ✗ | ✗ | ✅ | ✅ |
-| Conversation history | 7 days | 30 days | Unlimited | Unlimited | Unlimited |
-| Analytics | Basic | Basic | Advanced | Advanced + export | Custom |
-| Multi-language replies | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Lead capture → CRM | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Support | Community | Email | Priority email | Priority + onboarding | Dedicated CSM + SLA |
-| SSO / audit export / DPA | ✗ | ✗ | ✗ | Audit export | ✅ all |
+Voice minutes · AI conversations · indexed pages & storage · projects · team seats · AI agents/personas · phone numbers · data sources · history retention.
 
-### Gating rationale, tied to the research
+### Bucket 3 — Genuinely gated on/off. Deliberately only eight.
 
-- **API access held to Growth** — Chatbase gates it at its $120 tier; the market accepts this. We give it away at $59.
-- **Voice minutes excluded from Free** — every voice vendor in the set refuses a free plan for exactly this reason. Free gets web chat only. **This is the single most important line in the table for gross margin**, and it becomes *more* important at r2 prices, not less.
-- **History retention as a ladder (7d → 30d → ∞)** — copied from Goodcall, which uses exactly this.
-- **Branding removal** — Chatbase charges $1,188/yr for it; we include it at $59 and sell it as a $9 add-on at $19.
-- **Multi-language included everywhere** — Slang charges **$99/month** for Spanish alone. It costs us nothing (the model already auto-detects) and it is a strong comparative line.
-- **Agents bundled, not priced per unit** — Goodcall prices *per agent* ($79 each), Chatbase charges $300/yr per extra agent.
-- **The four uncontested features** split Growth/Scale so each of the top two tiers has something no competitor sells at all.
+Each one is here because it **either costs us money, or is something a larger customer will happily pay for** — and none of them makes the entry plan feel crippled.
 
-### Add-ons (all database-driven, none required at launch)
-Extra voice-minute packs · extra project +$15/mo · extra seat +$5/mo · extra phone number +$5/mo · remove branding on Starter +$9/mo · extra conversation packs.
+| # | Gated capability | Free | Starter | Growth | Scale | Why gated |
+|---|---|---|---|---|---|---|
+| 1 | **Voice / telephony** | ✗ | ✅ | ✅ | ✅ | Real cost per minute. This one line is the single biggest protector of gross margin — **no voice vendor in the market offers a free plan**, for exactly this reason |
+| 2 | **WhatsApp / Instagram / Facebook** | ✗ | WhatsApp + 1 | All | All | Meta conversation fees + per-channel setup cost |
+| 3 | **Flow builder** | ✗ | 1 flow | Unlimited | Unlimited | Power feature; Goodcall gates identically (1 / 3 / 25 logic flows) |
+| 4 | **Team roles & permissions (RBAC)** | ✗ | ✗ | ✅ | ✅ | Only matters once there's a team; a solo shop never notices |
+| 5 | **API access + webhooks** | ✗ | ✗ | ✅ | ✅ | Chatbase gates it at $120 — we give it at $59 |
+| 6 | **Live DB connector + per-table AI access control** | ✗ | ✗ | ✅ | ✅ | **Nobody in the market sells this at any price.** Our strongest upgrade lever |
+| 7 | **Remove "Powered by Serve AI"** | ✗ | +$9/mo | ✅ | ✅ | Chatbase charges $1,188/yr; we include it at $59 |
+| 8 | **White-label + custom domain · BYO LLM key · audit export** | ✗ | ✗ | ✗ | ✅ | Agency/compliance features; also keeps expensive-model users on the $149 tier |
+
+**That's it. Eight switches.** Everything else is either always-on or a number.
+
+This maps cleanly onto the existing `config/modules.php` registry — a plan's entitlements are a subset of the same 17 module keys the RBAC matrix already uses, so `EnsurePlanFeature` slots straight into the middleware chain with no new concepts.
+
+---
+
+## 4. Full plan table
+
+| | **FREE** | **STARTER** $19/mo · $190/yr | **GROWTH** ★ $59/mo · $590/yr | **SCALE** $149/mo · $1,490/yr |
+|---|---|---|---|---|
+| **AI conversations / month** | 100 | 1,000 | 5,000 | 20,000 |
+| **Voice minutes / month** | **0** | 60 | 300 | 1,200 |
+| Voice overage | — | $0.35/min | $0.30/min | $0.25/min |
+| Conversation overage | hard stop | $0.02 each | $0.015 each | $0.01 each |
+| Projects (isolated DBs) | 1 | 1 | 3 | 10 |
+| Team seats | 2 | 3 | 10 | 25 |
+| AI agents / personas | 1 | 2 | 10 | Unlimited |
+| Phone numbers | 0 | 1 | 3 | 10 |
+| Data sources | 1 | 3 | Unlimited | Unlimited |
+| Indexed content | 50 pages / 20 MB | 500 pages / 100 MB | 5,000 pages / 1 GB | 25,000 pages / 5 GB |
+| History retention | 7 days | 30 days | Unlimited | Unlimited |
+| **— Never gated —** | | | | |
+| Voice cloning + 30 stock voices | ✅ (stock only) | ✅ | ✅ | ✅ |
+| Multi-language (13) | ✅ | ✅ | ✅ | ✅ |
+| Lead capture → CRM | ✅ | ✅ | ✅ | ✅ |
+| Website chat widget | ✅ | ✅ | ✅ | ✅ |
+| RAG: website + documents | ✅ | ✅ | ✅ | ✅ |
+| Transcripts & summaries | ✅ | ✅ | ✅ | ✅ |
+| **— The eight gates —** | | | | |
+| Voice / telephony | ✗ | ✅ | ✅ | ✅ |
+| WhatsApp / IG / FB | ✗ | WhatsApp + 1 | All | All |
+| Flow builder | ✗ | 1 | Unlimited | Unlimited |
+| Team roles & permissions | ✗ | ✗ | ✅ | ✅ |
+| API + webhooks | ✗ | ✗ | ✅ | ✅ |
+| Live DB connector + access control | ✗ | ✗ | ✅ | ✅ |
+| Remove branding | ✗ | +$9/mo | ✅ | ✅ |
+| White-label · BYO LLM · audit export | ✗ | ✗ | ✗ | ✅ |
+| **Support** | Community | Email | Priority email | Priority + onboarding |
+
+Voice-minute allowances are calibrated so the effective rate stays healthy — **$0.317 / $0.197 / $0.124 per minute**. For reference: Dialzara $0.45–0.48/min, Rosie $0.149–0.196/min. We are cheaper than Dialzara at every tier and at or below Rosie at every tier, *while also bundling web chat, WhatsApp, Instagram, Facebook, flows and CRM that neither of them sells.*
+
+### Add-ons (database-driven, none required at launch)
+Extra voice-minute packs · extra conversation packs · extra project +$15/mo · extra seat +$5/mo · extra phone number +$5/mo · remove branding on Starter +$9/mo.
 
 ---
 
@@ -160,131 +149,114 @@ Extra voice-minute packs · extra project +$15/mo · extra seat +$5/mo · extra 
 
 | | **FREE PLAN** | **7-DAY TRIAL** |
 |---|---|---|
-| Price | $0 forever | $0 for 7 days, then the plan's normal price |
-| Duration | Permanent | 7 days |
-| Features | Free-tier limits (no voice) | **Full features of the paid plan being trialled** |
-| Stripe | **No Stripe customer, no subscription** | A real Stripe subscription in `trialing` status |
-| DB representation | `subscriptions` row with `plan_id = free`, or no row at all (default) | `subscriptions.stripe_status = 'trialing'`, `trial_ends_at` set |
-| Ends by | Never | Converting to paid, cancelling, or expiring |
-| Eligibility | Everyone | **Once per business** — see §7 |
-| After it ends | n/a | Converts to paid, or **falls back to Free** (never a dead account) |
+| Price | $0 forever | $0 for 7 days, then the plan's price |
+| Features | Free-tier limits, **no voice** | **Full features of the paid plan being trialled** |
+| Stripe | **No customer, no subscription** | Real subscription, `trialing` status |
+| DB | `plan_id = free` (or no row) | `stripe_status = 'trialing'`, `trial_ends_at` set |
+| Eligibility | Everyone | **Once per business** — §7 |
+| When it ends | Never | Converts to paid, or **falls back to Free** |
 
-**Trial → Free fallback is deliberate.** A lapsed trial drops the workspace to Free rather than locking it out. The data stays, the widget keeps answering within free limits, the upgrade path stays open. Locking someone out of a product that is answering their customers' calls turns a lapsed trial into a support ticket and a bad review.
+**Trial → Free fallback is deliberate.** A lapsed trial drops to Free rather than locking the account. Data stays, the widget keeps answering within free limits, the upgrade path stays open. Locking someone out of a product that is answering their customers' calls turns a lapsed trial into a support ticket and a bad review.
 
 ---
 
-## 6. Trial: payment method before or after?
+## 6. Trial: card required, configurable per plan
 
-### Recommendation: **card required before the trial** (Stripe Checkout with `trial_period_days=7`, `payment_method_collection=always`), **configurable per plan.**
+**Recommendation: card required up front** (Stripe Checkout, `trial_period_days=7`, `payment_method_collection=always`).
 
-1. **Our trial gives away real marginal cost.** Seven days of Growth is up to 300 voice minutes plus 5,000 AI conversations — telephony, STT, TTS and LLM compute we actually pay for. Every voice vendor in the comparison set (Rosie, Dialzara, Goodcall, Simple Phones) requires a card for this reason, and none advertises "no credit card" on a trial. The vendors that do (Tidio, Intercom, respond.io, Zoho, Retell, Bland) are giving away text or credits that cost them almost nothing.
-2. **Card-required trials convert far better** — the conversion is passive. The customer does nothing and becomes a paying customer, rather than having to decide again on day 7.
-3. **The card is the abuse control.** With fingerprinting (§7) it is what stops the trial being farmed across throwaway workspaces.
-4. **We keep the "no credit card required" promise** — relocated, not broken. `content.hero_meta1` and `content.cta_button` point at the **Free plan**, which genuinely needs no card. The pricing page then carries both messages honestly: *free forever, no card* on the Free card; *7-day trial, card required, cancel anytime* on the paid cards.
+1. **The trial gives away real cost** — 7 days of Growth is up to 300 voice minutes plus 5,000 conversations. Every voice vendor in the set (Rosie, Dialzara, Goodcall, Simple Phones) requires a card for this reason; none advertises "no credit card" on a trial. The vendors that do (Tidio, Intercom, respond.io, Zoho) are giving away text that costs them almost nothing.
+2. **Card-required trials convert far better** — conversion is passive; the customer does nothing and becomes a paying customer.
+3. **The card is the abuse control** (§7).
+4. **We keep the "no credit card required" promise** — relocated to the **Free plan**, where it is literally true. The pricing page then says both things honestly: *free forever, no card* on the Free card; *7-day trial, card required, cancel anytime* on the paid cards.
 
-**Configurable, not hard-coded:** `plans.trial_requires_payment_method` and `plans.trial_days`, both Super-Admin editable. The card requirement can be A/B tested or dropped for a launch promotion with no deploy. Stripe supports both modes natively (`payment_method_collection: 'always' | 'if_required'`, `trial_settings.end_behavior.missing_payment_method: 'cancel' | 'pause'`).
+**Configurable, not hard-coded:** `plans.trial_requires_payment_method` and `plans.trial_days`, both Super-Admin editable, so this can be A/B tested or dropped for a launch promo with no deploy. Stripe supports both natively.
 
-**Required either way:** email at trial start, a reminder on day 5 (Stripe's `customer.subscription.trial_will_end` fires 3 days out), a days-remaining banner in-app, one-click cancel during the trial.
+**Required either way:** email at trial start, day-5 reminder (Stripe's `trial_will_end` fires 3 days out), days-remaining banner in-app, one-click cancel.
 
 ---
 
 ## 7. Trial abuse prevention
 
-A `User` can create unlimited `Client` workspaces, so a per-workspace trial is trivially farmed. Eligibility is keyed on a **fingerprint set** in a `trial_fingerprints` table:
+A user can create unlimited workspaces, so a per-workspace trial is trivially farmed. Eligibility keys on a fingerprint set in `trial_fingerprints`:
 
-1. **Owner `user_id`** — one trial per person.
-2. **Normalised email** — lowercase, strip `+tags`, strip dots in Gmail-family domains.
-3. **Stripe PaymentMethod fingerprint** — stable per card across customers. The strongest signal, and the main reason to collect the card up front.
-4. **Business website domain** (optional, from the project profile) — one trial per business, not per employee.
+1. Owner `user_id`
+2. **Normalised email** — lowercase, strip `+tags`, strip dots in Gmail-family domains
+3. **Stripe PaymentMethod fingerprint** — stable per card across customers; the strongest signal, and the main reason to take the card up front
+4. Business website domain (optional, from project profile)
 
-If any fingerprint has already consumed a trial, the plan is still purchasable — the customer goes **straight to paid checkout with no trial**, with a clear message. Never a hard block, never a silent failure. Super Admin gets an audited "grant trial" override.
+A repeat fingerprint doesn't block the purchase — it goes **straight to paid checkout with no trial**, with a clear message. Super Admin gets an audited "grant trial" override.
 
 ---
 
-## 8. Regional display pricing (what the customer will see)
+## 8. Regional display pricing
 
 Charged in USD, always. Local amount is informational and rounded coarsely so it can never read as a quote.
 
-| Plan / interval | USD (charged) | Pakistan, approx. | UAE, approx. | UK, approx. |
+| Plan | USD (charged) | Pakistan ≈ | UAE ≈ | UK ≈ |
 |---|---|---|---|---|
-| Starter monthly | $19 | ≈ PKR 5,400/mo | ≈ AED 70/mo | ≈ £14/mo |
-| Growth monthly | $59 | ≈ PKR 16,600/mo | ≈ AED 217/mo | ≈ £44/mo |
-| Growth quarterly | $159 | ≈ PKR 44,700 | ≈ AED 584 | ≈ £118 |
-| Growth annual | $569 | ≈ PKR 160,100 | ≈ AED 2,090 | ≈ £422 |
+| Starter monthly | $19 | PKR 5,400/mo | AED 70/mo | £14/mo |
+| Growth monthly | $59 | PKR 16,600/mo | AED 217/mo | £44/mo |
+| Growth annual | $590 | PKR 166,000/yr | AED 2,167/yr | £437/yr |
+| Scale monthly | $149 | PKR 41,900/mo | AED 547/mo | £111/mo |
 
-> **Illustrative only** — every figure is a worked example of the *format*, not a live rate. Real values come from `plan_prices.unit_amount` × the cached rate from `ExchangeRateService` at render time.
+> **Illustrative format only** — real values come from `plan_prices.unit_amount` × the cached rate from `ExchangeRateService` at render time.
 
-Required on the page: **"Prices are charged in USD. Local currency amounts are approximate."** If geolocation or FX is unavailable, the local line does not render and USD stands alone.
+Required on the page: **"Prices are charged in USD. Local currency amounts are approximate."** If geolocation or FX is unavailable, the local line simply doesn't render and USD stands alone.
 
-At **≈ PKR 5,400/month**, Starter costs less than a single day of a part-time receptionist in Lahore. That comparison should be on the pricing page.
+At ≈ PKR 5,400/month, Starter costs less than a single day of a part-time receptionist in Lahore. That comparison belongs on the pricing page.
 
 ---
 
-## 9. What this means for the marketing site
+## 9. Marketing-site impact
 
-| Existing copy (`config/site.php`) | Compatible? |
+| Existing copy (`config/site.php`) | Status |
 |---|---|
-| `hero_meta1` — "No credit card" | ✅ true of the Free plan; keep it next to the free CTA |
-| `cta_button` — "Start free — no card required →" | ✅ points at Free |
-| `faq6_a` — "Start free… Upgrade when you're ready, cancel anytime… No long-term contracts, no lock-in." | ✅ all four claims hold. Worth extending with one line naming the 7-day trial and that it takes a card |
-| Footer / nav | ⚠️ **needs a `/pricing` link** — no pricing route exists today |
+| `hero_meta1` "No credit card" · `cta_button` "Start free — no card required" | ✅ both true of the Free plan; keep them next to the free CTA |
+| `faq6_a` "Start free… upgrade when ready, cancel anytime… no lock-in" | ✅ all four claims hold; worth adding one line naming the 7-day trial and that it takes a card |
+| Footer / nav | ⚠️ needs a `/pricing` link — no pricing route exists today |
 | `seo.sitemap_urls`, `seo.page_views` | ⚠️ need a `/pricing` entry each |
 
 ---
 
 ## 10. Everything here is Super-Admin editable
 
-This is worth stating plainly, because it changes how heavily this decision needs to weigh on you.
+Changeable at `/admin/billing/plans` with **no code change, no migration, no deploy**: any price on any interval · add/remove a plan or a whole billing interval (including switching quarterly back on) · every usage limit and feature value · trial length and whether a card is required · plan order, name, description, badge, CTA · popular flag · active/inactive · public/private.
 
-**Changeable at `/admin/billing/plans` with no code change, no migration, no deploy:**
+Not editable by design: Stripe secret key, webhook secret, geo/FX API keys. Those stay in `.env`.
 
-- any price, on any interval (monthly / quarterly / annual)
-- adding or removing a plan, or a whole billing interval
-- every usage limit and feature value
-- trial length, and whether a card is required
-- plan order, name, description, badge, CTA text
-- marking a plan popular; activating or deactivating a plan or a single price
-- making a plan public or private (private = link-only, for custom deals)
+### The Stripe caveat, and why it protects you
 
-**Not Super-Admin editable, by design:** Stripe secret key, webhook secret, and the geolocation/FX API keys. Infrastructure secrets stay in `.env`.
+Stripe Prices are **immutable**. Changing $19 → $29 doesn't edit anything — the system creates a **new** Stripe Price and archives the old one. **Existing subscribers keep the price they signed up at** until explicitly migrated.
 
-### The one Stripe caveat — and why it protects you
+> Launch at $19 / $59 / $149. If that's too cheap in six months, raise it from the admin panel. Every early customer keeps their original price forever — a real loyalty reward — and new customers pay the new rate.
 
-Stripe Prices are **immutable**. Changing $19 → $29 does not edit a price; the system **creates a new Stripe Price**, marks the old one inactive for new signups, and archives it.
-
-**Existing subscribers stay on the price they signed up at** until you explicitly migrate them. That is automatic grandfathering, and it is exactly what makes launching low safe:
-
-> Launch at $19 / $59 / $149. If those turn out to be too cheap in six months, raise them to $29 / $89 / $199 from the admin panel. **Every early customer keeps $19/$59/$149 forever**, which is a genuine loyalty reward, and new customers pay the new rate. No migration, no angry emails, no code change.
-
-The reverse is not true. Launching high and cutting later means either refunding early customers or leaving them overpaying. **So the asymmetry favours starting low — which is what r2 does.**
+The reverse isn't true: launching high and cutting later means refunds or customers quietly overpaying. **The asymmetry favours starting low.**
 
 ---
 
-## 11. Honest risk with r2 (one paragraph, then it's your call)
+## 11. Honest risk
 
-At $59, Growth's margin depends entirely on the voice-minute allowance holding and on the local-model path (XTTS + Ollama/Groq) staying the default. If a meaningful share of Growth customers push their 300 minutes to a premium cloud LLM plus ElevenLabs voices, that tier gets thin. Three things keep it safe, and all three are already in the design: the **allowances reduced alongside the prices** (§4), the **published overage rates** that turn heavy users into more revenue rather than more loss, and **BYO-LLM-key gated to Scale**, so the customers most likely to want expensive models are the ones paying $149 or bringing their own key. My recommendation is to launch at r2 and watch actual cost-per-workspace for 60 days — and because pricing is Super-Admin editable with automatic grandfathering, correcting upward later costs nothing but a form submission.
+At $59, Growth's margin depends on the voice allowance holding and on the local-model path (XTTS + Ollama/Groq) staying the default. If a meaningful share of Growth customers push 300 minutes through a premium cloud LLM plus ElevenLabs voices, that tier gets thin. Three things in the design keep it safe: **allowances reduced alongside the prices** (§4), **published overage** that turns heavy users into revenue rather than loss, and **BYO-LLM gated to Scale**, so the customers most likely to want expensive models are the ones paying $149 or bringing their own key. Launch at these numbers, watch real cost-per-workspace for 60 days, and correct upward from the admin panel if needed — grandfathering makes that painless.
 
 ---
 
-## 12. Summary of what I am asking you to approve
+## 12. What I'm asking you to approve
 
-1. **Structure** — Free + Starter + Growth + Scale + Enterprise (5 rows).
-2. **Prices** — $0 / **$19** / **$59** / **$149** monthly; **$51** / **$159** / **$399** quarterly; **$179** / **$569** / **$1,429** annual; Enterprise from $499.
-3. **Discounts** — quarterly 10%, annual 20% (Starter annual 21% for a round number).
+1. **4 plans** — Free, Starter, Growth, Scale — plus an Enterprise "talk to us" band (not a pricing card).
+2. **2 billing intervals shown** — monthly + annual. Quarterly stays supported in the schema, switched off.
+3. **Prices** — $0 / $19 / $59 / $149 monthly; $190 / $590 / $1,490 annual (**2 months free**).
 4. **Popular plan** — Growth ($59), badged.
-5. **Metering** — AI conversations + voice minutes, with published overage that falls as the tier rises.
+5. **Feature philosophy** — all *core* features on every plan; differentiate on **volume** plus exactly **eight** on/off gates (§3).
 6. **Free plan** — 100 conversations, **zero voice minutes**, web chat only, 1 project, 2 seats, 7-day history.
-7. **Trial** — 7 days on all three paid plans, **card required by default but configurable per plan**, lapses to Free rather than lockout.
-8. **Trial abuse** — fingerprint on user + normalised email + card fingerprint + business domain; ineligible users get paid checkout without a trial, not a block.
-9. **Feature allocation and limits** — as tabled in §4.
-10. **Billing subject** — the **Client (workspace)**, not the User and not the Project.
+7. **Trial** — 7 days on all three paid plans, card required by default but configurable, lapses to Free rather than lockout.
+8. **Trial abuse** — fingerprint on user + normalised email + card fingerprint + business domain.
+9. **Billing subject** — the **Client (workspace)**.
 
-### Still open — your answer changes the build
+### Two open items
 
-- **Free-tier voice:** I recommend **zero** minutes. A taste (e.g. 10 minutes lifetime, not monthly) is possible but changes the abuse model and the cost floor.
+- **Free-tier voice:** I recommend **zero** minutes. A one-off taste (e.g. 10 minutes lifetime, not monthly) is possible but changes the abuse model and the cost floor.
 - **Overage vs hard stop:** I recommend published overage on paid tiers, hard stop on Free. Hard stops everywhere is simpler to build but caps revenue and means the phone stops being answered mid-month.
-- **Agency / reseller tier:** the product supports multi-workspace agencies and Dialzara/Voiceflow both monetise this. Not included above.
 
 ---
 
-**Nothing proceeds until you approve.** On approval I will implement Phase 8 in full: database schema, Stripe Billing, Super Admin → Billing → Plans, 7-day trial, free plan, `GeoLocationService` + `ExchangeRateService`, the public pricing page, customer billing area, idempotent webhooks, tests, and the two final documents.
+**Nothing proceeds until you approve.** On approval I implement Phase 8 in full: schema, Stripe Billing, Super Admin → Billing → Plans, 7-day trial, free plan, `GeoLocationService` + `ExchangeRateService`, the public pricing page, customer billing area, idempotent webhooks, tests, and the two final documents.

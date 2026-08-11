@@ -7,12 +7,14 @@
     "require": {
         "php": "^8.1",
         "bacon/bacon-qr-code": "^3.1",
+        "geoip2/geoip2": "^3.4",
         "guzzlehttp/guzzle": "^7.9",
         "laravel/framework": "^10.10",
         "laravel/sanctum": "^3.3",
         "laravel/socialite": "^5.28",
         "laravel/tinker": "^2.8",
-        "laravel/ui": "^4.6"
+        "laravel/ui": "^4.6",
+        "stripe/stripe-php": "^21.1"
     },
     "require-dev": {
         "fakerphp/faker": "^1.9.1",

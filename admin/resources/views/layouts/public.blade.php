@@ -20,6 +20,7 @@
     @include('partials.seo-head', [
         'metaTitle'       => $headTitle,
         'metaDescription' => $metaDescription ?? null,
+        'metaKeywords'    => $metaKeywords ?? null,
         'breadcrumbs'     => $breadcrumbs ?? null,
         'pageSchemaType'  => $pageSchemaType ?? 'WebPage',
         'jsonLd'          => $jsonLd ?? [],
@@ -104,7 +105,19 @@
 
         /* ── Prose / legal article ── */
         .article { padding: 30px 0 40px; }
+        /* 820px is a reading measure — right for the legal and policy pages
+           this layout was built for, since long lines of prose are tiring. */
         .article .wrap { max-width: 820px; }
+
+        /* Pages whose content is a grid rather than prose (pricing tables,
+           card layouts) need the full container. Without this they inherit the
+           reading measure above and sit in a narrow column with large empty
+           margins — which is what happened to /pricing. Matches the 1240px
+           the homepage sections use, so the same plan cards look identical in
+           both places. */
+        .article--wide .wrap { max-width: 1240px; }
+        /* …while any prose *inside* a wide page keeps a comfortable measure. */
+        .article--wide .prose { max-width: 820px; margin-left: auto; margin-right: auto; }
         .prose {
             background: var(--panel); border: 1px solid var(--line);
             border-radius: 18px; padding: 40px clamp(20px, 4vw, 48px);
@@ -177,6 +190,8 @@
     <div class="nav__links">
         <a href="{{ url('/') }}#platform">Features</a>
         <a href="{{ url('/') }}#cases">Use cases</a>
+        <a href="{{ url('/pricing') }}">Pricing</a>
+        <a href="{{ url('/blog') }}">{{ tva_setting('content.blog_label', 'Insights') }}</a>
         <a href="{{ url('/security') }}">Security</a>
         <a href="{{ url('/about') }}">About</a>
         <a href="{{ url('/contact') }}">Contact</a>

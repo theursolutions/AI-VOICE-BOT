@@ -34,6 +34,8 @@ class RegistrationTest extends TestCase
             'email'                 => 'test@example.com',
             'password'              => 'password',
             'password_confirmation' => 'password',
+            // Terms acceptance is now enforced server-side, not just in markup.
+            'terms'                 => '1',
         ]);
 
         $this->assertAuthenticated();
@@ -63,6 +65,8 @@ class RegistrationTest extends TestCase
             'email'                 => 'test@example.com',
             'password'              => 'password',
             'password_confirmation' => 'password',
+            // Terms acceptance is now enforced server-side, not just in markup.
+            'terms'                 => '1',
         ]);
 
         $response->assertSessionHasErrors('company_name');

@@ -69,6 +69,7 @@
                     <a href="{{ url('/') }}#platform">Features</a>
                     <a href="{{ url('/') }}#channels">Channels</a>
                     <a href="{{ url('/') }}#cases">Who it's for</a>
+                    <a href="{{ url('/pricing') }}">Pricing</a>
                     <a href="{{ url('/security') }}">Security</a>
                     <a href="{{ url('/') }}#faq">FAQ</a>
                     @auth
@@ -79,6 +80,9 @@
                 </div>
                 <div class="site-footer__col">
                     <h3>Company</h3>
+                    {{-- Label is configurable (content.blog_label) — the URL stays
+                         /blog, which is the path Google expects. --}}
+                    <a href="{{ url('/blog') }}">{{ tva_setting('content.blog_label', 'Insights') }}</a>
                     <a href="{{ url('/about') }}">About us</a>
                     <a href="{{ url('/contact') }}">Contact</a>
                     {{-- Signed in → back into the app; no point offering a

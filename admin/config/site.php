@@ -119,10 +119,20 @@ return [
             '/profile',
         ],
 
+        // Database-backed sitemap contributors: [Class::class, 'method'],
+        // each returning [['loc' => …, 'lastmod' => …, 'changefreq' => …,
+        // 'priority' => …], …]. Blog posts appear in /sitemap.xml the moment
+        // they are published, with no operator action.
+        'sitemap_providers' => [
+            [\App\Models\BlogPost::class, 'sitemapEntries'],
+        ],
+
         // Blade template behind each public path — used to derive a truthful
         // <lastmod> in the sitemap (file mtime) instead of stamping "today".
         'page_views'        => [
             '/'              => 'welcome',
+            '/blog'          => 'blog.index',
+            '/pricing'       => 'pages.pricing',
             '/about'         => 'pages.about',
             '/contact'       => 'pages.contact',
             '/security'      => 'pages.security',
@@ -138,6 +148,10 @@ return [
         // is dropped by App\Services\Seo\SitemapBuilder before rendering.
         'sitemap_urls'      => [
             ['loc' => '/',               'changefreq' => 'weekly',  'priority' => '1.0'],
+            ['loc' => '/blog',           'changefreq' => 'weekly',  'priority' => '0.9'],
+            // High priority: "<product> pricing" is one of the highest-intent
+            // queries there is, and it's the page buyers look for first.
+            ['loc' => '/pricing',        'changefreq' => 'weekly',  'priority' => '0.9'],
             ['loc' => '/contact',        'changefreq' => 'monthly', 'priority' => '0.8'],
             ['loc' => '/security',       'changefreq' => 'monthly', 'priority' => '0.7'],
             ['loc' => '/about',          'changefreq' => 'monthly', 'priority' => '0.6'],
@@ -152,13 +166,23 @@ return [
     'content' => [
         'brand_name'        => 'Serve AI',
 
+        // What the articles section is CALLED in navigation and the footer.
+        // The URL stays /blog regardless — that is the path Google expects,
+        // and renaming a live URL costs redirects and ranking for nothing.
+        // Swap this for Resources / Research / Guides / Library to taste.
+        'blog_label'        => 'Insights',
+        'blog_tagline'      => 'Practical writing on AI receptionists, WhatsApp automation and turning conversations into customers.',
+
         // Hero
         'hero_eyebrow'      => 'Live · AI Mission Console',
         'hero_title'        => 'Your AI receptionist that',
         'hero_title_accent' => 'never sleeps.',
         'hero_subtitle'     => 'Serve AI answers your calls and chats 24/7 in your own cloned voice, qualifies leads on the spot, and drops them straight into your CRM. Drop your data — watch it work.',
-        'hero_cta_label'    => 'Call me now →',
-        'hero_callbar_msg'  => 'Our AI agent will call you in under 10 seconds.',
+        // The hero bar logs a callback request; it does not dial anyone. Keep
+        // this copy a promise we actually keep — "call me now" implied an
+        // instant robocall that never happened.
+        'hero_cta_label'    => 'Reach out →',
+        'hero_callbar_msg'  => 'Leave your number — our agent will call you back soon.',
         'hero_meta1'        => 'No credit card',
         'hero_meta2'        => 'Your data stays in your DB',
         'hero_meta3'        => 'Set up in 90 seconds',
@@ -255,6 +279,12 @@ return [
         'case4_icon' => '🍽️', 'case4_title' => 'Restaurants & hospitality', 'case4_body' => 'Takes reservations, answers menu and hours questions, and handles the dinner-rush phone calls you can’t pick up.',
         'case5_icon' => '🧰', 'case5_title' => 'Services & trades',        'case5_body' => 'Captures job details from every caller, gives quotes from your price list, and makes sure no lead slips away while you’re on a job.',
         'case6_icon' => '📈', 'case6_title' => 'Agencies & B2B',           'case6_body' => 'Qualifies leads around the clock, books demos straight into your calendar, and hands sales a CRM full of ready-to-call prospects.',
+
+        // ── Demo test call ───────────────────────────────────────────
+        // First thing the visitor hears when the "Call me now" bar rings
+        // them back. Spoken in the demo agent's cloned voice; after this
+        // the live agent takes over the conversation.
+        'demo_call_greeting' => 'Hi! This is the Serve AI demo agent calling you back from our website. Ask me anything about what we do — this test call lasts about 30 seconds.',
 
         // ── Testimonials ─────────────────────────────────────────────
         // Only the section heading lives here. The quotes themselves are

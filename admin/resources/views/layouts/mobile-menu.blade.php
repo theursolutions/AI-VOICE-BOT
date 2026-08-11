@@ -19,9 +19,24 @@
     // Unverified email → Ask AI only (mirrors sidebar + route gate).
     $emailOk = !Auth::check() || Auth::user()->hasVerifiedEmail();
 
-    // Hide modules a super-admin has switched OFF platform-wide (mirrors the
-    // sidebar + the module.enabled route gate).
-    $modOn = fn (string $k) => tva_module_enabled($k);
+    // Module visibility — use the SAME resolved list as the desktop sidebar
+    // ($tvaModules, shared by the layouts.master composer), which is:
+    //     the member's role grants
+    //   ∩ modules a super-admin has switched on platform-wide
+    //   ∩ modules the workspace's PLAN includes
+    //
+    // This previously called tva_module_enabled() alone, which only checks the
+    // platform switchboard — so the mobile menu ignored both the member's role
+    // and (once billing shipped) their plan. A member with a restricted role
+    // could see every section here that the desktop sidebar correctly hid, and
+    // clicking one just 403'd or 402'd.
+    //
+    // Falls back to the old behaviour when $tvaModules isn't shared (any
+    // context outside layouts.master), so nothing can disappear unexpectedly.
+    $mods  = $tvaModules ?? null;
+    $modOn = $mods === null
+        ? fn (string $k) => tva_module_enabled($k)
+        : fn (string $k) => in_array($k, $mods, true);
 @endphp
 
 <div class="mobile-menu md:hidden">

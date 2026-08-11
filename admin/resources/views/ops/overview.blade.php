@@ -64,6 +64,14 @@
                 <div style="font-size:11px; color:#94a3b8;">{{ $stats['super_admins'] }} super-admin{{ $stats['super_admins'] === 1 ? '' : 's' }}</div>
             </div>
         </div>
+        <a href="{{ route('ops.visitors.index') }}" class="tva-stat" style="text-decoration:none;">
+            <div class="tva-stat__icon" style="background:#ccfbf1; color:#0f766e;"><i data-lucide="globe" class="w-4 h-4"></i></div>
+            <div>
+                <div class="tva-stat__label">Site visitors</div>
+                <div class="tva-stat__value">{{ number_format($stats['visitors']) }}</div>
+                <div style="font-size:11px; color:#94a3b8;">{{ number_format($stats['visitors_today']) }} today</div>
+            </div>
+        </a>
         <div class="tva-stat">
             <div class="tva-stat__icon" style="background:#dcfce7; color:#15803d;"><i data-lucide="briefcase" class="w-4 h-4"></i></div>
             <div>

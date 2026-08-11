@@ -44,8 +44,15 @@ class RegisteredUserController extends Controller
             // mixed case. Adding it here would turn working signups into 422s.
             'email'        => ['required', 'string', 'email', 'max:255'],
             'password'     => ['required', 'string', 'min:8', 'confirmed'],
+            // Terms + privacy acceptance. The checkbox on the form previously
+            // had no `name` and no rule here, so it was decoration: the page
+            // asked for agreement and the server neither received nor checked
+            // one. `required` in the markup alone is trivially bypassed.
+            'terms'        => ['accepted'],
             // CAPTCHA. Passes automatically when Turnstile isn't configured.
             'cf-turnstile-response' => TurnstileRule::rules(),
+        ], [
+            'terms.accepted' => 'Please accept the Terms of Service and Privacy Policy to continue.',
         ]);
 
         $isNewUser = false;
@@ -100,6 +107,20 @@ class RegisteredUserController extends Controller
                 'last_picked_at'   => time(),
             ])->save();
 
+            // Start the 7-day, no-card free window. Deliberately inside the
+            // transaction: a workspace with no subscription row would fail OPEN
+            // in EnsureSubscribed (that path exists for pre-billing accounts),
+            // so a half-created signup must not become permanently free.
+            //
+            // startFreeWindow() is idempotent and checks the trial-abuse
+            // fingerprints itself — a repeat email or a reused card gets the
+            // plan with no free window rather than a second free week.
+            //
+            // No Stripe customer is created here: a free workspace never
+            // touches Stripe until it buys something.
+            app(\App\Services\Billing\SubscriptionService::class)
+                ->startFreeWindow($client, $user);
+
             DB::commit();
         } catch (\Throwable $e) {
             DB::rollBack();
@@ -119,6 +140,17 @@ class RegisteredUserController extends Controller
             event(new Registered($user));
         } elseif (! $user->hasVerifiedEmail()) {
             $user->sendEmailVerificationNotification();
+        }
+
+        // Resume a plan choice made on /pricing before signing up. Without
+        // this the visitor picks Growth, registers, and lands on a dashboard
+        // with no memory of what they came to buy.
+        if ($intent = $request->session()->pull('billing.intent')) {
+            return redirect()
+                ->route('billing.index', ['client' => $client->slug])
+                ->with('billing_intent', $intent)
+                ->with('info', 'Verify your email whenever you like — first, finish setting up your '
+                    . ucfirst((string) ($intent['plan'] ?? 'plan')) . ' plan.');
         }
 
         return redirect(route('dashboard', ['client' => $client->slug]));

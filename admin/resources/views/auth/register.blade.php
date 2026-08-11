@@ -1,22 +1,26 @@
 @extends('layouts.auth', ['authTitle' => 'Create your account'])
 
+@php $brand = tva_setting('content.brand_name', 'Serve AI'); @endphp
+
 @section('content')
  <div class="container sm:px-10">
     <div class="block xl:grid grid-cols-2 gap-4">
         <!-- BEGIN: Register Info -->
         <div class="hidden xl:flex flex-col min-h-screen">
-            <a href="" class="-intro-x flex items-center pt-5">
-                <img alt="Midone - HTML Admin Template" class="w-6" src="{{serveai_icon()}}">
-                <span class="text-white text-lg ml-3">  NeuraBot </span> 
+            <a href="{{ url('/') }}" class="-intro-x flex items-center pt-5">
+                <img alt="{{ $brand }}" class="w-8" src="{{ serveai_icon_sized(64) }}" width="32" height="32">
+                <span class="text-white text-xl font-semibold ml-3">{{ $brand }}</span>
             </a>
             <div class="my-auto">
-                <img alt="Midone - HTML Admin Template" class="-intro-x w-1/2 -mt-16" src="{{url('/assets/dist/images/illustration.svg')}}">
+                <img alt="" class="-intro-x w-1/2 -mt-16" src="{{url('/assets/dist/images/illustration.svg')}}">
                 <div class="-intro-x text-white font-medium text-4xl leading-tight mt-10">
-                    A few more clicks to 
+                    Your AI agent,
                     <br>
-                    sign up to your account.
+                    live in minutes.
                 </div>
-                <div class="-intro-x mt-5 text-lg text-white text-opacity-70 dark:text-slate-400">Manage all your e-commerce accounts in one place</div>
+                <div class="-intro-x mt-5 text-lg text-white text-opacity-70 dark:text-slate-400">
+                    Answer every call, chat and message — 24/7. Free to start, no card required.
+                </div>
             </div>
         </div>
         <!-- END: Register Info -->
@@ -28,7 +32,7 @@
                     <h2 class="intro-x font-bold text-2xl xl:text-3xl text-center xl:text-left">
                         Sign Up
                     </h2>
-                    <div class="intro-x mt-2 text-slate-400 dark:text-slate-400 xl:hidden text-center">A few more clicks to sign in to your account. Manage all your e-commerce accounts in one place</div>
+                    <div class="intro-x mt-2 text-slate-400 dark:text-slate-400 xl:hidden text-center">Create your {{ $brand }} workspace. Free to start, no card required.</div>
                     <div class="intro-x mt-8">
                         <input id="name" type="text" class="intro-x login__input form-control py-3 px-4 block @error('name') is-invalid @enderror" placeholder="Enter Name" name="name" value="{{ old('name') }}" required autocomplete="name" autofocus>
                         @error('name')
@@ -55,20 +59,44 @@
                             </span>
                         @enderror
                         
-                        <div class="intro-x w-full grid grid-cols-12 gap-4 h-1 mt-3">
-                            <div class="col-span-3 h-full rounded bg-success"></div>
-                            <div class="col-span-3 h-full rounded bg-success"></div>
-                            <div class="col-span-3 h-full rounded bg-success"></div>
-                            <div class="col-span-3 h-full rounded bg-slate-100 dark:bg-darkmode-800"></div>
+                        {{-- Password strength. This used to be four hardcoded bars —
+                             three permanently green regardless of what was typed —
+                             which told a user that "password" was strong. A meter
+                             that lies is worse than no meter. Now driven by the
+                             script at the foot of this file. --}}
+                        <div class="intro-x w-full grid grid-cols-12 gap-4 h-1 mt-3" id="pwBars" aria-hidden="true">
+                            <div class="col-span-3 h-full rounded bg-slate-100 dark:bg-darkmode-800" data-bar></div>
+                            <div class="col-span-3 h-full rounded bg-slate-100 dark:bg-darkmode-800" data-bar></div>
+                            <div class="col-span-3 h-full rounded bg-slate-100 dark:bg-darkmode-800" data-bar></div>
+                            <div class="col-span-3 h-full rounded bg-slate-100 dark:bg-darkmode-800" data-bar></div>
                         </div>
-                        <a href="" class="intro-x text-slate-500 block mt-2 text-xs sm:text-sm">What is a secure password?</a> 
+                        <div class="intro-x text-slate-500 block mt-2 text-xs sm:text-sm" id="pwHint" aria-live="polite">
+                            At least 8 characters. Longer is stronger than complicated.
+                        </div>
                         <input id="password-confirm" type="password" class="intro-x login__input form-control py-3 px-4 block mt-4" placeholder="Confirm Password" name="password_confirmation" required autocomplete="new-password">
                     </div>
-                    <div class="intro-x flex items-center text-slate-600 dark:text-slate-500 mt-4 text-xs sm:text-sm">
-                        <input id="remember-me" type="checkbox" class="form-check-input border mr-2">
-                        <label class="cursor-pointer select-none" for="remember-me">I agree to the Envato</label>
-                        <a class="text-primary dark:text-slate-200 ml-1" href="">Privacy Policy</a>. 
+
+                    {{-- Consent. Previously this said "I agree to the Envato Privacy
+                         Policy" — the template vendor's name — with an empty href,
+                         no `name` attribute and no server-side check. It looked like
+                         an agreement and legally was not one: nothing was submitted
+                         and nothing was verified. Now it names our own documents,
+                         links to both, and is enforced in
+                         RegisteredUserController with an `accepted` rule. --}}
+                    <div class="intro-x flex items-start text-slate-600 dark:text-slate-500 mt-4 text-xs sm:text-sm">
+                        <input id="terms" name="terms" value="1" type="checkbox" required
+                               class="form-check-input border mr-2 mt-0.5 flex-shrink-0 @error('terms') border-danger @enderror"
+                               @checked(old('terms'))>
+                        <label class="cursor-pointer select-none" for="terms">
+                            I agree to the {{ $brand }}
+                            <a class="text-primary dark:text-slate-200" href="{{ url('/terms') }}" target="_blank" rel="noopener">Terms of Service</a>
+                            and
+                            <a class="text-primary dark:text-slate-200" href="{{ url('/privacy') }}" target="_blank" rel="noopener">Privacy Policy</a>.
+                        </label>
                     </div>
+                    @error('terms')
+                        <div class="intro-x text-danger mt-1 text-xs sm:text-sm">{{ $message }}</div>
+                    @enderror
                     <div class="intro-x mt-5 xl:mt-8 text-center xl:text-left">
 @include('partials.turnstile')
                         <button type="submit" class="btn btn-primary py-3 px-4 w-full xl:w-32 xl:mr-3 align-top">Register</button>
@@ -82,4 +110,56 @@
         <!-- END: Register Form -->
     </div>
 </div>
+
+<script>
+/* Password strength — deliberately simple and honest.
+   Scores length first (which is what actually resists cracking) and
+   character variety second, then colours the bars to match. It never
+   claims a short password is strong, which is the bug this replaces. */
+(function () {
+    var input = document.getElementById('password');
+    var bars  = document.querySelectorAll('#pwBars [data-bar]');
+    var hint  = document.getElementById('pwHint');
+    if (!input || !bars.length) return;
+
+    var EMPTY  = 'bg-slate-100 dark:bg-darkmode-800';
+    var LEVELS = [
+        { cls: 'bg-danger',  text: 'Too short — use at least 8 characters.' },
+        { cls: 'bg-warning', text: 'Weak. Add length, or a number or symbol.' },
+        { cls: 'bg-warning', text: 'Fair. A few more characters would help.' },
+        { cls: 'bg-success', text: 'Good.' },
+        { cls: 'bg-success', text: 'Strong.' },
+    ];
+
+    function score(v) {
+        if (!v) return -1;
+        if (v.length < 8) return 0;
+
+        var s = 1;
+        if (v.length >= 12) s++;                       // length beats complexity
+        if (v.length >= 16) s++;
+        var variety = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/]
+            .filter(function (re) { return re.test(v); }).length;
+        if (variety >= 3) s++;
+
+        return Math.min(s, 4);
+    }
+
+    function render() {
+        var s = score(input.value);
+
+        bars.forEach(function (bar, i) {
+            bar.className = 'col-span-3 h-full rounded ' +
+                (s > 0 && i < s ? LEVELS[s].cls : EMPTY);
+        });
+
+        hint.textContent = s < 0
+            ? 'At least 8 characters. Longer is stronger than complicated.'
+            : LEVELS[s].text;
+    }
+
+    input.addEventListener('input', render);
+    render();
+})();
+</script>
 @endsection
