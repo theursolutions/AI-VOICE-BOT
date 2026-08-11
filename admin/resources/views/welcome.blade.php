@@ -999,9 +999,13 @@
         <a href="#channels">Channels</a>
         <a href="#platform">Features</a>
         <a href="#cases">Use cases</a>
-        @if (! empty($pricing['plans'] ?? []))
-            <a href="#pricing">Pricing</a>
-        @endif
+        {{-- Always shown, and pointing at the real /pricing page rather than
+             the #pricing anchor. Two reasons it is no longer conditional on
+             plans existing: the link vanished entirely on any environment
+             where plans had not been seeded, and "pricing" is the highest-
+             intent query in this category — a page that earns a nav link
+             from every visit should not be able to disappear silently. --}}
+        <a href="{{ url('/pricing') }}">Pricing</a>
         <a href="{{ url('/contact') }}">Contact</a>
         {{-- Signed-in visitors get a way back into the app instead of being
              asked to sign in again. /dashboard redirects to the active
