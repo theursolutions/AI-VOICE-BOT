@@ -1,0 +1,131 @@
+<p>Most systems sold as "AI lead qualification" do not qualify anything. They collect a few extra fields and hand your team the same undifferentiated pile, now with more typing involved.</p>
+
+<p>Qualification is a decision, not a questionnaire. This is a practical framework for designing that decision — what to ask, how to score, when to route to a human, and the mistakes that make the whole thing pointless.</p>
+
+<h2>The short answer</h2>
+
+<p>A qualification workflow that works has four parts:</p>
+
+<ol>
+<li><strong>A definition</strong> of what "qualified" means for your business, written down as rules</li>
+<li><strong>A conversation</strong> that gathers only what those rules need</li>
+<li><strong>A decision</strong> — route to a human, nurture automatically, or decline politely</li>
+<li><strong>A handoff</strong> carrying enough context that the human does not start over</li>
+</ol>
+
+<p>Miss the first and you have a chatbot asking questions nobody uses. Miss the fourth and your team re-qualifies every lead by hand — which is the work you were trying to remove.</p>
+
+<h2>Start by writing down what qualified means</h2>
+
+<p>This sounds obvious and is skipped constantly. Before automating anything, answer: <strong>which enquiries do we want a human to call within the hour, and what is true about them?</strong></p>
+
+<table>
+<thead><tr><th>Dimension</th><th>Example rule</th><th>How you learn it</th></tr></thead>
+<tbody>
+<tr><td><strong>Need</strong></td><td>Wants a service we actually offer</td><td>Ask, or infer from what they described</td></tr>
+<tr><td><strong>Scale</strong></td><td>Budget or volume above our floor</td><td>Ask indirectly — a range, not a number</td></tr>
+<tr><td><strong>Timing</strong></td><td>Buying within 90 days</td><td>Ask directly; people answer this honestly</td></tr>
+<tr><td><strong>Fit</strong></td><td>In a region or sector we serve</td><td>Often inferable without asking</td></tr>
+<tr><td><strong>Authority</strong></td><td>Can decide, or can bring the decider</td><td>Ask only in B2B, and gently</td></tr>
+</tbody>
+</table>
+
+<p>Two disciplines make this list useful. <strong>Keep it to three or four dimensions</strong> — every extra one costs you completed conversations. And <strong>write the disqualifying condition too</strong>: knowing who you do <em>not</em> want is what makes a filter a filter.</p>
+
+<h2>Design the conversation around the decision</h2>
+
+<p>The classic mistake is a form in disguise: five questions in a row, no context, nothing given back. Completion rates collapse — and the people who do finish are not necessarily your best leads, they are the most patient ones.</p>
+
+<ul>
+<li><strong>Answer before you ask.</strong> Someone who asks "do you do X?" gets a real answer first. Then a question. Reciprocity is the whole mechanism.</li>
+<li><strong>Ask in the order the conversation suggests</strong>, not in your CRM's field order. An agent can do this; a form cannot.</li>
+<li><strong>Infer rather than interrogate.</strong> If the enquiry says "for our clinic in Lahore", you have sector and location. Asking anyway signals nobody read it.</li>
+<li><strong>Stop when you can decide.</strong> If the third answer already disqualifies, do not ask the fourth.</li>
+<li><strong>Never ask for something you will not act on.</strong> Every unused field is friction you charged the customer for nothing.</li>
+</ul>
+
+<h2>Scoring: keep it explainable</h2>
+
+<p>Elaborate scoring models are appealing and usually a mistake early on. Nobody trusts a number they cannot interrogate, and a sales team that does not trust the score ignores it.</p>
+
+<p>Start with something a person could compute on paper:</p>
+
+<ul>
+<li><strong>Hard filters first.</strong> Out of area, out of scope, obviously spam — decline politely, do not score.</li>
+<li><strong>Then a small additive score.</strong> Three or four signals, each worth a defined amount.</li>
+<li><strong>Then three bands.</strong> Hot (human now), warm (automated nurture, human this week), cold (self-serve resources).</li>
+</ul>
+
+<p>Three bands is deliberate. Ten grades of lead create an argument about grading; three create an action for each.</p>
+
+<blockquote><p><strong>Review the scoring against outcomes after a month.</strong> The only test that matters is whether "hot" leads convert better than "warm" ones. If they do not, your rules describe something other than buying intent — and no amount of AI fixes a wrong definition.</p></blockquote>
+
+<h2>The handoff is where most of the value is</h2>
+
+<p>A qualified lead delivered badly is barely better than an unqualified one. What the human receives should include:</p>
+
+<ul>
+<li>The <strong>full transcript</strong>, not a summary alone — exact wording carries intent</li>
+<li>The <strong>answers to the qualifying questions</strong>, as structured fields</li>
+<li><strong>Which band and why</strong>, in one line a rep can read while dialling</li>
+<li>The <strong>channel and time</strong> — someone who messaged at 11pm on WhatsApp expects a reply there, not a phone call at 9am</li>
+<li>Anything the customer <strong>explicitly asked for</strong>, flagged</li>
+</ul>
+
+<p>This is where an agent architecture earns its keep over a form: it can write all of that into the CRM as it goes, so the record exists the moment the conversation ends.</p>
+
+<p>It is also where a unified data layer matters more than the model does. Salesforce found that organisations which unify their channel data are <strong>1.4× more likely to report a very successful AI implementation</strong> (<a href="https://www.salesforce.com/blog/state-of-service/" target="_blank" rel="noopener">State of Service, 7th edition</a>). If a WhatsApp enquiry and a web-chat enquiry from the same person land as two unrelated records, no qualification logic makes that coherent.</p>
+
+<h2>Mistakes that make qualification useless</h2>
+
+<table>
+<thead><tr><th>Mistake</th><th>What happens</th><th>Fix</th></tr></thead>
+<tbody>
+<tr><td>Qualifying before answering</td><td>People abandon; you lose the good ones too</td><td>Answer the question they came with first</td></tr>
+<tr><td>Too many questions</td><td>Completion collapses</td><td>Three or four, tied to real rules</td></tr>
+<tr><td>Scoring nobody understands</td><td>Sales ignores the score</td><td>Explainable rules, three bands</td></tr>
+<tr><td>No disqualification path</td><td>Everything routes to a human; nothing is filtered</td><td>Define and enforce "not for us"</td></tr>
+<tr><td>Losing the transcript</td><td>The human re-qualifies from scratch</td><td>Attach it to the CRM record</td></tr>
+<tr><td>Never reviewing outcomes</td><td>Rules drift from reality</td><td>Compare bands to conversions monthly</td></tr>
+</tbody>
+</table>
+
+<h2>A worked example</h2>
+
+<p>An interior fit-out company gets enquiries across WhatsApp, Instagram and their website. Most are homeowners wanting a single room; the profitable work is commercial fit-outs above a certain size.</p>
+
+<p>Their rules: <em>commercial premises</em>, <em>project starting within three months</em>, <em>within two cities</em>. Everything else is nurture or decline.</p>
+
+<ol>
+<li>Enquiry arrives: "Do you do office interiors?"</li>
+<li>Agent answers properly — yes, with two sentences on typical scope</li>
+<li>"Is this for a commercial space or a home?" → commercial</li>
+<li>"Roughly when are you hoping to start?" → next month</li>
+<li>"Which city?" → in range</li>
+<li>All three match → books a site visit into the calendar, creates the lead as <strong>hot</strong>, notifies the commercial team with the transcript attached</li>
+</ol>
+
+<p>A homeowner asking the same opening question gets an equally polite answer, a link to residential partners, and no site visit. Nobody's time is wasted, and the enquiry is not simply ignored — which matters, because that homeowner talks to people.</p>
+
+<h2>Frequently asked questions</h2>
+
+<h3>Does AI qualification replace SDRs?</h3>
+<p>It replaces the first-pass filtering, not the selling. What it reliably removes is the hour a day spent on enquiries that were never going to buy, and the delay before a good lead gets a reply.</p>
+
+<h3>Will customers resent being screened by a bot?</h3>
+<p>They resent being <em>ignored</em> far more. An instant, useful reply ending in "let me get the right person" reads as competent. What reads badly is being interrogated before getting any value.</p>
+
+<h3>How many questions is too many?</h3>
+<p>If you cannot justify each one against a rule you actually apply, it is too many. Three or four, asked conversationally, is the practical ceiling before completion drops noticeably.</p>
+
+<h3>What about leads that disqualify but might buy later?</h3>
+<p>Do not discard them. A "not now" is a nurture record with a date on it. The mistake is treating disqualified as deleted.</p>
+
+<h3>Can this work for inbound phone calls too?</h3>
+<p>Yes — the logic is identical, only the channel changes. The difference is that on a call you must decide faster and cannot show links, so the qualifying set usually needs to be shorter still.</p>
+
+<h2>The takeaway</h2>
+
+<p>Qualification is a decision you have already made, written down and applied consistently. The AI is what applies it at 11pm on a Sunday across four channels without getting bored. If you have not written the rules down, automating them will only make the mess arrive faster.</p>
+
+<p><strong>See it end to end</strong> — Serve AI qualifies enquiries across phone, chat and WhatsApp, then writes a scored lead with the full transcript into your CRM. <a href="/pricing">See what it costs</a> or <a href="/contact">talk through your rules with us</a>.</p>
