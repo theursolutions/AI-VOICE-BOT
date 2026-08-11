@@ -1,0 +1,132 @@
+<p>A caller asks "are you open on Sunday?" and hears an answer 900 milliseconds later. In that gap four separate systems ran in sequence. Understanding which one is slow — and which one you are paying for — is most of what you need to evaluate a voice agent properly.</p>
+
+<p>This covers the pipeline, why latency is the genuinely hard part, what drives cost per minute, and the situations where a voice agent is the wrong tool.</p>
+
+<h2>The short answer</h2>
+
+<p>An AI voice agent is four components in a chain:</p>
+
+<ol>
+<li><strong>Speech-to-text (ASR)</strong> — turns the caller's audio into words</li>
+<li><strong>A language model</strong> — decides what to say and what to do</li>
+<li><strong>Tools</strong> — checks a calendar, looks up an order, writes a CRM record</li>
+<li><strong>Text-to-speech (TTS)</strong> — turns the reply back into audio</li>
+</ol>
+
+<p>Every stage adds delay, and the delays are cumulative. That is the whole engineering problem: a chatbot can take two seconds to reply and nobody minds. On a phone call, two seconds of silence is when people say "hello? are you there?"</p>
+
+<h2>Where the time goes</h2>
+
+<table>
+<thead><tr><th>Stage</th><th>Typical contribution</th><th>What makes it worse</th></tr></thead>
+<tbody>
+<tr><td>Speech-to-text</td><td>Small to moderate</td><td>Waiting for the caller to definitely stop talking</td></tr>
+<tr><td>Language model</td><td><strong>Usually the largest</strong></td><td>Long prompts, large models, tool calls needing a second round trip</td></tr>
+<tr><td>Tool calls</td><td>Varies wildly</td><td>A slow CRM or calendar API blocks the whole turn</td></tr>
+<tr><td>Text-to-speech</td><td>Small</td><td>Generating a whole sentence before playing any of it</td></tr>
+<tr><td>Network</td><td>Small, but repeated</td><td>Every hop between separate vendors adds another</td></tr>
+</tbody>
+</table>
+
+<p><strong>A note on the numbers you will be quoted.</strong> Independent benchmarks of voice-agent latency vary widely and often do not disclose their methodology. Vendor figures in the 200–400&nbsp;ms range typically measure model inference alone, while end-to-end tests that include speech recognition, network hops and speech synthesis report medians closer to 700–1,300&nbsp;ms. Treat any single number with suspicion and ask what it measures.</p>
+
+<p>What is not disputed is the perceptual threshold. Below roughly 800&nbsp;ms a caller experiences the exchange as normal conversation. Past about 1.5 seconds, the pause is obvious and people realise they are talking to a machine. That is the bar — and it is why "which model is smartest" is often the wrong question. A slightly less capable model that answers in half the time produces a better call.</p>
+
+<blockquote><p><strong>Test on a real phone line, not a browser demo.</strong> Browser-to-browser demos skip the telephony leg entirely, which is exactly the part that adds delay and degrades audio. A demo that sounds flawless on a laptop can be noticeably worse on an actual call.</p></blockquote>
+
+<h2>The parts nobody demos</h2>
+
+<h3>Turn-taking</h3>
+<p>Knowing when the caller has finished speaking is harder than transcribing what they said. End the turn too early and you interrupt someone mid-sentence; too late and you add dead air to every exchange. People pause mid-thought, say "um", and trail off. This is where cheap voice agents feel wrong even when the words are right.</p>
+
+<h3>Barge-in</h3>
+<p>Can the caller interrupt? If the agent is halfway through a long sentence and the caller says "no, wait", a system without barge-in support keeps talking over them. This single behaviour does more for perceived quality than almost anything else.</p>
+
+<h3>Accents, names and noise</h3>
+<p>Speech recognition accuracy is not uniform. It degrades with background noise, regional accents, and — critically for a business — proper nouns. A system that transcribes ordinary sentences perfectly may still mangle a street name, a product code, or a caller's surname. Test with <em>your</em> vocabulary, not generic phrases.</p>
+
+<h3>Numbers</h3>
+<p>Phone numbers, order references and amounts are where errors are least forgivable and most common. Any serious deployment reads them back for confirmation. Ask a vendor how they handle this; a shrug is an answer.</p>
+
+<h2>What it costs, and what drives the number</h2>
+
+<p>Voice agents are usually priced per minute, and that figure is assembled from parts:</p>
+
+<table>
+<thead><tr><th>Cost component</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td>Telephony</td><td>Carrier charges for the call itself; varies enormously by country and by inbound vs outbound</td></tr>
+<tr><td>Speech-to-text</td><td>Billed by audio duration</td></tr>
+<tr><td>Language model</td><td>Billed by tokens. <strong>Long conversations cost more per minute than short ones</strong>, because the history is re-sent each turn</td></tr>
+<tr><td>Text-to-speech</td><td>Billed by characters generated; cloned or premium voices cost more</td></tr>
+<tr><td>Platform margin</td><td>The vendor's own charge on top</td></tr>
+</tbody>
+</table>
+
+<p>Three consequences worth knowing before you compare quotes:</p>
+
+<ul>
+<li><strong>"Per minute" is not comparable across vendors</strong> unless you know whether telephony is included. Some quote the AI only and bill carrier charges separately.</li>
+<li><strong>Silence is billable.</strong> A caller who puts you on hold is still consuming minutes.</li>
+<li><strong>A cheaper per-minute rate can cost more overall</strong> if the agent is slower to resolve. Twenty extra seconds of fumbling on every call is real money at volume.</li>
+</ul>
+
+<p>Ask for a worked example: a typical call for your business, minute by minute, with every line item.</p>
+
+<h2>Compliance you cannot skip</h2>
+
+<p>Two obligations catch people out, and both vary by jurisdiction — treat this as a prompt to get advice, not as advice.</p>
+
+<ul>
+<li><strong>Recording consent.</strong> Many jurisdictions require callers to be told a call is recorded, and some require explicit consent from all parties. If you retain transcripts — and any useful system does — you are recording in substance even if you keep no audio.</li>
+<li><strong>Disclosure that it is AI.</strong> A growing number of jurisdictions require it, and reputationally it is the right default regardless. Callers who discover mid-conversation that they were misled respond badly.</li>
+</ul>
+
+<p>You also inherit the ordinary data-protection questions: where transcripts are stored, how long they are kept, and who can read them. Handling health or financial detail raises that scrutiny further.</p>
+
+<h2>When not to use a voice agent</h2>
+
+<ul>
+<li><strong>Complaints and cancellations.</strong> Someone already angry does not want to explain themselves to software. Route these straight to a person.</li>
+<li><strong>Anything with legal or financial consequence.</strong> Contract terms, medical guidance, disputed charges.</li>
+<li><strong>Very low call volume.</strong> If you take four calls a day, the setup effort will not repay itself. A shared inbox is a better answer.</li>
+<li><strong>When your information is not written down anywhere.</strong> An agent can only answer from what it can read. If your pricing lives in a colleague's head, fix that first.</li>
+</ul>
+
+<h2>What a good deployment looks like</h2>
+
+<ol>
+<li><strong>Start with overflow, not replacement.</strong> The agent answers what rings out — after hours, during a rush. Nobody loses a call they would otherwise have taken.</li>
+<li><strong>Pick three intents.</strong> Hours and location, availability, booking. Three done well beats thirty done adequately.</li>
+<li><strong>Make escalation instant and obvious.</strong> "Let me get someone" should be one sentence away at all times.</li>
+<li><strong>Read the transcripts.</strong> Every week, for the first month. The highest-value hour you will spend, and the step most people skip.</li>
+<li><strong>Widen only when a category is genuinely solved.</strong></li>
+</ol>
+
+<p>This is also how you get a result quickly. Salesforce reports that <strong>70% of organisations adopting AI agents see measurable value within 60 days</strong> (<a href="https://www.salesforce.com/blog/state-of-service/" target="_blank" rel="noopener">State of Service, 7th edition</a>) — and the ones that do are almost always those who scoped tightly rather than attempting everything at once.</p>
+
+<h2>Frequently asked questions</h2>
+
+<h3>Will callers know it is AI?</h3>
+<p>Most will, quickly — and that is fine. What annoys people is not the machine, it is the machine wasting their time. A clear opening ("you're speaking to an automated assistant; I can help with bookings or put you through to someone") sets expectations and improves the rest of the call.</p>
+
+<h3>Can it use my own voice?</h3>
+<p>Voice cloning from a short sample is standard. Whether you should is a separate question: cloning a named person's voice raises consent issues, and a neutral professional voice is often the safer choice for a business line.</p>
+
+<h3>What happens if it does not understand?</h3>
+<p>In a well-built agent, it asks once for clarification and then escalates. An agent that loops — "sorry, I didn't catch that" three times running — is worse than no agent, because the caller has wasted a minute and is annoyed before reaching a human.</p>
+
+<h3>Can it make outbound calls too?</h3>
+<p>Technically yes, and it is a different risk profile. Outbound calling attracts far more regulation than answering your own phone — consent, calling hours, do-not-call registers. Check the rules for every market you would call into before you start.</p>
+
+<h3>How many concurrent calls can it handle?</h3>
+<p>In principle many more than a human team, which is the main operational argument for it. In practice the ceiling is usually your telephony provider's concurrency limit and your budget, not the AI.</p>
+
+<h3>Does it work in languages other than English?</h3>
+<p>Multilingual support is common, but quality is uneven across languages and worse for regional accents and code-switching — which matters if your callers mix languages mid-sentence, as many do. Test in the languages your customers actually use, not the ones on the feature list.</p>
+
+<h2>The takeaway</h2>
+
+<p>A voice agent is a latency problem with a language model attached. Judge it on how a whole call feels on a real phone line, not on how clever the transcript looks; get a line-by-line cost example before comparing quotes; and deploy it on overflow first, where a failure costs you nothing you were not already losing.</p>
+
+<p><strong>Want to hear one?</strong> Serve AI answers calls in your own voice, books into your calendar and writes the lead into your CRM. <a href="/pricing">See what it costs</a> or <a href="/contact">have it call you</a>.</p>

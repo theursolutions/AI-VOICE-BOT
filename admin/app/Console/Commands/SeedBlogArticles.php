@@ -6,8 +6,13 @@ use App\Models\BlogPost;
 use Illuminate\Console\Command;
 
 /**
- * Loads the written articles from CONTENT_STRATEGY.md into the blog as
- * DRAFTS, ready to review at /admin/blog.
+ * Loads the prepared articles into the blog as DRAFTS, ready to review at
+ * /admin/blog.
+ *
+ * Article bodies live as HTML files in resources/content/blog/<slug>.html
+ * rather than inline here. That keeps this command readable, lets the copy
+ * be edited without touching PHP, and means a 15 KB article is not sitting
+ * inside a heredoc.
  *
  * Drafts, never published: an article should be read by a human before it
  * is public, and these carry SEO metadata that deserves a second pair of
@@ -17,12 +22,15 @@ use Illuminate\Console\Command;
  * duplicating. It will NOT overwrite an article you have already published
  * or edited by hand (see --force).
  *
- *   php artisan blog:seed-articles            # add/refresh drafts
- *   php artisan blog:seed-articles --force    # also overwrite edited drafts
+ *   php artisan blog:seed-articles              # add/refresh drafts
+ *   php artisan blog:seed-articles --force      # also overwrite edited drafts
+ *   php artisan blog:seed-articles --no-covers  # skip cover generation
  */
 class SeedBlogArticles extends Command
 {
-    protected $signature = 'blog:seed-articles {--force : Overwrite drafts that have been edited since seeding}';
+    protected $signature = 'blog:seed-articles
+                            {--force : Overwrite drafts that have been edited since seeding}
+                            {--no-covers : Do not generate cover images}';
 
     protected $description = 'Load the prepared blog articles into /admin/blog as drafts';
 
@@ -31,6 +39,13 @@ class SeedBlogArticles extends Command
         $seeded = $skipped = 0;
 
         foreach ($this->articles() as $article) {
+            $body = $this->body($article['slug']);
+            if ($body === null) {
+                $this->error("  missing resources/content/blog/{$article['slug']}.html — skipped");
+                $skipped++;
+                continue;
+            }
+
             $existing = BlogPost::withTrashed()->where('slug', $article['slug'])->first();
 
             if ($existing) {
@@ -42,8 +57,8 @@ class SeedBlogArticles extends Command
                     continue;
                 }
 
-                // A draft whose body no longer matches what we seeded has been
-                // edited by a human. Their work wins unless --force.
+                // A draft touched after creation has been edited by a human.
+                // Their work wins unless --force.
                 $edited = $existing->updated_at && $existing->created_at
                     && $existing->updated_at->gt($existing->created_at->addMinute());
 
@@ -56,10 +71,11 @@ class SeedBlogArticles extends Command
 
             $post = $existing ?: new BlogPost();
             $post->fill($article);
-            $post->slug        = $article['slug'];
-            $post->status      = BlogPost::STATUS_DRAFT;   // review before publishing
+            $post->body         = $body;
+            $post->slug         = $article['slug'];
+            $post->status       = BlogPost::STATUS_DRAFT;   // review before publishing
             $post->published_at = null;
-            $post->deleted_at  = null;                     // un-trash if it was deleted
+            $post->deleted_at   = null;                     // un-trash if it was deleted
             $post->save();
 
             $this->info("  seeded {$article['slug']}  ({$post->reading_time} min read)");
@@ -68,23 +84,35 @@ class SeedBlogArticles extends Command
 
         $this->newLine();
         $this->line("{$seeded} article(s) seeded as drafts, {$skipped} skipped.");
-        $this->line('Review and publish at ' . url('/admin/blog'));
+
+        if (! $this->option('no-covers')) {
+            $this->newLine();
+            $this->call('blog:covers');
+        }
+
         $this->newLine();
-        $this->comment('Note: articles are seeded WITHOUT links to unpublished siblings.');
-        $this->comment('Add those cross-links once the related articles are live.');
+        $this->line('Review and publish at ' . url('/admin/blog'));
+        $this->comment('Articles are seeded WITHOUT links to unpublished siblings —');
+        $this->comment('add those cross-links once the related articles are live.');
 
         return self::SUCCESS;
     }
 
+    /** Article body HTML, or null when the file is missing. */
+    private function body(string $slug): ?string
+    {
+        $path = resource_path("content/blog/{$slug}.html");
+
+        return is_file($path) ? trim((string) file_get_contents($path)) : null;
+    }
+
     /**
-     * The articles themselves.
-     *
-     * Body is HTML because that is what the editor stores and the public
-     * template renders — h2/h3, p, ul, table, blockquote all match the
-     * styles in resources/views/blog/show.blade.php.
+     * Metadata for each article. The body comes from the matching file in
+     * resources/content/blog/.
      *
      * Cross-links to articles that are not written yet are deliberately
-     * omitted: a live 404 inside body copy is worse than a missing link.
+     * omitted from the bodies: a live 404 inside body copy is worse than a
+     * missing link.
      */
     private function articles(): array
     {
@@ -99,194 +127,53 @@ class SeedBlogArticles extends Command
                 'meta_title'       => 'AI Agents vs Chatbots vs AI Assistants: What\'s Actually Different',
                 'meta_description' => 'A plain-English taxonomy of chatbots, AI assistants and AI agents — what each can do, where each fails, and how to tell which one a vendor is really selling you.',
                 'meta_keywords'    => 'ai agents vs chatbots, ai assistant vs ai agent, what is an ai agent, types of ai agents',
-                'cover_alt'        => 'Diagram comparing rule-based chatbots, AI assistants and AI agents by how much each decides on its own',
+                'cover_alt'        => 'Comparison of rule-based chatbots, AI assistants and AI agents by how much each decides on its own',
                 'author_name'      => 'Serve AI',
                 'author_role'      => 'Product team',
-                'body'             => $this->articleOne(),
+                'is_featured'      => true,
+            ],
+            [
+                'slug'     => 'ai-voice-agents-how-they-work-cost',
+                'title'    => 'AI voice agents: how they work, where they fail, and what they cost',
+                'subtitle' => 'The pipeline, the latency problem, and the numbers vendors are vague about.',
+                'category' => 'Guides',
+                'tags'     => ['ai voice agents', 'ai call agent', 'latency', 'pricing'],
+                'excerpt'  => 'A voice agent is four systems in a chain, and each one adds delay. How the pipeline works, why latency is the hard part, and what actually drives the price per minute.',
+                'meta_title'       => 'AI Voice Agents: How They Work, Where They Fail & What They Cost',
+                'meta_description' => 'How AI voice agents actually work — the speech-to-text, LLM and text-to-speech pipeline, why latency is the hard problem, what drives cost per minute, and when not to use one.',
+                'meta_keywords'    => 'ai voice agent, ai call agent, ai phone agent, voice ai latency, voice ai cost per minute',
+                'cover_alt'        => 'The four stages of an AI voice agent pipeline and where the delay accumulates',
+                'author_name'      => 'Serve AI',
+                'author_role'      => 'Product team',
+            ],
+            [
+                'slug'     => 'ai-lead-qualification-workflow',
+                'title'    => 'AI lead qualification: building a workflow that actually filters',
+                'subtitle' => 'Most "AI qualification" is a contact form with extra steps. Here is the difference.',
+                'category' => 'Playbooks',
+                'tags'     => ['lead qualification', 'sales automation', 'crm'],
+                'excerpt'  => 'Qualification is not asking more questions — it is deciding, from the answers, who deserves a human. A practical framework, and the mistakes that make it useless.',
+                'meta_title'       => 'AI Lead Qualification: Building a Workflow That Actually Filters',
+                'meta_description' => 'A practical framework for automated lead qualification — what to ask, how to score, when to route to a human, and why most AI qualification adds work instead of removing it.',
+                'meta_keywords'    => 'ai lead qualification, automated lead qualification, ai lead scoring, lead routing',
+                'cover_alt'        => 'An enquiry being qualified, scored and routed to either a human or automated follow-up',
+                'author_name'      => 'Serve AI',
+                'author_role'      => 'Product team',
+            ],
+            [
+                'slug'     => 'why-ai-support-projects-fail',
+                'title'    => 'Why AI support projects fail — and the checks that prevent it',
+                'subtitle' => 'Gartner expects more than 40% of agentic AI projects to be cancelled by 2027.',
+                'category' => 'Guides',
+                'tags'     => ['implementation', 'ai strategy', 'customer support'],
+                'excerpt'  => 'The failures are not exotic. They cluster into six causes, every one of them visible before you sign. A pre-deployment checklist built from what actually goes wrong.',
+                'meta_title'       => 'Why AI Support Projects Fail — and the Checks That Prevent It',
+                'meta_description' => 'Gartner expects over 40% of agentic AI projects to be cancelled by 2027. The six reasons AI support deployments fail, and a pre-launch checklist that catches each one.',
+                'meta_keywords'    => 'ai customer service implementation, ai project failure, ai implementation checklist',
+                'cover_alt'        => 'Six common causes of AI support project failure and the pre-launch check that catches each',
+                'author_name'      => 'Serve AI',
+                'author_role'      => 'Product team',
             ],
         ];
-    }
-
-    private function articleOne(): string
-    {
-        return <<<'HTML'
-<p>Three vendors will quote you for the same problem this month. One will call its product a chatbot, one an AI assistant, one an AI agent. All three demos will look similar. The prices will not be.</p>
-
-<p>The words are not interchangeable, and the difference is not marketing. It comes down to one question: <strong>how much does the system decide on its own?</strong></p>
-
-<h2>The short answer</h2>
-
-<table>
-<thead><tr><th></th><th>Rule-based chatbot</th><th>AI assistant</th><th>AI agent</th></tr></thead>
-<tbody>
-<tr><td><strong>How it decides</strong></td><td>Follows a decision tree you drew</td><td>Understands the request, then answers</td><td>Understands the request, then <strong>acts</strong> — choosing which steps to take</td></tr>
-<tr><td><strong>Knows your business?</strong></td><td>Only what you typed into it</td><td>Yes, from documents or a database you connect</td><td>Yes, and it can look things up mid-conversation</td></tr>
-<tr><td><strong>Can it take action?</strong></td><td>Only pre-wired actions</td><td>Rarely — it mostly answers</td><td>Yes: books, updates, escalates, creates records</td></tr>
-<tr><td><strong>Handles the unexpected</strong></td><td>No — falls to "I didn't understand"</td><td>Usually, within its knowledge</td><td>Usually, and can change approach mid-task</td></tr>
-<tr><td><strong>Predictable?</strong></td><td>Completely</td><td>Mostly</td><td><strong>Least</strong> — the trade-off for flexibility</td></tr>
-<tr><td><strong>Use it when</strong></td><td>The process never varies</td><td>People ask questions</td><td>Something needs doing, not just answering</td></tr>
-</tbody>
-</table>
-
-<p><strong>The one-line test:</strong> if the system can only <em>tell</em> you things, it is a chatbot or an assistant. If it can <em>change something</em> — a calendar, a CRM record, an order — it is an agent.</p>
-
-<p>That distinction matters commercially, because agents are the ones that can be wrong in expensive ways. A chatbot that misunderstands wastes a customer's time. An agent that misunderstands books the wrong appointment.</p>
-
-<h2>Why the confusion exists</h2>
-
-<p>It is not an accident of language. Three things drive it.</p>
-
-<p><strong>The categories genuinely overlap.</strong> A modern product is often all three at once: a scripted flow for the top five questions, a language model for everything else, and tool access for booking. Asking "is this a chatbot or an agent?" can be the wrong question — the useful question is which mode handles which request.</p>
-
-<p><strong>"Agent" already meant something else.</strong> In customer service, an agent is a person. So "AI agent" gets used loosely to mean "the AI thing that replaces what an agent did", regardless of architecture.</p>
-
-<p><strong>Naming follows fashion.</strong> "Chatbot" carries the memory of a decade of bad ones. Vendors moved to "assistant", then to "agent", faster than their products changed. Some 2026 "AI agents" are 2019 decision trees with a language model bolted to the fallback branch.</p>
-
-<h2>Rule-based chatbots: predictable, and that is the point</h2>
-
-<p>A rule-based chatbot follows a flow somebody drew. Keyword or button matches a branch; branch produces a reply.</p>
-
-<p><strong>Where it genuinely wins:</strong></p>
-<ul>
-<li><strong>Regulated or scripted exchanges.</strong> If the reply must be word-for-word every time — a disclosure, a policy, a legal notice — a decision tree is a feature, not a limitation. A language model that paraphrases is a liability here.</li>
-<li><strong>Very high volume, very narrow question.</strong> "Where is my order?" answered by an order-status lookup does not need reasoning.</li>
-<li><strong>Zero tolerance for surprise.</strong> You can read a decision tree and know everything it will ever say.</li>
-</ul>
-
-<p><strong>Where it fails:</strong> the moment someone phrases a question in a way you did not anticipate. Real customers do this constantly. The failure is visible and irritating: <em>"Sorry, I didn't understand that. Please choose from the options below."</em></p>
-
-<p><strong>Realistic example.</strong> A courier's tracking bot handles "where's my parcel" perfectly. A customer types <em>"the driver left it at the wrong gate and now the guard says he doesn't have it"</em> — that has no branch, and never will.</p>
-
-<h2>AI assistants: they understand, then they answer</h2>
-
-<p>An AI assistant uses a large language model to interpret what was actually meant, then answers from knowledge you have given it.</p>
-
-<p>The technique behind most business assistants is <strong>retrieval-augmented generation (RAG)</strong>: the system searches your documents for relevant passages, then writes an answer grounded in what it found. That grounding is what separates a useful business assistant from a chatbot that invents plausible nonsense.</p>
-
-<p><strong>Where it wins:</strong></p>
-<ul>
-<li><strong>Questions with real answers in your material.</strong> Policies, specifications, hours, pricing, "does this fit that".</li>
-<li><strong>Wide surface, shallow action.</strong> Hundreds of possible questions, no follow-up task.</li>
-<li><strong>Deflection before escalation.</strong> Resolve the answerable, hand over the rest.</li>
-</ul>
-
-<p><strong>Where it fails:</strong> anything requiring an action. An assistant can tell a customer that Tuesday at 3pm looks free. It cannot book Tuesday at 3pm.</p>
-
-<p><strong>Realistic example.</strong> A building-supplies company connects its price list and spec sheets. The assistant answers "what's the coverage of a 20kg bag" and "do you deliver to Gujranwala" accurately, all night. It cannot place the order.</p>
-
-<blockquote><p><strong>A caution worth stating plainly:</strong> an assistant is only as truthful as its grounding. Connected to a stale document, it will answer confidently and wrongly — which is worse than not answering, because the customer believes it. Whatever you deploy, know what it is reading and how you update it.</p></blockquote>
-
-<h2>AI agents: they decide what to do</h2>
-
-<p>An AI agent adds two things: <strong>tools</strong> and <strong>the discretion to choose among them</strong>.</p>
-
-<p>A tool is any capability you expose — check a calendar, create a CRM record, look up an order, send an email, escalate to a human. The agent decides which to use, in what order, and when it is finished. In current systems this is usually implemented as <strong>function calling</strong>: the model is told which tools exist and what arguments they take, and it responds with a call rather than prose.</p>
-
-<p>That is the whole leap. Not better language — <strong>agency</strong>.</p>
-
-<p><strong>A concrete sequence.</strong> A property enquiry arrives on WhatsApp at 10pm: <em>"Is the Gulberg apartment still available? Could I see it this week?"</em></p>
-
-<ol>
-<li>Searches the listing database → still available</li>
-<li>Answers the question, with the price</li>
-<li>Asks two qualifying questions — budget, and buying or renting</li>
-<li>Checks the agent's calendar → offers Thursday 4pm or Saturday 11am</li>
-<li>Books the chosen slot</li>
-<li>Creates a CRM lead with the transcript and qualification answers attached</li>
-<li>Notifies the human agent</li>
-</ol>
-
-<p>A chatbot could do step 1 with a rigid script. An assistant could do steps 1–2. Only an agent does 3–7, and only an agent adapts when the customer says <em>"actually, do you have anything cheaper in DHA?"</em> halfway through.</p>
-
-<p><strong>Where it wins:</strong> the enquiry has to <em>become</em> something — a booking, a lead, a ticket, an order.</p>
-
-<p><strong>Where it fails, and this is the part vendors skip:</strong></p>
-<ul>
-<li><strong>It can take the wrong action.</strong> The failure mode is no longer a bad sentence, it is a wrong booking. McKinsey's 2026 research on AI trust puts it precisely: organisations must now contend with systems <em>doing</em> the wrong thing — taking unintended actions, misusing tools, or operating outside their guardrails — not merely saying the wrong thing (<a href="https://www.mckinsey.com/capabilities/tech-and-ai/our-insights/tech-forward/state-of-ai-trust-in-2026-shifting-to-the-agentic-era" target="_blank" rel="noopener">McKinsey, State of AI trust in 2026</a>).</li>
-<li><strong>It is harder to test.</strong> A decision tree has finite paths. An agent with six tools has a combinatorial space you cannot enumerate.</li>
-<li><strong>It needs permissions, and permissions are risk.</strong> An agent that can write to your CRM can write badly to your CRM.</li>
-</ul>
-
-<p>Which is why the adoption numbers are less triumphant than the marketing. McKinsey found <strong>88% of organisations use AI in at least one function, but only around 23% are scaling an agentic system</strong> — and <strong>no more than 10%</strong> are scaling agents in any single business function (<a href="https://www.mckinsey.com/~/media/mckinsey/business%20functions/quantumblack/our%20insights/the%20state%20of%20ai/november%202025/the-state-of-ai-2025-agents-innovation_cmyk-v1.pdf" target="_blank" rel="noopener">McKinsey, The State of AI, November 2025</a>). Experimenting is easy. Trusting one in production is not.</p>
-
-<h2>Two more terms you will meet</h2>
-
-<h3>AI workflow automation</h3>
-
-<p>A fixed sequence with AI at one step: <em>when an email arrives → classify it → route it → notify someone.</em> The AI classifies; the workflow decides. Deterministic, testable, and often the right answer when the process genuinely does not vary. Not an agent — the agency lives in your flowchart.</p>
-
-<h3>Agentic workflow</h3>
-
-<p>An agent operating inside constraints you set: it may use these four tools, must get approval before refunding over a threshold, must escalate if the customer says "complaint". The current mainstream direction of travel, because it keeps most of the flexibility while bounding the blast radius.</p>
-
-<p>If you are buying in 2026 and the vendor cannot tell you where their guardrails sit, that is the question to keep asking.</p>
-
-<h2>Which one do you actually need?</h2>
-
-<p>Work down this list and stop at the first "yes".</p>
-
-<ol>
-<li><strong>Must the wording be identical every time, for compliance?</strong> → Rule-based chatbot. Do not use a language model.</li>
-<li><strong>Do people mostly ask questions your documents already answer?</strong> → AI assistant.</li>
-<li><strong>Does something need to happen — a booking, a lead, a ticket, an order?</strong> → AI agent.</li>
-<li><strong>Is the process fixed, with one judgement call in the middle?</strong> → Workflow automation with an AI step.</li>
-<li><strong>All of the above, on different requests?</strong> → One agent with a scripted path for the fixed cases. This is the common real answer.</li>
-</ol>
-
-<h3>Sanity checks before you sign anything</h3>
-
-<ul>
-<li><strong>"Show me it being wrong."</strong> Ask for a failure, not a happy path. How does it behave on an ambiguous request? A vendor who has never shown you a failure has not tested one.</li>
-<li><strong>"What can it change?"</strong> Get the list of writes: calendar, CRM, orders, refunds. If the answer is vague, the permissions are too broad.</li>
-<li><strong>"How does it escalate?"</strong> Every system needs a competent exit to a human. Ask what triggers it and what the human sees.</li>
-<li><strong>"What is it reading, and who updates it?"</strong> Grounding decays. Someone must own it.</li>
-<li><strong>"What happens when it doesn't know?"</strong> "I don't know, let me get someone" is a correct answer. Confident invention is not.</li>
-</ul>
-
-<h2>What this looks like in practice</h2>
-
-<p>By channel, because the right choice shifts:</p>
-
-<table>
-<thead><tr><th>Channel</th><th>Usually the right fit</th><th>Why</th></tr></thead>
-<tbody>
-<tr><td><strong>Website chat</strong></td><td>Assistant → agent</td><td>Starts as questions; converts when it can book or capture</td></tr>
-<tr><td><strong>WhatsApp</strong></td><td>Agent</td><td>Conversations are long-running and transactional</td></tr>
-<tr><td><strong>Phone</strong></td><td>Agent</td><td>A caller asking to book will not accept "visit our website"</td></tr>
-<tr><td><strong>Instagram / Facebook DMs</strong></td><td>Assistant, escalating</td><td>Mostly pre-sales questions; volume is spiky</td></tr>
-<tr><td><strong>Email</strong></td><td>Workflow automation</td><td>Not real-time; classify and route beats conversing</td></tr>
-</tbody>
-</table>
-
-<p>Serve AI runs a single agent across all of these, with the same knowledge and the same CRM behind it — so a customer who starts on WhatsApp and later calls does not have to repeat themselves.</p>
-
-<h2>Frequently asked questions</h2>
-
-<h3>Is an AI agent just a chatbot with a language model?</h3>
-<p>No. Adding a language model to a chatbot gets you an assistant — better understanding, better answers. An agent adds <em>tools and the discretion to use them</em>. The difference is whether it can change something, not how well it writes.</p>
-
-<h3>Can one system be all three?</h3>
-<p>Yes, and most good ones are. A scripted path for fixed cases, an assistant for questions, agent behaviour when something needs doing. Ask a vendor which mode handles which request — the answer tells you how carefully they have thought about it.</p>
-
-<h3>Are AI agents reliable enough for customer-facing work in 2026?</h3>
-<p>For bounded tasks with guardrails and a human escalation path, many businesses are running them in production — Salesforce reports AI-agent adoption in customer service rose from 39% to 66% year over year across 3,075 service professionals (<a href="https://www.salesforce.com/blog/state-of-service/" target="_blank" rel="noopener">State of Service, 7th edition</a>). For open-ended authority over money or sensitive records, the honest answer is: constrain it, log everything, and review.</p>
-
-<h3>What is the biggest mistake buyers make?</h3>
-<p>Buying an agent for a problem an assistant solves. Agents cost more, take longer to deploy, and carry action risk. If nobody needs anything <em>done</em>, you are paying for capability you will not use.</p>
-
-<h3>Do I need to understand RAG or function calling to buy this?</h3>
-<p>No, but knowing the terms lets you ask the two questions that matter: what is it reading (grounding), and what can it do (tools). Vendors who answer both clearly are usually the ones who built it properly.</p>
-
-<h3>Will an AI agent replace my support team?</h3>
-<p>Not in any deployment worth having. The pattern that works is agents handling volume and routine, humans handling judgement, complaints and the unusual — with a clean handoff. Gartner's own forecast of high autonomous resolution rates is explicitly about <em>common</em> issues, not all of them.</p>
-
-<h2>The takeaway</h2>
-
-<p>Chatbots follow rules. Assistants understand and answer. Agents understand, decide, and act. Everything else in a vendor conversation is a variation on those three, and the label on the box tells you less than the answer to "what can it change?".</p>
-
-<p>Get the category right before you compare prices. Most disappointing AI deployments are not bad products — they are the wrong category bought for the job.</p>
-
-<p><strong>See how it works in practice</strong> — Serve AI runs one agent across phone, web chat, WhatsApp, Instagram and Facebook, answering from your own data and writing leads into your CRM. <a href="/pricing">See what it costs</a> or <a href="/contact">talk to us about your workflow</a>.</p>
-HTML;
     }
 }

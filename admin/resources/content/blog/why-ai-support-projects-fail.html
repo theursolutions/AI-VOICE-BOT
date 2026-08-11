@@ -1,0 +1,117 @@
+<p>Gartner expects <strong>more than 40% of agentic AI projects to be cancelled by the end of 2027</strong>, citing escalating costs, unclear business value and inadequate risk controls (<a href="https://www.gartner.com/en/newsroom/press-releases/2025-08-26-gartner-predicts-40-percent-of-enterprise-apps-will-feature-task-specific-ai-agents-by-2026-up-from-less-than-5-percent-in-2025" target="_blank" rel="noopener">Gartner</a>).</p>
+
+<p>That is a striking number for a technology this widely adopted. But the failures are not exotic, and they are mostly not technical. They cluster into six causes, and every one is visible before you sign anything.</p>
+
+<h2>The short answer</h2>
+
+<table>
+<thead><tr><th>Cause</th><th>How it shows up</th><th>The check that catches it</th></tr></thead>
+<tbody>
+<tr><td>No defined success measure</td><td>Six months in, nobody can say if it worked</td><td>Agree one number, and today's baseline, before launch</td></tr>
+<tr><td>Data that is not ready</td><td>The agent answers confidently and wrongly</td><td>Read what it will read. Is it current? Who owns it?</td></tr>
+<tr><td>Scope too broad</td><td>Mediocre at everything, trusted for nothing</td><td>Three intents at launch. Not thirty</td></tr>
+<tr><td>No escalation design</td><td>Customers trapped in loops</td><td>Test the handoff before the happy path</td></tr>
+<tr><td>Nobody owns it after launch</td><td>Quality decays quietly over months</td><td>Name the owner and the weekly review slot</td></tr>
+<tr><td>Risk controls added last</td><td>Security review blocks go-live — or an incident does</td><td>Decide permissions and audit logging up front</td></tr>
+</tbody>
+</table>
+
+<h2>1. Nobody defined what success looks like</h2>
+
+<p>"We want AI in customer service" is not an objective. It cannot be measured, so the project cannot end, so it drifts until someone cancels it.</p>
+
+<p>The fix costs an hour: pick <strong>one primary number</strong>, record where it stands today, and set a review date. Candidates that work — percentage of enquiries resolved without a human, median first-response time, after-hours enquiries answered, bookings completed without staff involvement.</p>
+
+<p>Worth knowing what actually moves. Salesforce found that the <strong>KPI organisations most often report improving after deploying AI agents is customer satisfaction</strong> — ahead of agent productivity, handle time and retention (<a href="https://www.salesforce.com/news/stories/ai-service-agents-improve-customer-satisfaction/" target="_blank" rel="noopener">Salesforce</a>). If you justified the project purely on headcount savings, you may be measuring the wrong thing and reporting a failure that is actually a success.</p>
+
+<h2>2. The data was not ready</h2>
+
+<p>This is the most common cause and the least discussed, because it is nobody's exciting project. An AI agent answers from what you give it. Give it a price list from 2024 and it will quote 2024 prices — fluently, confidently, to customers.</p>
+
+<p>The people closest to the work already know. Salesforce found <strong>72% of service operations professionals call data readiness a major blocker</strong>, against 59% of service leaders (<a href="https://www.salesforce.com/blog/state-of-service/" target="_blank" rel="noopener">State of Service, 7th edition</a>) — a gap worth noticing, because the people who will run the thing are more worried than the people approving it.</p>
+
+<p><strong>The check:</strong> before launch, read the documents the agent will read. Not a sample — the actual set. For each: is it current, who updates it, and how will the agent learn that it changed? If the answer to the last is "someone will remember", it will not happen.</p>
+
+<h2>3. The scope was too broad</h2>
+
+<p>Attempting every enquiry type at once produces a system that is adequate at all of them and trusted for none. The first bad answer in a category nobody tested becomes the story everyone repeats internally, and support for the project evaporates.</p>
+
+<p>The pattern that survives contact with reality: <strong>three intents, chosen because they are high-volume and low-risk</strong>. Opening hours. Availability. Booking. Get those genuinely right, measure, then widen.</p>
+
+<p>This is also the difference between organisations getting value and those stuck in pilots. McKinsey found <strong>88% of organisations use AI in at least one function, but only around 23% are scaling an agentic system</strong>, and <strong>no more than 10%</strong> are scaling agents in any single business function (<a href="https://www.mckinsey.com/~/media/mckinsey/business%20functions/quantumblack/our%20insights/the%20state%20of%20ai/november%202025/the-state-of-ai-2025-agents-innovation_cmyk-v1.pdf" target="_blank" rel="noopener">The State of AI, November 2025</a>). Experimenting is easy. The gap between experiment and production is mostly discipline about scope.</p>
+
+<h2>4. Escalation was an afterthought</h2>
+
+<p>Every demo shows the happy path. Almost none show what happens when the agent cannot help — and that is the interaction which determines whether customers trust the channel at all.</p>
+
+<p>Bad escalation looks like: repeating "I'm sorry, I didn't understand" three times; offering a human and then doing nothing; handing over with no context so the customer explains everything again.</p>
+
+<p><strong>The check:</strong> before testing whether it answers well, test whether it fails well. Ask something outside its scope. Say "I want to speak to a person". Say something ambiguous. Then ask: how many turns to reach a human, and what does that human see?</p>
+
+<p>A useful rule: an agent that cannot help should reach a human <strong>within two turns</strong>, carrying the full conversation with it.</p>
+
+<h2>5. Nobody owned it after launch</h2>
+
+<p>AI support degrades quietly. Products change, policies change, documents drift, and the agent keeps confidently answering from what it knew. There is no error log for "answered an outdated question smoothly" — it just gradually gets worse until someone notices complaints.</p>
+
+<p><strong>The check:</strong> name a person and a recurring slot before go-live. Thirty minutes a week reading transcripts — especially escalations and abandonments — catches more problems than any dashboard. This is the most skipped step on this list and the cheapest.</p>
+
+<h2>6. Risk controls were left until last</h2>
+
+<p>Permissions and audit logging get treated as a pre-launch formality, then block go-live for a month — or worse, do not, and something goes wrong in production.</p>
+
+<p>McKinsey found that <strong>security and risk concerns are the top barrier to scaling agentic AI</strong>, ahead of regulatory uncertainty and technical limitations, and frames the shift precisely: with agents you must contend not only with a system saying the wrong thing but <em>doing</em> the wrong thing — taking unintended actions, misusing tools, or operating outside its guardrails (<a href="https://www.mckinsey.com/capabilities/tech-and-ai/our-insights/tech-forward/state-of-ai-trust-in-2026-shifting-to-the-agentic-era" target="_blank" rel="noopener">State of AI trust in 2026</a>).</p>
+
+<p><strong>Decide these before you build:</strong></p>
+
+<ul>
+<li><strong>What can it read?</strong> Table by table, field by field. Payment details and internal notes usually should not be in that set.</li>
+<li><strong>What can it change?</strong> Every write is a way to be wrong at scale.</li>
+<li><strong>What needs approval?</strong> Refunds, cancellations, anything past a monetary threshold.</li>
+<li><strong>What is logged?</strong> You need to answer "what did it say to this customer, and why" months later.</li>
+<li><strong>Where does data live, and for how long?</strong> Especially transcripts.</li>
+</ul>
+
+<h2>The pre-launch checklist</h2>
+
+<p>Ten questions. If you cannot answer all of them you are not ready — and answering them takes a morning, against a project that takes months.</p>
+
+<ol>
+<li>What single number are we trying to move, and what is it today?</li>
+<li>Which three enquiry types launch first, and why those?</li>
+<li>What exactly will the agent read, and who keeps it current?</li>
+<li>What can it change, and what requires human approval?</li>
+<li>How does a customer reach a human, and in how many turns?</li>
+<li>What does that human see when the handover happens?</li>
+<li>Who reads the transcripts, and when is it in their calendar?</li>
+<li>What is logged, and for how long is it kept?</li>
+<li>What is our rollback if quality is unacceptable in week one?</li>
+<li>When do we review, and what result would make us stop?</li>
+</ol>
+
+<p>Question ten is the one people resist and the one that matters most. A project with no defined failure condition cannot be evaluated — only defended.</p>
+
+<h2>Frequently asked questions</h2>
+
+<h3>Is the 40% cancellation figure a reason not to start?</h3>
+<p>No — it is a reason to scope tightly and measure honestly. The same body of research shows organisations getting value quickly when they do: Salesforce reports 70% see measurable value within 60 days. Failure clusters around vague objectives and broad scope, both of which are choices.</p>
+
+<h3>How long before we know if it is working?</h3>
+<p>For a narrow deployment with a defined metric, four to eight weeks is usually enough to see direction. If you cannot tell after three months, the problem is almost always the measure rather than the technology.</p>
+
+<h3>Should we run a pilot first?</h3>
+<p>Yes, but bound it. An open-ended pilot is how projects die of exhaustion. Define what it must show, by when, to become production.</p>
+
+<h3>What if our team resists it?</h3>
+<p>Usually a signal worth listening to. Support teams know which enquiries are genuinely repetitive and which need judgement — and they are right more often than the plan is. Involving them in choosing the first three intents converts the most credible sceptics into the people who make it work.</p>
+
+<h3>Can we start without cleaning up our data?</h3>
+<p>You can start on a narrow slice whose data you trust — one product line, one service. What you cannot do is point an agent at a decade of unmaintained documents and expect it to sort out which are current.</p>
+
+<h2>The takeaway</h2>
+
+<p>AI support projects rarely fail because the technology could not do the job. They fail because nobody agreed what the job was, the information was stale, the scope was too wide, the failure path was untested, and no one owned it afterwards.</p>
+
+<p>All five are decisions, all five are cheap to get right at the start, and all five are expensive to fix once live.</p>
+
+<p><strong>Planning a deployment?</strong> Serve AI is built around exactly these controls — per-workspace data isolation, column-level limits on what the AI may read, and a full transcript of everything it ever said. <a href="/security">See how the controls work</a> or <a href="/contact">talk through your rollout</a>.</p>
