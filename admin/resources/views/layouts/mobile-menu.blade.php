@@ -288,6 +288,19 @@
                 </a>
             </li>
             @endif
+
+            {{-- Billing. Deliberately NOT behind $modOn(): /billing has to stay
+                 reachable when the workspace is read-only, or the paywall has
+                 no way through it. Owner-only, matching the route gate. --}}
+            @if ($clientSlug && Auth::check() && Auth::user()->isOwnerOf(Auth::user()->active_client_id ?? 0))
+            <li>
+                <a href="{{ route('billing.index', ['client' => $clientSlug]) }}"
+                   class="menu {{ $is('billing.*') ? 'menu--active' : '' }}">
+                    <div class="menu__icon"><i data-lucide="credit-card"></i></div>
+                    <div class="menu__title">Plan &amp; billing</div>
+                </a>
+            </li>
+            @endif
             @endunless
         </ul>
     </div>

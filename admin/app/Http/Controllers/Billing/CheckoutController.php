@@ -166,6 +166,135 @@ class CheckoutController extends Controller
     }
 
     /**
+     * The on-site checkout page: order summary + saved cards + Elements form.
+     *
+     * `plan` and `interval` come in as query params — opaque identifiers only.
+     * The amount shown is looked up server-side from the same `plan_prices`
+     * row the charge will use, so the page cannot display one price and bill
+     * another.
+     */
+    public function page(Request $request, Client $client)
+    {
+        $this->authorizeWorkspace($request, $client);
+
+        abort_unless(config('billing.checkout.enabled', false), 404);
+
+        $planSlug = (string) $request->query('plan', '');
+        $interval = (string) $request->query('interval', 'monthly');
+
+        try {
+            $price = $this->plans->resolvePrice($planSlug, $interval);
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->route('billing.plans', ['client' => $client->slug])
+                ->with('error', $e->getMessage());
+        }
+
+        $cards = app(\App\Services\Billing\PaymentMethodService::class)->all($client);
+
+        return view('billing.checkout', [
+            'title'        => 'Checkout',
+            'client'       => $client,
+            'plan'         => $price->plan,
+            'price'        => $price,
+            'priceDisplay' => app(\App\Services\Billing\PricingPresenter::class)
+                                ->renderPrice($price->unit_amount, $price->interval, $request),
+            'cards'        => $cards,
+            'subscription' => $client->currentSubscription(),
+            'stripeKey'    => (string) config('billing.stripe.key'),
+        ]);
+    }
+
+    /**
+     * Create the subscription from an Elements-tokenised card. JSON only.
+     *
+     * Returns whether the browser still has work to do (3-D Secure, or simply
+     * confirming a PaymentIntent created against a saved card). This endpoint
+     * does NOT mark anyone as paid — the webhook does that.
+     */
+    public function subscribe(Request $request, Client $client): \Illuminate\Http\JsonResponse
+    {
+        $this->authorizeWorkspace($request, $client);
+
+        if (! config('billing.checkout.enabled', false)) {
+            return response()->json(['message' => 'Plans aren’t available to buy just yet.'], 422);
+        }
+
+        $data = $request->validate([
+            'plan'           => ['required', 'string', 'max:100'],
+            'interval'       => ['required', 'string', 'max:20'],
+            // NOT `payment_method_id` — DecodeHashids would mangle it.
+            'payment_method' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $result = $this->billing->subscribeWithPaymentMethod(
+                client:           $client,
+                planSlug:         $data['plan'],
+                interval:         $data['interval'],
+                paymentMethodRef: $data['payment_method'],
+                actor:            $request->user(),
+            );
+
+            AuditLog::record('billing.subscribe.attempted', [
+                'payload' => [
+                    'client_id' => $client->id,
+                    'plan'      => $data['plan'],
+                    'interval'  => $data['interval'],
+                    'status'    => $result['status'],
+                ],
+            ]);
+
+            return response()->json($result);
+        } catch (\Stripe\Exception\CardException $e) {
+            // The bank declined. Stripe's message is written for cardholders
+            // ("Your card was declined."), so it is safe and useful to show.
+            return response()->json(['message' => $e->getError()->message ?? 'Your card was declined.'], 422);
+        } catch (\RuntimeException $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            Log::error('billing.subscribe.failed', [
+                'client_id' => $client->id,
+                'plan'      => $data['plan'],
+                'error'     => $e->getMessage(),
+            ]);
+
+            return response()->json(['message' => 'We couldn’t complete your payment. Please try again.'], 500);
+        }
+    }
+
+    /**
+     * Called after the browser finishes a 3-D Secure challenge, to pull the
+     * settled state forward rather than making the customer stare at a
+     * "pending" screen until the webhook lands. Idempotent; the webhook is
+     * still the authority.
+     */
+    public function confirm(Request $request, Client $client): \Illuminate\Http\JsonResponse
+    {
+        $this->authorizeWorkspace($request, $client);
+
+        $data = $request->validate([
+            'subscription' => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $this->billing->refreshSubscription($client, $data['subscription']);
+        } catch (\Throwable $e) {
+            Log::info('billing.confirm.sync_skipped', ['error' => $e->getMessage()]);
+        }
+
+        $client->forgetSubscription();
+        $sub = $client->currentSubscription();
+
+        return response()->json([
+            'status'      => $sub?->status,
+            'active'      => (bool) $sub?->grantsAccess(),
+            'plan'        => $sub?->plan?->name,
+            'redirect'    => route('billing.index', ['client' => $client->slug]),
+        ]);
+    }
+
+    /**
      * Stripe's success redirect.
      *
      * IMPORTANT: this does NOT activate the subscription. Anyone can visit

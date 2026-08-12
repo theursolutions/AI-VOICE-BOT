@@ -2,131 +2,50 @@
 
 @section('content')
 @php
-    $sub   = $subscription;
-    $isFree = $sub?->isFree();
+    $sub          = $subscription;
+    $isFree       = (bool) $sub?->isFree();
     $freeDaysLeft = $sub?->freeDaysRemaining();
-    $degraded = $sub && ! $sub->grantsAccess();
+    $degraded     = $sub && ! $sub->grantsAccess();
+    $canBuy       = (bool) config('billing.checkout.enabled', false);
+
+    // "What you get" for the ACTIVE plan, reusing the same view model the
+    // pricing page renders from — so this page and the marketing site can
+    // never describe the same plan differently.
+    $included = collect($pricing['plans'] ?? [])
+        ->firstWhere('slug', $plan?->slug)['included'] ?? [];
 @endphp
 
-<style>
-    .bl-grid { display:grid; gap:20px; grid-template-columns:1fr; }
-    @media (min-width:1100px){ .bl-grid { grid-template-columns: 1.35fr 1fr; align-items:start; } }
+@include('billing._styles')
 
-    .bl-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:22px; }
-    .bl-card__title {
-        font-size:13px; font-weight:700; color:#0f172a; text-transform:uppercase;
-        letter-spacing:.06em; display:flex; align-items:center; gap:8px;
-        margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #e2e8f0;
-    }
+<div class="intro-y flex flex-wrap items-center gap-3 mt-8 mb-6">
+    <h2 class="text-lg font-medium mr-auto">Billing &amp; plan</h2>
 
-    .bl-plan-row { display:flex; align-items:flex-start; gap:16px; flex-wrap:wrap; justify-content:space-between; }
-    .bl-plan-name { font-size:26px; font-weight:800; color:#0f172a; line-height:1.15; }
-    .bl-plan-meta { font-size:13px; color:#64748b; margin-top:4px; }
-    .bl-amount { font-size:26px; font-weight:800; color:#0f172a; text-align:right; line-height:1.15; }
-    .bl-amount small { font-size:13px; font-weight:600; color:#64748b; }
-    .bl-local { font-size:12px; color:#6366f1; text-align:right; margin-top:2px; }
-
-    .bl-badge {
-        display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:700;
-        letter-spacing:.06em; text-transform:uppercase; padding:4px 10px; border-radius:999px;
-    }
-    .bl-badge--green { background:#dcfce7; color:#15803d; }
-    .bl-badge--blue  { background:#dbeafe; color:#1d4ed8; }
-    .bl-badge--amber { background:#fef3c7; color:#b45309; }
-    .bl-badge--red   { background:#fee2e2; color:#b91c1c; }
-    .bl-badge--slate { background:#f1f5f9; color:#475569; }
-
-    .bl-alert { border-radius:12px; padding:14px 16px; font-size:14px; display:flex; gap:11px; margin-bottom:20px; }
-    .bl-alert--warn { background:#fffbeb; border:1px solid #fde68a; color:#92400e; }
-    .bl-alert--info { background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; }
-    .bl-alert--err  { background:#fef2f2; border:1px solid #fecaca; color:#991b1b; }
-    .bl-alert__body { flex:1; }
-    .bl-alert strong { display:block; margin-bottom:2px; }
-
-    .bl-meter { margin-bottom:16px; }
-    .bl-meter:last-child { margin-bottom:0; }
-    .bl-meter__head { display:flex; justify-content:space-between; align-items:baseline; font-size:13px; margin-bottom:6px; }
-    .bl-meter__label { color:#334155; font-weight:600; }
-    .bl-meter__value { color:#64748b; font-variant-numeric:tabular-nums; }
-    .bl-meter__bar { height:7px; border-radius:999px; background:#f1f5f9; overflow:hidden; }
-    .bl-meter__fill { height:100%; border-radius:999px; background:linear-gradient(90deg,#6366f1,#8b5cf6); }
-    .bl-meter__fill--warn { background:linear-gradient(90deg,#f59e0b,#ef4444); }
-    .bl-meter__over { font-size:11.5px; color:#b45309; margin-top:4px; }
-
-    .bl-btn {
-        display:inline-flex; align-items:center; gap:7px; font-size:13.5px; font-weight:600;
-        padding:10px 16px; border-radius:10px; text-decoration:none; cursor:pointer;
-        border:1px solid transparent; transition:filter .15s;
-    }
-    .bl-btn--primary { background:var(--tva-gradient, linear-gradient(135deg,#6366f1,#8b5cf6)); color:#fff; }
-    .bl-btn--ghost   { background:#fff; border-color:#e2e8f0; color:#334155; }
-    .bl-btn--danger  { background:#fff; border-color:#fecaca; color:#b91c1c; }
-    .bl-btn:hover { filter:brightness(1.05); }
-    .bl-actions { display:flex; gap:9px; flex-wrap:wrap; margin-top:18px; }
-
-    .bl-table { width:100%; border-collapse:collapse; font-size:13px; }
-    .bl-table th, .bl-table td { text-align:left; padding:9px 10px; border-bottom:1px solid #f1f5f9; color:#475569; }
-    .bl-table th { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; font-weight:700; }
-    .bl-table td:last-child, .bl-table th:last-child { text-align:right; }
-
-    .bl-empty { font-size:13px; color:#94a3b8; padding:14px 0; }
-
-    /* Plan chooser */
-    .bl-plans { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); margin-top:6px; }
-    .bl-plan-opt { border:1px solid #e2e8f0; border-radius:12px; padding:16px; background:#f8fafc; }
-    .bl-plan-opt--current { border-color:#6366f1; background:#eef2ff; }
-    .bl-plan-opt h4 { font-size:14.5px; font-weight:700; color:#0f172a; margin:0 0 3px; }
-    .bl-plan-opt .amt { font-size:20px; font-weight:800; color:#0f172a; }
-    .bl-plan-opt .amt small { font-size:12px; font-weight:600; color:#64748b; }
-    .bl-plan-opt .loc { font-size:11.5px; color:#6366f1; margin-top:2px; }
-    .bl-plan-opt form { margin-top:11px; }
-    .bl-plan-opt button { width:100%; justify-content:center; }
-    .bl-plan-opt__current { font-size:11px; font-weight:700; color:#4f46e5; text-transform:uppercase; letter-spacing:.06em; }
-
-    .bl-note { font-size:11.5px; color:#94a3b8; margin-top:12px; line-height:1.55; }
-
-    html.dark .bl-card { background:#1e293b; border-color:#334155; }
-    html.dark .bl-card__title, html.dark .bl-plan-name, html.dark .bl-amount, html.dark .bl-plan-opt h4, html.dark .bl-plan-opt .amt { color:#f1f5f9; }
-    html.dark .bl-plan-opt { background:#0f172a; border-color:#334155; }
-    html.dark .bl-plan-opt--current { background:#312e81; border-color:#6366f1; }
-    html.dark .bl-btn--ghost { background:#0f172a; border-color:#334155; color:#cbd5e1; }
-    html.dark .bl-meter__bar { background:#334155; }
-    html.dark .bl-table th, html.dark .bl-table td { border-color:#334155; }
-</style>
-
-<div class="intro-y flex items-center mt-8 mb-6">
-    <h2 class="text-lg font-medium mr-auto">Billing</h2>
+    @if ($isOwner && $canBuy)
+        {{-- The upgrade path the customer is most likely to want, kept at the
+             top of the page where it's found without scrolling. --}}
+        <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary">
+            <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+            {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Upgrade plan' }}
+        </a>
+    @endif
 </div>
 
-{{-- ── Status alerts ──────────────────────────────────────────────── --}}
-@if (session('billing_warning'))
-    <div class="bl-alert bl-alert--warn">
-        <i data-lucide="alert-triangle" class="w-5 h-5" style="flex:none"></i>
-        <div class="bl-alert__body">{{ session('billing_warning') }}</div>
-    </div>
-@endif
+{{-- ── Status alerts ─────────────────────────────────────────────── --}}
+@foreach ([['success','ok','check-circle'], ['error','err','alert-octagon'], ['info','info','info'], ['billing_warning','warn','alert-triangle']] as [$key, $kind, $icon])
+    @if (session($key))
+        <div class="bl-alert bl-alert--{{ $kind }}">
+            <i data-lucide="{{ $icon }}" class="w-5 h-5" style="flex:none"></i>
+            <div>{{ session($key) }}</div>
+        </div>
+    @endif
+@endforeach
 
-{{-- "Stripe keys are missing" is an OPERATOR problem, not the customer's.
-     Showing it to them advertises that our billing isn't set up and gives them
-     nothing they can act on, so it's super-admin only. --}}
 @if (! $stripeReady && auth()->user()?->isSuperAdmin())
     <div class="bl-alert bl-alert--err">
         <i data-lucide="alert-octagon" class="w-5 h-5" style="flex:none"></i>
-        <div class="bl-alert__body">
-            <strong>Stripe isn't configured (only you can see this)</strong>
-            Checkout is unavailable until STRIPE_KEY and STRIPE_SECRET are set in .env.
-        </div>
-    </div>
-@endif
-
-@if ($isFree && $freeDaysLeft !== null && ! $degraded)
-    <div class="bl-alert bl-alert--info">
-        <i data-lucide="clock" class="w-5 h-5" style="flex:none"></i>
-        <div class="bl-alert__body">
-            <strong>{{ $freeDaysLeft }} {{ Str::plural('day', $freeDaysLeft) }} left of free access</strong>
-            Your free {{ $sub->plan?->free_window_days ?? 7 }} days end on
-            {{ $sub->free_ends_at?->format('j M Y') }}. Choose a plan before then and your agent keeps
-            answering without interruption — no card needed until you do.
+        <div>
+            <strong>Stripe isn’t configured (only you can see this)</strong>
+            Set STRIPE_KEY and STRIPE_SECRET in .env to enable checkout.
         </div>
     </div>
 @endif
@@ -134,308 +53,400 @@
 @if ($degraded)
     <div class="bl-alert bl-alert--warn">
         <i data-lucide="pause-circle" class="w-5 h-5" style="flex:none"></i>
-        <div class="bl-alert__body">
+        <div>
             <strong>Your agent is paused</strong>
             @if ($sub->isExpired())
                 Your free access ended{{ $sub->free_ends_at ? ' on ' . $sub->free_ends_at->format('j M Y') : '' }}.
-                Everything is still here — your leads, conversations and settings are untouched, and you can
-                export them any time. Pick a plan below to switch the agent back on.
-                @if ($sub->purge_after)
-                    <br><small>Data is kept until {{ $sub->purge_after->format('j M Y') }}.</small>
-                @endif
+                Everything is still here — leads, conversations and settings are untouched and exportable.
+                @if ($sub->purge_after) Data is kept until {{ $sub->purge_after->format('j M Y') }}. @endif
             @elseif ($sub->isPastDue())
-                We couldn't take your last payment. Update your card to resume service.
-            @else
-                Choose a plan below to continue.
+                We couldn’t take your last payment. Update your card to resume service.
             @endif
         </div>
     </div>
-@endif
-
-@if ($sub?->onGracePeriod())
+@elseif ($sub?->onGracePeriod())
     <div class="bl-alert bl-alert--info">
         <i data-lucide="info" class="w-5 h-5" style="flex:none"></i>
-        <div class="bl-alert__body">
+        <div>
             <strong>Cancellation scheduled</strong>
             You keep full access until {{ $sub->ends_at?->format('j M Y') }}. Change your mind any time before then.
         </div>
     </div>
 @endif
 
-<div class="bl-grid">
-    {{-- ── Left column ────────────────────────────────────────────── --}}
-    <div>
-        {{-- Current plan --}}
-        <div class="bl-card intro-y" style="margin-bottom:20px">
-            <div class="bl-card__title"><i data-lucide="credit-card" class="w-4 h-4"></i> Current plan</div>
+{{-- ── Current plan ──────────────────────────────────────────────── --}}
+@php
+    // One pill, chosen from real state rather than five stacked badges.
+    [$pillClass, $pillText] = match (true) {
+        $sub === null                       => ['muted',   'No plan'],
+        $sub->isExpired()                   => ['stopped', 'Paused'],
+        $sub->isPastDue()                   => ['warn',    'Payment failed'],
+        $sub->cancel_at_period_end          => ['warn',    'Cancels ' . ($sub->ends_at?->format('j M') ?? 'soon')],
+        $sub->isFree() && $freeDaysLeft !== null
+            => ['trial', $freeDaysLeft . ' ' . Str::plural('day', $freeDaysLeft) . ' left'],
+        $sub->isFree()                      => ['trial',   'Free'],
+        default                             => ['live',    'Active'],
+    };
+@endphp
 
-            <div class="bl-plan-row">
-                <div>
-                    <div class="bl-plan-name">{{ $plan?->name ?? 'No plan' }}</div>
-                    <div class="bl-plan-meta">
-                        <span class="bl-badge bl-badge--{{ $sub?->statusColor() ?? 'slate' }}">
-                            {{ $sub?->statusLabel() ?? 'None' }}
-                        </span>
-                        @if ($price)
-                            <span style="margin-left:8px">Billed {{ strtolower($price->intervalLabel()) }}</span>
-                        @endif
-                    </div>
+<div class="bl-plan intro-y">
+    <div class="bl-plan__inner">
+        <div class="bl-plan__top">
+            <div style="min-width:0">
+                <div class="bl-plan__eyebrow">Current plan</div>
+                <div class="bl-plan__name">
+                    {{ $plan?->name ?? 'No plan' }}
+                    <span class="bl-pill bl-pill--{{ $pillClass }}">
+                        <span class="bl-pill__dot"></span>{{ $pillText }}
+                    </span>
                 </div>
+                @if ($plan?->tagline)
+                    <p class="bl-plan__tagline">{{ $plan->tagline }}</p>
+                @endif
+            </div>
 
-                @if ($price && $priceDisplay)
-                    <div>
-                        <div class="bl-amount">
-                            {{ $priceDisplay['usd'] }}<small>{{ $priceDisplay['suffix'] }}</small>
-                        </div>
-                        @if ($priceDisplay['local'])
-                            {{-- Reference only. Stripe charges the USD figure above. --}}
-                            <div class="bl-local">≈ {{ $priceDisplay['local'] }} {{ $priceDisplay['suffix'] }}</div>
-                        @endif
+            @if ($price && $priceDisplay)
+                <div class="bl-plan__price">
+                    <div class="bl-plan__amount">{{ $priceDisplay['usd'] }}</div>
+                    <div class="bl-plan__per">
+                        per {{ $price->months() > 1 ? strtolower($price->intervalLabel()) : 'month' }} · USD
+                    </div>
+                    @if ($priceDisplay['local'])
+                        {{-- Reference only; the card is charged the USD figure. --}}
+                        <div class="bl-plan__local">≈ {{ $priceDisplay['local'] }}</div>
+                    @endif
+                </div>
+            @elseif ($isFree)
+                <div class="bl-plan__price">
+                    <div class="bl-plan__amount">$0</div>
+                    <div class="bl-plan__per">no card required</div>
+                </div>
+            @endif
+        </div>
+
+        {{-- Stat strip. Only facts that exist — an account screen full of
+             "—" placeholders looks unfinished, not informative. --}}
+        @php
+            $stats = [];
+
+            if ($isFree && $sub?->free_ends_at) {
+                $stats[] = ['Free access ends', $sub->free_ends_at->format('j M Y'), null];
+            }
+            if ($sub?->nextBillingDate()) {
+                $stats[] = ['Next payment', $sub->nextBillingDate()->format('j M Y'), null];
+            }
+            if ($sub?->cancel_at_period_end && $sub?->ends_at) {
+                $stats[] = ['Access ends', $sub->ends_at->format('j M Y'), null];
+            }
+            if ($price) {
+                $stats[] = ['Billing', $price->intervalLabel(), 'charged in USD'];
+            }
+            if ($paymentMethod) {
+                $stats[] = [
+                    'Payment method',
+                    \App\Services\Billing\PaymentMethodService::brandLabel($paymentMethod['brand']),
+                    '···· ' . $paymentMethod['last4'],
+                ];
+            }
+            $seatLimit = $plan ? app(\App\Services\Billing\PlanFeatureService::class)->planLimit($plan, 'seats') : null;
+            if ($seatLimit !== null && $seatLimit > 0) {
+                $stats[] = ['Team seats', (string) $seatLimit, 'included'];
+            }
+        @endphp
+
+        @if ($stats)
+            <dl class="bl-plan__stats">
+                @foreach ($stats as [$label, $value, $sub2])
+                    <div class="bl-plan__stat">
+                        <dt>{{ $label }}</dt>
+                        <dd>{{ $value }} @if($sub2)<small>{{ $sub2 }}</small>@endif</dd>
+                    </div>
+                @endforeach
+            </dl>
+        @endif
+
+        @if ($isOwner)
+            <div class="bl-plan__cta">
+                @if ($canBuy)
+                    <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary">
+                        <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+                        {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Choose a plan' }}
+                    </a>
+                @endif
+
+                @if ($sub?->onGracePeriod() || $sub?->cancel_at_period_end)
+                    <form method="POST" action="{{ route('billing.resume', ['client' => $client->slug]) }}">
+                        @csrf
+                        <button type="submit" class="bl-btn bl-btn--ghost">
+                            <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Resume subscription
+                        </button>
+                    </form>
+                @elseif ($sub?->stripe_subscription_ref && $sub->grantsAccess())
+                    <form method="POST" action="{{ route('billing.cancel', ['client' => $client->slug]) }}"
+                          onsubmit="return confirm('Cancel at the end of your current period? You keep full access until then.');">
+                        @csrf
+                        <button type="submit" class="bl-btn bl-btn--ghost">Cancel subscription</button>
+                    </form>
+                @endif
+            </div>
+        @endif
+    </div>
+</div>
+
+<div class="bl-grid" style="margin-top:20px">
+    {{-- ── Left column ───────────────────────────────────────────── --}}
+    <div>
+        {{-- Usage.
+             Deliberately METERS, not doughnuts. Each figure is one value
+             against one cap; a pie per metric is the classic way to make that
+             harder to read. The % is stated as text and the state carries an
+             icon + word, so nothing depends on colour alone. --}}
+        <div class="bl-card intro-y">
+            <div class="bl-card__head">
+                <i data-lucide="activity" class="w-4 h-4" style="color:#6366f1"></i>
+                <div class="bl-card__title">Usage this period</div>
+                @php $resetsAt = collect($usage)->pluck('resets_at')->filter()->first(); @endphp
+                @if ($resetsAt)
+                    <div class="bl-card__action" style="font-size:11.5px;color:#94a3b8">
+                        Resets {{ $resetsAt->format('j M') }}
                     </div>
                 @endif
             </div>
 
-            <table class="bl-table" style="margin-top:20px">
-                <tbody>
-                    @if ($isFree && $sub?->free_ends_at)
-                        <tr><td>Free access ends</td><td>{{ $sub->free_ends_at->format('j M Y') }}</td></tr>
-                    @endif
-                    @if ($sub?->onTrial())
-                        <tr><td>Trial ends</td><td>{{ $sub->trial_ends_at->format('j M Y') }}</td></tr>
-                    @endif
-                    @if ($sub?->nextBillingDate())
-                        <tr><td>Next payment</td><td>{{ $sub->nextBillingDate()->format('j M Y') }}</td></tr>
-                    @endif
-                    @if ($sub?->ends_at && $sub->cancel_at_period_end)
-                        <tr><td>Access ends</td><td>{{ $sub->ends_at->format('j M Y') }}</td></tr>
-                    @endif
-                    {{-- Only once there IS a card. Telling someone who has never
-                         paid that they have "no payment method on file" reads as
-                         a setup task they've failed to do, when in fact nothing
-                         is required of them at all. --}}
-                    @if ($paymentMethod)
-                        <tr>
-                            <td>Payment method</td>
-                            <td>
-                                {{ ucfirst((string) $paymentMethod['brand']) }} ···· {{ $paymentMethod['last4'] }}
-                                @if ($paymentMethod['exp_month'])
-                                    <span style="color:#94a3b8">
-                                        ({{ str_pad((string) $paymentMethod['exp_month'], 2, '0', STR_PAD_LEFT) }}/{{ $paymentMethod['exp_year'] }})
+            @if (empty($usage))
+                <div class="bl-empty">
+                    <i data-lucide="bar-chart-3" class="w-7 h-7"></i>
+                    No usage recorded yet.
+                </div>
+            @else
+                <div class="bl-meters">
+                    @foreach ($usage as $metric => $row)
+                        @php
+                            $pct   = $row['unlimited'] ? 0 : (int) $row['percent'];
+                            $over  = $row['overage'] > 0;
+                            $warn  = ! $over && $pct >= 80;
+                            $state = $over ? 'over' : ($warn ? 'warn' : 'ok');
+                        @endphp
+                        <div class="bl-meter {{ $row['unlimited'] ? 'bl-meter--unlimited' : '' }}">
+                            <div class="bl-meter__top">
+                                <span class="bl-meter__label">{{ $row['label'] }}</span>
+                                @unless ($row['unlimited'])
+                                    <span class="bl-meter__pct">{{ $pct }}%</span>
+                                @endunless
+                            </div>
+
+                            <div class="bl-meter__bar">
+                                <div class="bl-meter__fill {{ $over ? 'bl-meter__fill--over' : ($warn ? 'bl-meter__fill--warn' : '') }}"
+                                     style="width:{{ $row['unlimited'] ? 100 : max(2, $pct) }}%"></div>
+                            </div>
+
+                            <div class="bl-meter__foot">
+                                <span>
+                                    {{ number_format($row['used']) }}
+                                    @if ($row['unlimited']) used @else / {{ number_format($row['allowance']) }} @endif
+                                    {{ $row['unit'] ? Str::plural($row['unit'], $row['used']) : '' }}
+                                </span>
+
+                                {{-- State in words + an icon, never colour alone. --}}
+                                @if ($row['unlimited'])
+                                    <span class="bl-meter__state bl-meter__state--ok">
+                                        <i data-lucide="infinity" class="w-3 h-3"></i> Unlimited
+                                    </span>
+                                @elseif ($over)
+                                    <span class="bl-meter__state bl-meter__state--over">
+                                        <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                                        {{ number_format($row['overage']) }} over
+                                    </span>
+                                @elseif ($warn)
+                                    <span class="bl-meter__state bl-meter__state--warn">
+                                        <i data-lucide="alert-circle" class="w-3 h-3"></i> Running low
+                                    </span>
+                                @else
+                                    <span class="bl-meter__state bl-meter__state--ok">
+                                        <i data-lucide="check" class="w-3 h-3"></i> Healthy
                                     </span>
                                 @endif
-                            </td>
-                        </tr>
-                    @endif
-
-                    {{-- Likewise: "charged in USD" only matters once something
-                         is actually being charged. --}}
-                    @if ($price)
-                        <tr><td>Billing currency</td><td>USD</td></tr>
-                    @endif
-                </tbody>
-            </table>
-
-            @if ($isOwner)
-                <div class="bl-actions">
-                    @if ($client->hasStripeCustomer())
-                        <form method="POST" action="{{ route('billing.portal', ['client' => $client->slug]) }}">
-                            @csrf
-                            <button type="submit" class="bl-btn bl-btn--ghost">
-                                <i data-lucide="external-link" class="w-4 h-4"></i> Manage payment &amp; invoices
-                            </button>
-                        </form>
-                    @endif
-
-                    @if ($sub?->onGracePeriod() || $sub?->cancel_at_period_end)
-                        <form method="POST" action="{{ route('billing.resume', ['client' => $client->slug]) }}">
-                            @csrf
-                            <button type="submit" class="bl-btn bl-btn--primary">
-                                <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Resume subscription
-                            </button>
-                        </form>
-                    @elseif ($sub?->stripe_subscription_ref && $sub->grantsAccess())
-                        <form method="POST" action="{{ route('billing.cancel', ['client' => $client->slug]) }}"
-                              onsubmit="return confirm('Cancel at the end of your current period? You keep full access until then.');">
-                            @csrf
-                            <button type="submit" class="bl-btn bl-btn--danger">
-                                <i data-lucide="x-circle" class="w-4 h-4"></i> Cancel subscription
-                            </button>
-                        </form>
-                    @endif
+                            </div>
+                        </div>
+                    @endforeach
                 </div>
-                <p class="bl-note">
-                    Cards, billing addresses and invoice PDFs are handled by Stripe's secure portal —
-                    your card details never touch our servers.
-                </p>
-            @else
-                <p class="bl-note" style="margin-top:18px">
-                    <i data-lucide="lock" class="w-3.5 h-3.5" style="display:inline;vertical-align:-2px"></i>
-                    Only the workspace owner can change billing.
-                </p>
+
+                @if (collect($usage)->contains(fn ($r) => $r['overage'] > 0))
+                    <p class="bl-note">
+                        Usage above your allowance is billed at your plan’s overage rate — your agent keeps
+                        answering rather than stopping mid-month.
+                    </p>
+                @endif
             @endif
         </div>
 
-        {{-- Plan chooser. Hidden entirely while checkout is switched off
-             (config/billing.php → checkout.enabled) — no placeholder, no
-             explanation, the section simply isn't there. --}}
-        @if ($isOwner && $stripeReady && config('billing.checkout.enabled', false))
-            <div class="bl-card intro-y" style="margin-bottom:20px">
-                <div class="bl-card__title">
-                    <i data-lucide="layers" class="w-4 h-4"></i>
-                    {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Choose a plan' }}
+        {{-- What the active plan includes --}}
+        @if (! empty($included))
+            <div class="bl-card intro-y">
+                <div class="bl-card__head">
+                    <i data-lucide="package-check" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="bl-card__title">What’s included in {{ $plan->name }}</div>
                 </div>
 
-                @foreach ($pricing['intervals'] as $iv)
-                    @php
-                        $ivKey = $iv['key'];
-                        $any = collect($pricing['plans'])->contains(fn ($p) => isset($p['prices'][$ivKey]));
-                    @endphp
-                    @continue(! $any)
-
-                    <div style="margin-bottom:22px">
-                        <div style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">
-                            {{ $iv['label'] }}
-                            @php
-                                $best = collect($pricing['plans'])
-                                    ->map(fn ($p) => (int) ($p['prices'][$ivKey]['savings_percent'] ?? 0))
-                                    ->max();
-                            @endphp
-                            @if ($best > 0)
-                                <span style="color:#15803d">· save {{ $best }}%</span>
-                            @endif
+                <div class="bl-incl">
+                    @foreach ($included as $group => $items)
+                        <div>
+                            <div class="bl-incl__group">{{ $group }}</div>
+                            <ul>
+                                @foreach ($items as $item)
+                                    <li>
+                                        <i data-lucide="check" class="w-3.5 h-3.5 tick" style="margin-top:2px"></i>
+                                        <span>{{ $item['label'] }}</span>
+                                    </li>
+                                @endforeach
+                            </ul>
                         </div>
-
-                        <div class="bl-plans">
-                            @foreach ($pricing['plans'] as $option)
-                                @continue($option['is_free'] || $option['is_enterprise'])
-                                @continue(! isset($option['prices'][$ivKey]))
-
-                                @php
-                                    $optPrice = $option['prices'][$ivKey];
-                                    $isCurrent = $plan && $plan->slug === $option['slug']
-                                                 && $price && $price->interval === $ivKey;
-                                @endphp
-
-                                <div class="bl-plan-opt {{ $isCurrent ? 'bl-plan-opt--current' : '' }}">
-                                    <h4>{{ $option['name'] }}</h4>
-                                    <div class="amt">{{ $optPrice['usd'] }}<small>{{ $optPrice['suffix'] }}</small></div>
-                                    @if ($optPrice['local'])
-                                        <div class="loc">≈ {{ $optPrice['local'] }}</div>
-                                    @endif
-
-                                    @if ($isCurrent)
-                                        <div class="bl-plan-opt__current" style="margin-top:11px">Current plan</div>
-                                    @else
-                                        {{-- Only `plan` + `interval` are submitted. The amount and the
-                                             Stripe price are resolved server-side; nothing money-shaped
-                                             leaves the browser. Field names avoid `*_id` because
-                                             DecodeHashids rewrites those keys. --}}
-                                        <form method="POST" action="{{ $sub?->stripe_subscription_ref && $sub->grantsAccess()
-                                                    ? route('billing.change', ['client' => $client->slug])
-                                                    : route('billing.checkout.store', ['client' => $client->slug]) }}">
-                                            @csrf
-                                            <input type="hidden" name="plan" value="{{ $option['slug'] }}">
-                                            <input type="hidden" name="interval" value="{{ $ivKey }}">
-                                            <button type="submit" class="bl-btn bl-btn--primary">
-                                                {{ $sub?->stripe_subscription_ref && $sub->grantsAccess() ? 'Switch' : 'Choose' }}
-                                                {{ $option['name'] }}
-                                            </button>
-                                        </form>
-                                    @endif
-                                </div>
-                            @endforeach
-                        </div>
-                    </div>
-                @endforeach
-
-                <p class="bl-note">
-                    Prices are charged in USD.
-                    @if ($pricing['has_local'])
-                        Local amounts are approximate and for reference only.
-                    @endif
-                    Upgrades apply immediately; the difference is prorated on your next invoice.
-                    <a href="{{ url('/pricing') }}" style="color:#6366f1">Compare all plans →</a>
-                </p>
+                    @endforeach
+                </div>
             </div>
         @endif
+
+        {{-- Transaction history --}}
+        <div class="bl-card intro-y">
+            <div class="bl-card__head">
+                <i data-lucide="receipt" class="w-4 h-4" style="color:#6366f1"></i>
+                <div class="bl-card__title">Payment history</div>
+            </div>
+
+            @if (empty($invoices))
+                <div class="bl-empty">
+                    <i data-lucide="file-text" class="w-7 h-7"></i>
+                    No payments yet. Invoices appear here after your first charge.
+                </div>
+            @else
+                <div style="overflow-x:auto">
+                    <table class="bl-table">
+                        <thead>
+                            <tr><th>Date</th><th>Invoice</th><th>Status</th><th>Amount</th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($invoices as $inv)
+                                <tr>
+                                    <td>{{ $inv['created']?->format('j M Y') ?? '—' }}</td>
+                                    <td>
+                                        <a href="{{ route('billing.invoice', ['client' => $client->slug, 'invoice' => $inv['id']]) }}"
+                                           style="color:#6366f1;font-weight:600">
+                                            {{ $inv['number'] ?: 'View' }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        <span class="bl-badge bl-badge--{{ $inv['status'] === 'paid' ? 'green' : ($inv['status'] === 'open' ? 'amber' : 'slate') }}">
+                                            {{ $inv['status'] }}
+                                        </span>
+                                    </td>
+                                    <td class="bl-amt">${{ number_format($inv['total'] / 100, 2) }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+        </div>
     </div>
 
-    {{-- ── Right column ───────────────────────────────────────────── --}}
+    {{-- ── Right column ──────────────────────────────────────────── --}}
     <div>
-        {{-- Usage --}}
-        <div class="bl-card intro-y" style="margin-bottom:20px">
-            <div class="bl-card__title"><i data-lucide="activity" class="w-4 h-4"></i> Usage this period</div>
-
-            @forelse ($usage as $metric => $row)
-                <div class="bl-meter">
-                    <div class="bl-meter__head">
-                        <span class="bl-meter__label">{{ $row['label'] }}</span>
-                        <span class="bl-meter__value">
-                            {{ number_format($row['used']) }}
-                            @if ($row['unlimited'])
-                                / unlimited
-                            @else
-                                / {{ number_format($row['allowance']) }}
-                            @endif
-                        </span>
-                    </div>
-                    @unless ($row['unlimited'])
-                        <div class="bl-meter__bar">
-                            <div class="bl-meter__fill {{ $row['percent'] >= 85 ? 'bl-meter__fill--warn' : '' }}"
-                                 style="width:{{ $row['percent'] }}%"></div>
-                        </div>
-                    @endunless
-                    @if ($row['overage'] > 0)
-                        <div class="bl-meter__over">
-                            {{ number_format($row['overage']) }} {{ Str::plural($row['unit'], $row['overage']) }}
-                            over your allowance — billed at your plan's overage rate.
+        {{-- Saved cards --}}
+        @if ($isOwner && ($cards || $canBuy))
+            <div class="bl-card intro-y">
+                <div class="bl-card__head">
+                    <i data-lucide="credit-card" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="bl-card__title">Payment methods</div>
+                    @if ($canBuy && $stripeReady)
+                        <div class="bl-card__action">
+                            <button type="button" class="bl-btn bl-btn--ghost bl-btn--sm" data-tva-modal-open="card-modal">
+                                <i data-lucide="plus" class="w-3.5 h-3.5"></i> Add card
+                            </button>
                         </div>
                     @endif
                 </div>
-            @empty
-                <p class="bl-empty">No usage recorded yet.</p>
-            @endforelse
 
-            @php $resets = collect($usage)->pluck('resets_at')->filter()->first(); @endphp
-            @if ($resets)
-                <p class="bl-note">Resets {{ $resets->format('j M Y') }}.</p>
-            @endif
-        </div>
-
-        {{-- Invoices — only once there are some. An empty "No invoices yet"
-             card on a brand-new free workspace is pure noise. --}}
-        @if (! empty($invoices))
-        <div class="bl-card intro-y">
-            <div class="bl-card__title"><i data-lucide="receipt" class="w-4 h-4"></i> Invoices</div>
-
-            {{-- Plain @foreach: the surrounding @if already guarantees there is
-                 at least one invoice, so the empty branch would be dead code. --}}
-            <table class="bl-table">
-                <thead><tr><th>Date</th><th>Status</th><th>Amount</th></tr></thead>
-                <tbody>
-                    @foreach ($invoices as $invoice)
-                        <tr>
-                            <td>
-                                @if ($invoice['hosted_url'])
-                                    <a href="{{ $invoice['hosted_url'] }}" target="_blank" rel="noopener" style="color:#6366f1">
-                                        {{ $invoice['created']?->format('j M Y') ?? '—' }}
-                                    </a>
-                                @else
-                                    {{ $invoice['created']?->format('j M Y') ?? '—' }}
+                @forelse ($cards as $card)
+                    <div class="bl-pm {{ $card['is_default'] ? 'bl-pm--default' : '' }} {{ $card['expired'] ? 'bl-pm--expired' : '' }}">
+                        <div class="bl-pm__brand">{{ \App\Services\Billing\PaymentMethodService::brandLabel($card['brand']) }}</div>
+                        <div>
+                            <div class="bl-pm__num">•••• •••• •••• {{ $card['last4'] }}</div>
+                            <div class="bl-pm__exp">
+                                Expires {{ str_pad((string) $card['exp_month'], 2, '0', STR_PAD_LEFT) }}/{{ $card['exp_year'] }}
+                                @if ($card['expired'])
+                                    <span class="bl-badge bl-badge--red" style="margin-left:6px">Expired</span>
+                                @elseif ($card['is_default'])
+                                    <span class="bl-badge bl-badge--blue" style="margin-left:6px">Default</span>
                                 @endif
-                            </td>
-                            <td>
-                                <span class="bl-badge bl-badge--{{ $invoice['status'] === 'paid' ? 'green' : ($invoice['status'] === 'open' ? 'amber' : 'slate') }}">
-                                    {{ $invoice['status'] }}
-                                </span>
-                            </td>
-                            <td>${{ number_format($invoice['total'] / 100, 2) }}</td>
-                        </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
+                            </div>
+                        </div>
+
+                        <div class="bl-pm__actions">
+                            @unless ($card['is_default'])
+                                <form method="POST" action="{{ route('billing.cards.default', ['client' => $client->slug]) }}">
+                                    @csrf
+                                    <input type="hidden" name="payment_method" value="{{ $card['id'] }}">
+                                    <button type="submit" class="bl-btn bl-btn--ghost bl-btn--sm">Make default</button>
+                                </form>
+                            @endunless
+                            <form method="POST" action="{{ route('billing.cards.destroy', ['client' => $client->slug]) }}"
+                                  onsubmit="return confirm('Remove this card?');">
+                                @csrf @method('DELETE')
+                                <input type="hidden" name="payment_method" value="{{ $card['id'] }}">
+                                <button type="submit" class="bl-btn bl-btn--danger bl-btn--sm" title="Remove">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                @empty
+                    <div class="bl-empty" style="padding:18px 10px">
+                        <i data-lucide="credit-card" class="w-7 h-7"></i>
+                        No cards saved. You’ll add one when you choose a plan.
+                    </div>
+                @endforelse
+
+                @if ($cards)
+                    <p class="bl-note">
+                        Card details are held by Stripe and never touch our servers — we only store the brand
+                        and last four digits to show here.
+                    </p>
+                @endif
+            </div>
         @endif
+
+        {{-- Stripe portal, for tax ids / billing address / raw invoices --}}
+        @if ($isOwner && $client->hasStripeCustomer())
+            <div class="bl-card intro-y">
+                <div class="bl-card__head">
+                    <i data-lucide="external-link" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="bl-card__title">Billing portal</div>
+                </div>
+                <p style="font-size:13px;color:#64748b;line-height:1.6;margin:0 0 14px">
+                    Billing address, tax ID and original Stripe receipts.
+                </p>
+                <form method="POST" action="{{ route('billing.portal', ['client' => $client->slug]) }}">
+                    @csrf
+                    <button type="submit" class="bl-btn bl-btn--ghost" style="width:100%">
+                        Open Stripe portal <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+                    </button>
+                </form>
+            </div>
+        @endif
+
+        @unless ($isOwner)
+            <div class="bl-card intro-y">
+                <p style="font-size:13px;color:#64748b;margin:0;display:flex;gap:8px">
+                    <i data-lucide="lock" class="w-4 h-4" style="flex:none;margin-top:2px"></i>
+                    Only the workspace owner can change the plan or manage payment methods.
+                </p>
+            </div>
+        @endunless
     </div>
 </div>
+
+{{-- ── Add-card modal (Stripe Elements) ──────────────────────────── --}}
+@if ($isOwner && $canBuy && $stripeReady)
+    @include('billing._card-modal', ['client' => $client, 'stripeKey' => config('billing.stripe.key')])
+@endif
 @endsection

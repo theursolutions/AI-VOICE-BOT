@@ -60,12 +60,64 @@ class BillingController extends Controller
             'usage'         => $this->usage->summaryFor($client),
             'invoices'      => $this->billing->invoices($client),
             'paymentMethod' => $this->billing->paymentMethod($client),
+            'cards'         => app(\App\Services\Billing\PaymentMethodService::class)->all($client),
 
             // Upgrade/downgrade options, priced for this visitor.
             'pricing'       => $this->presenter->build($request, $price?->interval),
 
             'isOwner'       => (bool) $request->user()?->isOwnerOf($client->id),
             'stripeReady'   => $this->billing->isConfigured(),
+        ]);
+    }
+
+    /**
+     * Choose / upgrade plan. The current plan is pre-selected so the page
+     * reads as "you are here, move from here" rather than a cold price list.
+     */
+    public function plans(Request $request, Client $client): View
+    {
+        $this->authorizeOwner($request, $client);
+
+        $subscription = $client->currentSubscription();
+        $current      = $subscription?->planPrice;
+
+        return view('billing.plans', [
+            'title'          => 'Choose a plan',
+            'client'         => $client,
+            'subscription'   => $subscription,
+            'currentPlan'    => $subscription?->plan,
+            'currentPrice'   => $current,
+            // Same presenter as /pricing, so the numbers here and on the
+            // marketing site can never disagree.
+            'pricing'        => $this->presenter->build($request, $current?->interval),
+            'checkoutOpen'   => (bool) config('billing.checkout.enabled', false),
+        ]);
+    }
+
+    /**
+     * A branded invoice we render ourselves.
+     *
+     * Stripe already produces a PDF, and we link to it — but that one carries
+     * Stripe's layout, not ours, and it isn't reachable without leaving the
+     * app. This is the in-product version: same numbers, our identity, and
+     * printable.
+     *
+     * The invoice id comes from the URL, so it is re-fetched from Stripe and
+     * checked against THIS workspace's customer before anything is rendered —
+     * otherwise an `in_…` id would read another tenant's invoice.
+     */
+    public function invoice(Request $request, Client $client, string $invoice): View
+    {
+        abort_unless($request->user()?->hasMembership($client->id), 403);
+
+        $data = $this->billing->invoice($client, $invoice);
+
+        abort_if($data === null, 404);
+
+        return view('billing.invoice', [
+            'title'   => 'Invoice ' . ($data['number'] ?: $invoice),
+            'client'  => $client,
+            'invoice' => $data,
         ]);
     }
 

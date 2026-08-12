@@ -209,6 +209,64 @@ abstract class BillingTestCase extends TestCase
         return $double;
     }
 
+    /**
+     * Stripe doubles for a workspace that HAS a saved card.
+     *
+     * Both services are needed: PaymentMethodService lists cards via
+     * `paymentMethods->all()` and reads the default off `customers->retrieve()`.
+     * Faking only the customer leaves the card list empty and the page renders
+     * as though nothing were saved.
+     *
+     * @return array{customers: object, paymentMethods: object}
+     */
+    protected function savedCardServices(
+        string $customerId = 'cus_test_1',
+        string $pmId = 'pm_test_1',
+        string $brand = 'visa',
+        string $last4 = '4242',
+    ): array {
+        $card = [
+            'id'       => $pmId,
+            'object'   => 'payment_method',
+            'type'     => 'card',
+            'customer' => $customerId,
+            'card'     => [
+                'brand'     => $brand,
+                'last4'     => $last4,
+                'exp_month' => 12,
+                'exp_year'  => (int) now()->addYears(3)->format('Y'),
+                'fingerprint' => 'fp_test',
+            ],
+        ];
+
+        $customers = Mockery::mock();
+        $customers->shouldReceive('create')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['id' => $customerId, 'object' => 'customer'], [])
+        );
+        $customers->shouldReceive('retrieve')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject([
+                'id'     => $customerId,
+                'object' => 'customer',
+                'invoice_settings' => ['default_payment_method' => $card],
+            ], [])
+        );
+        $customers->shouldReceive('update')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['id' => $customerId, 'object' => 'customer'], [])
+        );
+
+        $paymentMethods = Mockery::mock();
+        $paymentMethods->shouldReceive('all')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['object' => 'list', 'data' => [$card]], [])
+        );
+        $paymentMethods->shouldReceive('retrieve')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject($card, [])
+        );
+        $paymentMethods->shouldReceive('attach')->andReturn(\Stripe\Util\Util::convertToStripeObject($card, []));
+        $paymentMethods->shouldReceive('detach')->andReturn(\Stripe\Util\Util::convertToStripeObject($card, []));
+
+        return ['customers' => $customers, 'paymentMethods' => $paymentMethods];
+    }
+
     protected function customerServiceReturning(string $id = 'cus_test_1'): object
     {
         $double = Mockery::mock();
