@@ -77,11 +77,18 @@ class ChatController extends Controller
                 'channel_account' => $s->channel_account,
                 'name'            => $s->customer_name ?: $s->external_id,
                 'avatar'          => $meta['profile_pic'] ?? null,
+                'profile_url'     => $this->profileUrl($s, $meta),
                 'last_message'    => $this->preview($last),
                 'last_at'         => $s->last_activity_at,
                 'window_open'     => $this->meta->serviceWindowOpen($s->last_inbound_at, $now),
                 'window_expires'  => $this->meta->serviceWindowExpiresAt($s->last_inbound_at),
                 'unread'          => (int) ($s->last_inbound_at ?? 0) > (int) ($meta['read_at'] ?? 0),
+                // A dot only said "something new"; a count says how much is
+                // waiting, which is what decides who an agent opens first.
+                'unread_count'    => Message::where('session_id', $s->id)
+                    ->where('role', 'user')
+                    ->where('created_at', '>', (int) ($meta['read_at'] ?? 0))
+                    ->count(),
                 'bot_paused'      => (bool) ($meta['bot_paused'] ?? false),
                 'handoff'         => $s->handoff_status ?: 'bot',
                 'assigned_to'     => $s->assigned_agent_id ? ($agentNames[$s->assigned_agent_id] ?? 'Agent') : null,
@@ -120,10 +127,17 @@ class ChatController extends Controller
             'assigned_to'    => $session->assigned_agent_id ? (BotAgent::find($session->assigned_agent_id)->name ?? 'Agent') : null,
             'is_human_agent' => (bool) $this->myAgent($project),
             'contact'        => [
-                'name'    => $session->customer_name ?: $session->external_id,
-                'channel' => $session->channel,
-                'account' => $session->channel_account,
-                'avatar'  => data_get($session->metadata, 'meta.profile_pic'),
+                'name'        => $session->customer_name ?: $session->external_id,
+                'channel'     => $session->channel,
+                'account'     => $session->channel_account,
+                'avatar'      => data_get($session->metadata, 'meta.profile_pic'),
+                'profile_url' => $this->profileUrl($session, (array) data_get($session->metadata, 'meta', [])),
+                // Which of your Pages/numbers this conversation arrived on.
+                // With several connected channels, "who is this?" is only half
+                // the question — "and which of ours did they message?" matters
+                // just as much when replying.
+                'channel_name' => $this->channelName($session),
+                'channel_url'  => $this->channelUrl($session),
             ],
         ]);
     }
@@ -255,7 +269,10 @@ class ChatController extends Controller
             if (!$ok) {
                 return response()->json(['error' => 'send_failed'], 502);
             }
-            $msg = $this->persistOutbound($session, $data['caption'] ?? '', [['type' => $type, 'mime' => $mime, 'filename' => $filename, 'outbound' => true]]);
+            $msg = $this->persistOutbound($session, $data['caption'] ?? '', [array_filter([
+                'type' => $type, 'mime' => $mime, 'filename' => $filename, 'outbound' => true,
+                'url'  => $this->storeOutboundMedia($session, $bytes, $mime, $filename),
+            ], fn ($v) => $v !== null)]);
             return response()->json(['message' => $this->shapeMessage($msg, $sessionId)], 201);
         }
 
@@ -289,9 +306,14 @@ class ChatController extends Controller
             return response()->json(['error' => 'send_failed'], 502);
         }
 
-        $msg = $this->persistOutbound($session, $data['caption'] ?? '', [[
-            'type' => $type, 'mime' => $mime, 'filename' => $file->getClientOriginalName(), 'outbound' => true,
-        ]]);
+        $msg = $this->persistOutbound($session, $data['caption'] ?? '', [array_filter([
+            'type'     => $type,
+            'mime'     => $mime,
+            'filename' => $file->getClientOriginalName(),
+            'outbound' => true,
+            'media_id' => $mediaId,   // lets the proxy route re-fetch if needed
+            'url'      => $this->storeOutboundMedia($session, $bytes, $mime, $filename),
+        ], fn ($v) => $v !== null)]);
         return response()->json(['message' => $this->shapeMessage($msg, $sessionId)], 201);
     }
 
@@ -549,6 +571,50 @@ class ChatController extends Controller
         return [$this->meta->resolveConnection($provider, (string) $session->channel_account), $provider];
     }
 
+    /**
+     * Keep a local copy of outbound media and return its public URL.
+     *
+     * Outbound attachments used to store only type/mime/filename, so
+     * shapeMessage() fell through to the Graph proxy route, which has no
+     * media_id to fetch for our own uploads — the agent saw a broken image
+     * while the customer received the file perfectly.
+     *
+     * Storing it ourselves also means the thread still renders months later,
+     * after Meta has expired the media and the page token has rotated.
+     */
+    private function storeOutboundMedia(Session $session, string $bytes, string $mime, string $filename): ?string
+    {
+        try {
+            $ext  = pathinfo($filename, PATHINFO_EXTENSION) ?: $this->extForMime($mime);
+            $name = 'chat/' . $session->id . '/' . uniqid('out-', true) . ($ext ? '.' . $ext : '');
+            \Illuminate\Support\Facades\Storage::disk('public')->put($name, $bytes);
+
+            return \Illuminate\Support\Facades\Storage::disk('public')->url($name);
+        } catch (\Throwable $e) {
+            // Never fail a send because we could not keep our own copy — the
+            // message has already gone to the customer by this point.
+            Log::warning('Chat: could not store outbound media locally: ' . $e->getMessage());
+
+            return null;
+        }
+    }
+
+    /** Best-effort extension for a mime type, for the stored filename. */
+    private function extForMime(string $mime): string
+    {
+        return match (true) {
+            str_contains($mime, 'jpeg') => 'jpg',
+            str_contains($mime, 'png')  => 'png',
+            str_contains($mime, 'webp') => 'webp',
+            str_contains($mime, 'gif')  => 'gif',
+            str_contains($mime, 'ogg')  => 'ogg',
+            str_contains($mime, 'mpeg') => 'mp3',
+            str_contains($mime, 'mp4')  => 'mp4',
+            str_contains($mime, 'pdf')  => 'pdf',
+            default => '',
+        };
+    }
+
     private function persistOutbound(Session $session, string $content, array $attachments = [], ?string $wamid = null, ?array $replyTo = null): Message
     {
         $now = time();
@@ -603,6 +669,62 @@ class ChatController extends Controller
             }
         }
         return 0;
+    }
+
+    /** Display name of the Page / number this conversation arrived on. */
+    private function channelName(Session $session): ?string
+    {
+        [$conn] = $this->connectionFor($session);
+
+        return $conn?->name ?: $session->channel_account;
+    }
+
+    /**
+     * Public link to our own Page / number.
+     *
+     * Unlike a customer's PSID, a Page id IS public and resolvable, so this
+     * one can be linked reliably.
+     */
+    private function channelUrl(Session $session): ?string
+    {
+        [$conn] = $this->connectionFor($session);
+        $account = (string) $session->channel_account;
+
+        return match ($session->channel) {
+            'facebook', 'messenger' => $account !== '' ? 'https://facebook.com/' . $account : null,
+            'whatsapp' => ($n = data_get($conn?->metadata, 'display_phone_number'))
+                ? 'https://wa.me/' . preg_replace('/\D+/', '', (string) $n)
+                : null,
+            'instagram' => ($u = data_get($conn?->metadata, 'username'))
+                ? 'https://instagram.com/' . ltrim((string) $u, '@')
+                : null,
+            default => null,
+        };
+    }
+
+    /**
+     * A link to the customer's profile, where one genuinely exists.
+     *
+     * Only WhatsApp can be linked reliably. Messenger and Instagram identify
+     * senders by a PSID/IGSID, which is **page-scoped** — a different opaque
+     * id per business, deliberately not resolvable to a public profile. There
+     * is no URL to build, and guessing one produces a broken link that looks
+     * like our bug rather than Meta's design.
+     *
+     * Instagram becomes linkable once we store the username from the profile
+     * lookup; that waits until Instagram onboarding itself works.
+     */
+    private function profileUrl(Session $s, array $meta): ?string
+    {
+        return match ($s->channel) {
+            'whatsapp' => ($digits = preg_replace('/\D+/', '', (string) $s->external_id)) !== ''
+                ? 'https://wa.me/' . $digits
+                : null,
+            'instagram' => ! empty($meta['username'])
+                ? 'https://instagram.com/' . ltrim((string) $meta['username'], '@')
+                : null,
+            default => null,
+        };
     }
 
     private function preview(?Message $m): string

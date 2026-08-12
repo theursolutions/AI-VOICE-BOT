@@ -77,6 +77,40 @@ class GraphClient
         return $r ? (data_get($r, 'message_id') ?: 'sent') : null;
     }
 
+    /**
+     * The public profile of someone who has messaged a Page or IG account.
+     *
+     * WhatsApp puts the sender's name straight in the webhook payload, but
+     * Messenger and Instagram do not — they send only an opaque PSID/IGSID.
+     * Without this call the inbox can only show a 16-digit number, which is
+     * useless to whoever is answering.
+     *
+     * Meta only returns a profile for people who have actually messaged the
+     * account, so this cannot be used to look up arbitrary users. Failure is
+     * normal and non-fatal: a customer can decline profile sharing, and older
+     * IG accounts often return nothing at all.
+     *
+     * @return array{name:?string, profile_pic:?string}
+     */
+    public function messengerProfile(string $userId, string $provider = 'facebook_page'): array
+    {
+        // Instagram exposes username rather than a real name.
+        $fields = $provider === 'instagram'
+            ? 'name,username,profile_pic'
+            : 'first_name,last_name,profile_pic';
+
+        $r = $this->get($userId, ['fields' => $fields]) ?? [];
+
+        $name = $r['name']
+            ?? trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? ''))
+            ?: ($r['username'] ?? null);
+
+        return [
+            'name'        => is_string($name) && trim($name) !== '' ? trim($name) : null,
+            'profile_pic' => $r['profile_pic'] ?? null,
+        ];
+    }
+
     /** Send an attachment (image/audio/video/file) over Messenger/Instagram by URL. */
     public function sendMessengerAttachment(string $fromId, string $recipientId, string $type, string $url, ?string $tag = null): bool
     {
