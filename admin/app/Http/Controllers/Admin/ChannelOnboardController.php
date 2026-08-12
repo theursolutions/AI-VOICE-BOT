@@ -362,9 +362,16 @@ class ChannelOnboardController extends Controller
 
         $scopes = array_filter(explode(',', (string) (config('meta.app.scopes')[$provider] ?? '')));
 
+        // setScopes(), NOT scopes(). Socialite's Facebook driver ships with
+        // `protected $scopes = ['email']`, and scopes() MERGES into that
+        // rather than replacing it — so every request also asked for `email`.
+        // A Business-type app using Facebook Login for Business rejects that
+        // with "Invalid Scopes: email" and refuses to show the consent screen
+        // at all. setScopes() replaces the defaults with exactly what we ask
+        // for.
         return Socialite::driver('facebook')
             ->stateless()
-            ->scopes($scopes)
+            ->setScopes($scopes)
             ->with(['state' => $state])
             ->redirectUrl($this->callbackUrl())
             ->redirect();

@@ -138,7 +138,8 @@ class CheckoutDisabledTest extends BillingTestCase
 
         // What they SHOULD see: their plan and how long they've got.
         $response->assertSee('Free', false);
-        $response->assertSee('left of free access', false);
+        $response->assertSee('days left', false);
+        $response->assertSee('Free access ends', false);
     }
 
     public function test_a_super_admin_does_see_the_stripe_misconfiguration_warning(): void
@@ -174,11 +175,13 @@ class CheckoutDisabledTest extends BillingTestCase
             ]],
         ])->assertOk();
 
-        $this->fakeStripe(['customers' => $this->customerServiceReturning()]);
+        $this->fakeStripe($this->savedCardServices());
 
+        // The card row only exists once a card does.
         $this->actingAs($user)
              ->get(route('billing.index', ['client' => $client->slug]))
              ->assertOk()
-             ->assertSee('Billing currency', false);
+             ->assertSee('4242', false)
+             ->assertSee('Visa', false);
     }
 }

@@ -163,6 +163,110 @@ class BillingService
         return $session;
     }
 
+    /**
+     * Subscribe using an on-site Stripe Elements form instead of hosted Checkout.
+     *
+     * THE FLOW, and why it has these moving parts:
+     *
+     *  1. The browser turns card details into a PaymentMethod id via Stripe.js.
+     *     Card data never reaches us — the inputs are Stripe-hosted iframes.
+     *  2. We attach that PM to the customer and create the subscription with
+     *     `payment_behavior: default_incomplete`. Stripe then produces an
+     *     invoice with a PaymentIntent but does NOT charge yet.
+     *  3. We hand the PaymentIntent's client_secret back to the browser, which
+     *     confirms it. If the bank demands 3-D Secure, the challenge happens
+     *     there, with the customer present.
+     *  4. The webhook — not this method, and not the browser's success
+     *     callback — is what finally marks the subscription active.
+     *
+     * `default_incomplete` is essential: without it Stripe would attempt the
+     * charge server-side, and any card requiring SCA would fail outright with
+     * no way to present the challenge. That is the single most common reason a
+     * hand-rolled Elements subscription flow breaks for European and Indian
+     * cards.
+     *
+     * @return array{status:string, requires_action:bool, client_secret:?string, subscription_ref:?string}
+     */
+    public function subscribeWithPaymentMethod(
+        Client $client,
+        string $planSlug,
+        string $interval,
+        string $paymentMethodRef,
+        ?User $actor = null,
+    ): array {
+        $price = $this->plans->resolvePrice($planSlug, $interval);
+        $plan  = $price->plan;
+
+        if ($price->isStripeModeMismatched()) {
+            throw new \RuntimeException(
+                'This price was created in a different Stripe mode (test vs live). Re-sync it from Super Admin → Billing → Plans.'
+            );
+        }
+
+        $customerRef = $this->ensureCustomer($client);
+        $stripe      = $this->factory->make();
+
+        $payload = [
+            'customer' => $customerRef,
+            'items'    => [['price' => $price->stripe_price_ref]],
+
+            'payment_behavior'        => 'default_incomplete',
+            'default_payment_method'  => $paymentMethodRef,
+            'payment_settings'        => [
+                'save_default_payment_method' => 'on_subscription',
+                'payment_method_types'        => ['card'],
+            ],
+
+            // Both objects are stamped so the webhook can find the workspace
+            // whichever one it happens to see first.
+            'metadata' => $this->metadata($client, $plan->slug, $interval, $actor),
+
+            'expand' => ['latest_invoice.payment_intent'],
+        ];
+
+        if ($plan->hasTrial() && $this->subscriptions->isEligibleForFreeWindow($client)) {
+            $payload['trial_period_days'] = (int) $plan->trial_days;
+        }
+
+        $subscription = $stripe->subscriptions->create($payload);
+
+        $intent = $subscription->latest_invoice->payment_intent ?? null;
+
+        // Mirror immediately so the UI is responsive; the webhook remains the
+        // authority and will overwrite this with the settled truth.
+        $this->subscriptions->syncFromStripe($subscription->toArray(), $client);
+
+        Log::info('billing.subscribe.created', [
+            'client_id'    => $client->getKey(),
+            'plan'         => $plan->slug,
+            'interval'     => $interval,
+            'subscription' => $subscription->id,
+            'intent'       => $intent->status ?? 'none',
+        ]);
+
+        $status = (string) ($intent->status ?? 'succeeded');
+
+        return [
+            'status'           => $status,
+            // requires_confirmation is included deliberately: with a saved card
+            // Stripe hands back a PI awaiting confirmation, and the browser has
+            // to call confirmCardPayment for it exactly as it would for 3-D
+            // Secure. Treating only requires_action as "needs the browser"
+            // leaves those subscriptions stuck as incomplete.
+            'requires_action'  => in_array($status, ['requires_action', 'requires_confirmation', 'requires_payment_method'], true),
+            'client_secret'    => $intent->client_secret ?? null,
+            'subscription_ref' => $subscription->id,
+        ];
+    }
+
+    /** Re-read a subscription (after a browser-side 3-D Secure confirmation). */
+    public function refreshSubscription(Client $client, string $subscriptionRef): void
+    {
+        $remote = $this->factory->make()->subscriptions->retrieve($subscriptionRef, []);
+
+        $this->subscriptions->syncFromStripe($remote->toArray(), $client);
+    }
+
     /** Re-read a completed Checkout Session, expanding what the webhook needs. */
     public function retrieveSession(string $sessionId): CheckoutSession
     {
@@ -329,6 +433,75 @@ class BillingService
             ]);
 
             return [];
+        }
+    }
+
+    /**
+     * One invoice, with its line items, for our own branded invoice page.
+     *
+     * SECURITY: the id comes from a URL, so the fetched invoice is checked
+     * against this workspace's Stripe customer before anything is returned.
+     * Without that check an `in_…` id would read another tenant's invoice.
+     * Returns null (→ 404) on any mismatch or failure.
+     */
+    public function invoice(Client $client, string $invoiceRef): ?array
+    {
+        if (! $client->stripe_customer_ref || ! $this->isConfigured()) {
+            return null;
+        }
+
+        try {
+            $invoice = $this->factory->make()->invoices->retrieve($invoiceRef, []);
+
+            if (($invoice->customer ?? null) !== $client->stripe_customer_ref) {
+                Log::warning('billing.invoice.cross_tenant_blocked', [
+                    'client_id' => $client->getKey(),
+                    'invoice'   => $invoiceRef,
+                ]);
+
+                return null;
+            }
+
+            $lines = [];
+            foreach ($invoice->lines->data ?? [] as $line) {
+                $lines[] = [
+                    'description' => $line->description ?: ($line->price->nickname ?? 'Subscription'),
+                    'quantity'    => (int) ($line->quantity ?? 1),
+                    'amount'      => (int) ($line->amount ?? 0),
+                    'period_start'=> ! empty($line->period->start) ? \Illuminate\Support\Carbon::createFromTimestamp($line->period->start) : null,
+                    'period_end'  => ! empty($line->period->end) ? \Illuminate\Support\Carbon::createFromTimestamp($line->period->end) : null,
+                ];
+            }
+
+            return [
+                'id'          => $invoice->id,
+                'number'      => $invoice->number,
+                'status'      => $invoice->status,
+                'currency'    => strtoupper((string) $invoice->currency),
+                'subtotal'    => (int) ($invoice->subtotal ?? 0),
+                'tax'         => (int) ($invoice->tax ?? 0),
+                'total'       => (int) ($invoice->total ?? 0),
+                'amount_paid' => (int) ($invoice->amount_paid ?? 0),
+                'created'     => $invoice->created ? \Illuminate\Support\Carbon::createFromTimestamp($invoice->created) : null,
+                'paid_at'     => ! empty($invoice->status_transitions->paid_at)
+                                    ? \Illuminate\Support\Carbon::createFromTimestamp($invoice->status_transitions->paid_at)
+                                    : null,
+                'period_start'=> $invoice->period_start ? \Illuminate\Support\Carbon::createFromTimestamp($invoice->period_start) : null,
+                'period_end'  => $invoice->period_end ? \Illuminate\Support\Carbon::createFromTimestamp($invoice->period_end) : null,
+                'pdf'         => $invoice->invoice_pdf,
+                'hosted_url'  => $invoice->hosted_invoice_url,
+                'customer_name'  => $invoice->customer_name,
+                'customer_email' => $invoice->customer_email,
+                'lines'       => $lines,
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('billing.invoice.fetch_failed', [
+                'client_id' => $client->getKey(),
+                'invoice'   => $invoiceRef,
+                'error'     => $e->getMessage(),
+            ]);
+
+            return null;
         }
     }
 

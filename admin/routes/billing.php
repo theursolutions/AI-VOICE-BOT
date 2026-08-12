@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\CheckoutController;
+use App\Http\Controllers\Billing\PaymentMethodController;
 use App\Http\Controllers\PricingController;
 use App\Support\Hashid;
 use Illuminate\Support\Facades\Route;
@@ -41,9 +42,35 @@ Route::middleware(['auth', 'active.client'])
     ->prefix('c/{client:slug}')
     ->scopeBindings()
     ->group(function () {
+        // Plan + usage overview — the page everything links back to.
         Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
 
-        Route::post('/billing/checkout', [CheckoutController::class, 'store'])->name('billing.checkout.store');
+        // Upgrade / change plan → on-site checkout.
+        Route::get('/billing/plans',    [BillingController::class, 'plans'])->name('billing.plans');
+        Route::get('/billing/checkout', [CheckoutController::class, 'page'])->name('billing.checkout');
+
+        // Elements flow (JSON). `subscribe` creates the subscription from a
+        // tokenised card; `confirm` pulls state forward after a 3-D Secure
+        // challenge. Neither marks anyone paid — the webhook does that.
+        Route::post('/billing/subscribe', [CheckoutController::class, 'subscribe'])
+            ->middleware('throttle:20,1')->name('billing.subscribe');
+        Route::post('/billing/confirm',   [CheckoutController::class, 'confirm'])
+            ->middleware('throttle:30,1')->name('billing.confirm');
+
+        // Saved cards. Field is `payment_method`, never `payment_method_id` —
+        // DecodeHashids rewrites `*_id` keys and would corrupt a pm_… ref.
+        Route::post  ('/billing/cards/intent',  [PaymentMethodController::class, 'intent'])->name('billing.cards.intent');
+        Route::post  ('/billing/cards',         [PaymentMethodController::class, 'store'])->name('billing.cards.store');
+        Route::post  ('/billing/cards/default', [PaymentMethodController::class, 'makeDefault'])->name('billing.cards.default');
+        Route::delete('/billing/cards',         [PaymentMethodController::class, 'destroy'])->name('billing.cards.destroy');
+
+        // Branded invoice. `invoice` is deliberately not an *_id param name.
+        Route::get('/billing/invoices/{invoice}', [BillingController::class, 'invoice'])
+            ->where('invoice', '[A-Za-z0-9_]+')->name('billing.invoice');
+
+        // Hosted Stripe Checkout — kept as a fallback path and still used by
+        // the public pricing page CTA.
+        Route::post('/billing/checkout/start',   [CheckoutController::class, 'store'])->name('billing.checkout.store');
         Route::get ('/billing/checkout/success', [CheckoutController::class, 'success'])->name('billing.checkout.success');
         Route::get ('/billing/checkout/cancel',  [CheckoutController::class, 'cancel'])->name('billing.checkout.cancel');
 

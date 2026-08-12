@@ -328,6 +328,20 @@
                 <li>
                     <a href="{{ route('profile.edit') }}#update-password" class="dropdown-item hover:bg-white/5"> <i data-lucide="lock" class="w-4 h-4 mr-2"></i> Change Password </a>
                 </li>
+                {{-- Billing lives here as well as in the sidebar: "where do I
+                     see my plan?" is an account question, and the account menu
+                     is the first place people look for it. Owner-only, matching
+                     the route gate. --}}
+                @php
+                    $tbClient = request()->attributes->get('client') ?? Auth::user()->activeClient;
+                @endphp
+                @if ($tbClient && Auth::user()->isOwnerOf($tbClient->id))
+                    <li>
+                        <a href="{{ route('billing.index', ['client' => $tbClient->slug]) }}" class="dropdown-item hover:bg-white/5">
+                            <i data-lucide="credit-card" class="w-4 h-4 mr-2"></i> Plan &amp; billing
+                        </a>
+                    </li>
+                @endif
                 <li>
                     <hr class="dropdown-divider border-white/[0.08]">
                 </li>

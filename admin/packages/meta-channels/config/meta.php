@@ -18,11 +18,42 @@ return [
         // Optional WhatsApp Embedded Signup config id (JS flow); not required
         // for the redirect-based onboarding implemented here.
         'wa_config_id'  => env('META_WA_CONFIG_ID'),
-        // OAuth scopes requested per provider. Some require App Review.
+        // OAuth scopes requested per provider.
+        //
+        // Env-overridable on purpose: Meta renames and re-scopes permissions
+        // regularly, and an "Invalid Scopes" error should be fixable by
+        // editing .env and restarting rather than by shipping code.
+        //
+        // Two things to know when one of these is rejected:
+        //
+        //  1. A permission is only VALID for an app that has the matching
+        //     PRODUCT added in the Meta dashboard. Requesting
+        //     `instagram_manage_messages` from an app with no Instagram
+        //     product returns "Invalid Scopes" even though the permission
+        //     itself exists.
+        //  2. Valid is not the same as granted. Every permission below needs
+        //     Advanced Access via App Review before it works for anyone
+        //     without a role on the app.
+        //
+        // Note there is no `email` or `public_profile` here. Socialite's
+        // Facebook driver adds `email` by default and the controller uses
+        // setScopes() to suppress it — a Business app using Facebook Login
+        // for Business rejects it outright.
         'scopes' => [
-            'facebook_page' => 'pages_show_list,pages_messaging,business_management',
-            'instagram'     => 'instagram_basic,instagram_manage_messages,pages_show_list,pages_messaging,business_management',
-            'whatsapp'      => 'whatsapp_business_management,whatsapp_business_messaging,business_management',
+            // pages_manage_metadata is what allows subscribing the app to a
+            // Page's webhooks. Without it a Page connects and then silently
+            // never delivers a message.
+            'facebook_page' => env('META_SCOPES_FACEBOOK',
+                'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,business_management'),
+
+            // Instagram messaging via Facebook Login goes through the linked
+            // Page, so the Page permissions are required too. Requires the
+            // Instagram product on the app.
+            'instagram'     => env('META_SCOPES_INSTAGRAM',
+                'instagram_basic,instagram_manage_messages,pages_show_list,pages_manage_metadata,business_management'),
+
+            'whatsapp'      => env('META_SCOPES_WHATSAPP',
+                'whatsapp_business_management,whatsapp_business_messaging,business_management'),
         ],
     ],
 

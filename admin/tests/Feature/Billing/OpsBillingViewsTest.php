@@ -92,20 +92,22 @@ class OpsBillingViewsTest extends BillingTestCase
         [$client, $user] = $this->makeWorkspace();
         $this->fakeStripe(['customers' => $this->customerServiceReturning()]);
 
-        // 1. On the free window.
+        // 1. On the free window. There is no price yet, so no USD line —
+        //    what matters is the plan and the countdown.
         app(\App\Services\Billing\SubscriptionService::class)->startFreeWindow($client);
         $this->actingAs($user)
              ->get(route('billing.index', ['client' => $client->slug]))
              ->assertOk()
              ->assertSee('Free', false)
-             ->assertSee('charged in USD', false);
+             ->assertSee('days left', false);
 
-        // 2. Paid.
+        // 2. Paid — now the amount and the currency it's charged in appear.
         $this->postWebhook($this->subscriptionEvent('customer.subscription.created', $client))->assertOk();
         $this->get(route('billing.index', ['client' => $client->slug]))
              ->assertOk()
              ->assertSee('Growth', false)
-             ->assertSee('$59', false);
+             ->assertSee('$59', false)
+             ->assertSee('charged in USD', false);
 
         // 3. Expired free window (the degraded read-only state).
         $client->fresh()->currentSubscription()->forceFill([
