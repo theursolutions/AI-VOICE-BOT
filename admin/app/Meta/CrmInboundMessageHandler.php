@@ -100,6 +100,17 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
         if (!$session->customer_name && $m->senderName) {
             $session->customer_name = $m->senderName;
         }
+        // Same for the avatar. Backfilling here matters because Messenger and
+        // Instagram profiles are only fetched from Graph, which was added
+        // after some conversations already existed — without this they would
+        // stay faceless forever.
+        if ($m->profilePic && ! data_get($session->metadata, 'meta.profile_pic')) {
+            $meta = (array) $session->metadata;
+            $meta['meta'] = array_merge((array) ($meta['meta'] ?? []), [
+                'profile_pic' => $m->profilePic,
+            ]);
+            $session->metadata = $meta;
+        }
         $session->save();
 
         // If a human agent has taken over this conversation, store the

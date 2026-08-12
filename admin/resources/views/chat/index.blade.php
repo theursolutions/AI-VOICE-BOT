@@ -169,6 +169,29 @@
     .tva-lb-btn { position:absolute; top:50%; transform:translateY(-50%); width:46px; height:46px; border-radius:50%; background:rgba(255,255,255,.16); color:#fff; border:none; font-size:22px; cursor:pointer; z-index:81; }
     .tva-lb-btn:hover { background:rgba(255,255,255,.3); }
     .tva-lb-prev { left:22px; } .tva-lb-next { right:22px; } .tva-lb-close { top:22px; right:22px; transform:none; width:40px; height:40px; }
+    /* Unread as a number, not a dot: "3 waiting" is actionable, "something
+       new" is not. Capped at 99+ so the pill never resizes the row. */
+    .tva-unread { display:inline-flex; align-items:center; justify-content:center;
+                  min-width:17px; height:17px; padding:0 5px; border-radius:999px;
+                  background:#dc2626; color:#fff; font-size:9.5px; font-weight:800;
+                  line-height:1; font-variant-numeric:tabular-nums; }
+    #hdrChannel a { color:inherit; text-decoration:none; display:inline-flex; align-items:center; }
+    #hdrChannel a:hover { text-decoration:underline; }
+
+    /* Timestamp is secondary information — it should be readable when looked
+       for and invisible when scanning names and messages. */
+    .tva-convo__time { font-size:9px; line-height:1; color:#94a3b8; white-space:nowrap;
+                       font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+    html.dark .tva-convo__time { color:#64748b; }
+
+    /* Channel shown as a mark, not a word — see channelIcon(). Square-ish so
+       a row of them lines up regardless of provider name length. */
+    .tva-badge--icon { display:inline-flex; align-items:center; justify-content:center;
+                       padding:3px 6px; line-height:0; }
+    .tva-badge__txt { font-size:9.5px; letter-spacing:.03em; text-transform:uppercase; }
+    #hdrChannel { display:inline-flex; align-items:center; }
+    #hdrName a { color:inherit; text-decoration:none; border-bottom:1px dashed currentColor; }
+    #hdrName a:hover { opacity:.8; }
 </style>
 
 <div class="content">
@@ -311,6 +334,32 @@ function refreshTyping(){
     }
 }
 function initials(n){ return (n||'?').trim().slice(0,2).toUpperCase(); }
+
+/* Channel identity as a mark rather than a word.
+   The full provider name ("facebook_page") ate a third of the row and told an
+   operator nothing they couldn't see at a glance from the logo. Paths are the
+   same brand marks App\Support\BrandIcons renders server-side, inlined here
+   because this list is built in JavaScript. */
+const CHANNEL_MARKS = {
+    whatsapp:      'M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 2.1.55 4.15 1.6 5.96L2 22l4.26-1.68a9.9 9.9 0 0 0 5.78 1.85h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2zm5.8 14.06c-.24.68-1.42 1.3-1.96 1.35-.5.05-.99.23-3.35-.7-2.82-1.11-4.6-3.97-4.74-4.16-.14-.19-1.13-1.5-1.13-2.86 0-1.36.71-2.03.96-2.31.25-.28.55-.35.73-.35h.52c.17 0 .4-.06.62.48.24.57.8 1.98.87 2.12.07.14.12.31.02.5-.09.19-.14.31-.28.47l-.42.49c-.14.14-.28.29-.12.57.16.28.72 1.18 1.54 1.91 1.06.94 1.95 1.23 2.23 1.37.28.14.44.12.6-.07.17-.19.7-.81.88-1.09.19-.28.37-.23.63-.14.26.09 1.66.78 1.94.93.28.14.47.21.54.33.07.12.07.68-.17 1.36z',
+    instagram:     'M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zm0 5.68A4.16 4.16 0 1 0 16.16 12 4.16 4.16 0 0 0 12 7.84zm0 6.86A2.7 2.7 0 1 1 14.7 12 2.7 2.7 0 0 1 12 14.7zm5.3-7.1a.97.97 0 1 1-.97-.97.97.97 0 0 1 .97.97z',
+    facebook_page: 'M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.97h-1.52c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z',
+};
+CHANNEL_MARKS.messenger = CHANNEL_MARKS.facebook_page;
+
+const CHANNEL_LABELS = {
+    whatsapp: 'WhatsApp', instagram: 'Instagram',
+    facebook_page: 'Facebook', messenger: 'Messenger',
+    web: 'Web chat', twilio: 'Phone', plivo: 'Phone', api: 'API', internal: 'Internal',
+};
+
+function channelLabel(ch){ return CHANNEL_LABELS[ch] || (ch||'').replace(/_/g,' '); }
+
+function channelIcon(ch){
+    const d = CHANNEL_MARKS[ch];
+    if(!d) return '<span class="tva-badge__txt">' + h(channelLabel(ch)) + '</span>';
+    return '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="' + d + '"/></svg>';
+}
 async function api(url,opts={}){ opts.headers=Object.assign({'X-CSRF-TOKEN':CHAT.csrf,'X-Requested-With':'XMLHttpRequest','Accept':'application/json'},opts.headers||{}); return fetch(url,opts); }
 function msgUrl(p){ return `${CHAT.base}/${activeSid}/${p}`; }
 
@@ -378,11 +427,11 @@ function renderConvos(list){
         <div class="tva-convo ${c.id===activeSid?'is-active':''}" onclick="openThread(${c.id})">
             <div class="tva-convo__av">${c.avatar?`<img src="${h(c.avatar)}">`:h(initials(c.name))}</div>
             <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2"><span class="tva-convo__name flex-1 truncate">${h(c.name)}</span><span class="tva-badge tva-badge--${c.channel}">${c.channel}</span></div>
+                <div class="flex items-center gap-2"><span class="tva-convo__name flex-1 truncate">${h(c.name)}</span><span class="tva-badge tva-badge--${c.channel} tva-badge--icon" title="${h(channelLabel(c.channel))}">${channelIcon(c.channel)}</span></div>
                 <div class="flex items-center gap-2 mt-0.5">
                     <span class="tva-convo__last flex-1">${h(c.last_message)}</span>
-                    <span class="text-[10px] text-slate-400">${timeAgo(c.last_at)}</span>
-                    ${c.unread?'<span class="tva-dot tva-dot--unread"></span>':''}
+                    <span class="tva-convo__time">${timeAgo(c.last_at)}</span>
+                    ${c.unread_count>0?`<span class="tva-unread">${c.unread_count>99?'99+':c.unread_count}</span>`:(c.unread?'<span class="tva-dot tva-dot--unread"></span>':'')}
                     <span class="tva-dot ${c.window_open?'tva-dot--open':'tva-dot--closed'}" title="${c.window_open?'24h window open':'window closed'}"></span>
                 </div>
                 ${handoffBadge(c)?`<div class="mt-1">${handoffBadge(c)}</div>`:''}
@@ -427,8 +476,23 @@ async function loadThread(full){
 }
 function applyHeader(d){
     const c=d.contact||{};
-    document.getElementById('hdrName').textContent=c.name||'';
-    document.getElementById('hdrChannel').textContent=c.channel||'';
+    var hdrName=document.getElementById('hdrName');
+    // Only WhatsApp yields a real profile URL — Messenger/Instagram ids are
+    // page-scoped and deliberately not resolvable. Render plain text there
+    // rather than a link that would 404.
+    hdrName.innerHTML = c.profile_url
+        ? '<a href="' + h(c.profile_url) + '" target="_blank" rel="noopener" title="Open profile">' + h(c.name||'') + '</a>'
+        : h(c.name||'');
+    // Channel mark + the Page/number this conversation is on, linked where
+    // Meta exposes a public URL (Page ids are public; customer PSIDs are not).
+    var hdrCh=document.getElementById('hdrChannel');
+    var chLabel = h(c.channel_name || channelLabel(c.channel));
+    var chInner = channelIcon(c.channel) + '<span class="ml-1">' + chLabel + '</span>';
+    hdrCh.innerHTML = c.channel
+        ? (c.channel_url
+            ? '<a href="' + h(c.channel_url) + '" target="_blank" rel="noopener" title="Open ' + chLabel + '">' + chInner + '</a>'
+            : chInner)
+        : '';
     document.getElementById('hdrAccount').textContent=c.account||'';
     document.getElementById('hdrAvatar').innerHTML=c.avatar?`<img src="${h(c.avatar)}">`:h(initials(c.name));
     setBot(d.bot_paused);

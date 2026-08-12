@@ -52,6 +52,19 @@ class WebhookController
         $payload = $request->json()->all();
         $object  = (string) data_get($payload, 'object');
 
+        // Log every accepted delivery, not just failures.
+        //
+        // This controller previously logged only when something went wrong,
+        // which made the most common support question — "is Meta actually
+        // calling us?" — unanswerable from the logs: a silent log looked
+        // identical whether a message had been processed perfectly or the
+        // webhook had never been subscribed. One line at info level makes
+        // that distinction visible.
+        Log::info('MetaChannels webhook received', [
+            'object'  => $object,
+            'entries' => count((array) data_get($payload, 'entry', [])),
+        ]);
+
         foreach (data_get($payload, 'entry', []) as $entry) {
             if ($object === 'whatsapp_business_account') {
                 $this->handleWhatsappEntry($entry);
@@ -135,15 +148,38 @@ class WebhookController
                 continue;
             }
 
+            // WhatsApp puts the sender's name in the payload; Messenger and
+            // Instagram send only an opaque PSID/IGSID, so without this the
+            // inbox shows a 16-digit number and whoever is answering has no
+            // idea who they are talking to.
+            //
+            // Cached for a day and keyed on the id: profiles change rarely,
+            // and a Graph call on every inbound message would add latency to
+            // the reply for no benefit.
+            $profile = Cache::remember(
+                'meta:profile:' . $provider . ':' . $psid,
+                now()->addDay(),
+                function () use ($conn, $psid, $provider) {
+                    try {
+                        return (new GraphClient($conn->access_token))->messengerProfile($psid, $provider);
+                    } catch (\Throwable $e) {
+                        // Non-fatal: a customer can decline profile sharing,
+                        // and the message still matters more than the name.
+                        return ['name' => null, 'profile_pic' => null];
+                    }
+                },
+            );
+
             ProcessInboundMessage::dispatch(new InboundMessage(
                 projectId:         (int) $conn->project_id,
                 provider:          $provider,
                 channelExternalId: $bizId,
                 from:              $psid,
-                senderName:        null,
+                senderName:        $profile['name'] ?? null,
                 text:              $text,
                 messageId:         $mid ?: null,
                 accessToken:       $conn->access_token ?: null,
+                profilePic:        $profile['profile_pic'] ?? null,
                 attachments:       $attachments,
             ));
         }
