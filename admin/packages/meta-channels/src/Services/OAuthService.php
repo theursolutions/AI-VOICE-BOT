@@ -145,6 +145,68 @@ class OAuthService
     }
 
     /**
+     * A WhatsApp number's details from its phone_number_id — the dialable
+     * number, the name customers see, quality rating and verification state.
+     *
+     * @return array{display_phone_number?:string, verified_name?:string, quality_rating?:string, code_verification_status?:string}
+     */
+    public function whatsappNumberDetails(string $phoneNumberId, string $token): array
+    {
+        return $this->get($phoneNumberId, [
+            'fields'       => 'display_phone_number,verified_name,quality_rating,code_verification_status',
+            'access_token' => $token,
+        ]);
+    }
+
+    /**
+     * Subscribe our app to a Facebook Page's messaging webhooks.
+     *
+     * This is the step that makes a connected Page actually deliver messages,
+     * and its absence is invisible: onboarding succeeds, the Page appears in
+     * the UI with a valid token, and Meta simply never sends anything. There
+     * is no error to find because nothing failed — we just never asked.
+     *
+     * MUST be called with the PAGE access token, not the user token. Meta
+     * rejects a user token here even when that user administers the Page.
+     *
+     * Instagram (via Facebook Login) rides on the linked Page, so an IG
+     * connection subscribes its Page, not the IG account.
+     *
+     * @param array<int,string> $fields webhook fields to receive
+     */
+    public function subscribeAppToPage(string $pageId, string $pageToken, array $fields = ['messages', 'messaging_postbacks']): void
+    {
+        $this->post("{$pageId}/subscribed_apps", [
+            'subscribed_fields' => implode(',', $fields),
+            'access_token'      => $pageToken,
+        ]);
+    }
+
+    /**
+     * What our app is currently subscribed to on a Page — the direct way to
+     * answer "why isn't this Page delivering messages?".
+     *
+     * @return array<int,string> subscribed field names, empty when not subscribed
+     */
+    public function pageSubscribedFields(string $pageId, string $pageToken): array
+    {
+        $data = $this->get("{$pageId}/subscribed_apps", [
+            'access_token' => $pageToken,
+        ])['data'] ?? [];
+
+        $appId = (string) $this->cfg['id'];
+
+        foreach ($data as $app) {
+            // Several apps can be subscribed to one Page; only ours matters.
+            if ((string) ($app['id'] ?? '') === $appId) {
+                return (array) ($app['subscribed_fields'] ?? []);
+            }
+        }
+
+        return [];
+    }
+
+    /**
      * Register a number for Cloud API messaging.
      *
      * The PIN is the number's two-step verification code. Registration is
@@ -226,7 +288,7 @@ class OAuthService
         foreach ($businesses as $biz) {
             $wabas = $this->get("{$biz['id']}/owned_whatsapp_business_accounts", ['access_token' => $token, 'limit' => 50])['data'] ?? [];
             foreach ($wabas as $waba) {
-                $phones = $this->get("{$waba['id']}/phone_numbers", ['fields' => 'id,display_phone_number,verified_name', 'access_token' => $token, 'limit' => 50])['data'] ?? [];
+                $phones = $this->get("{$waba['id']}/phone_numbers", ['fields' => 'id,display_phone_number,verified_name,quality_rating,code_verification_status', 'access_token' => $token, 'limit' => 50])['data'] ?? [];
                 foreach ($phones as $p) {
                     if (empty($p['id'])) continue;
                     $out[] = [
@@ -234,7 +296,17 @@ class OAuthService
                         'external_id'  => (string) $p['id'],   // phone_number_id
                         'name'         => $p['verified_name'] ?? $p['display_phone_number'] ?? 'WhatsApp',
                         'access_token' => $token,              // see note in controller re: system token
-                        'metadata'     => ['waba_id' => $waba['id'], 'business_id' => $biz['id'] ?? null],
+                        'metadata'     => [
+                            'waba_id'     => $waba['id'],
+                            'business_id' => $biz['id'] ?? null,
+                            // The dialable number. Without this the UI could
+                            // only show phone_number_id, which nobody can call
+                            // and which does not answer "what do customers
+                            // message?".
+                            'display_phone_number' => $p['display_phone_number'] ?? null,
+                            'quality_rating'       => $p['quality_rating'] ?? null,
+                            'verification_status'  => $p['code_verification_status'] ?? null,
+                        ],
                     ];
                 }
             }

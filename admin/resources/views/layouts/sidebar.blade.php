@@ -184,7 +184,7 @@
                     <a href="{{ $clientSlug ? route('chat.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('chat.*') ? 'side-menu--active' : '' }}">
                         <div class="side-menu__icon"><i data-lucide="message-square"></i></div>
-                        <div class="side-menu__title">Messages</div>
+                        <div class="side-menu__title">Omni Chats</div>
                     </a>
                 </li>
                 @endif
@@ -193,7 +193,7 @@
                     <a href="{{ $clientSlug ? route('channels.index', ['client' => $clientSlug]) : '#' }}"
                        class="side-menu {{ $is('channels.*') ? 'side-menu--active' : '' }}">
                         <div class="side-menu__icon"><i data-lucide="radio"></i></div>
-                        <div class="side-menu__title">Channels</div>
+                        <div class="side-menu__title">Meta Onboarding</div>
                     </a>
                 </li>
                 @endif
