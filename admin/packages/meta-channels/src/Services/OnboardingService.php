@@ -259,6 +259,16 @@ class OnboardingService
                         'metadata'          => $ch['metadata'] ?? [],
                     ],
                 );
+                // Subscribe our app to this Page's messaging webhooks. Without
+                // it the connection looks perfectly healthy and Meta never
+                // delivers a message — there is no error anywhere, because
+                // nothing failed; we just never asked to be told.
+                //
+                // Non-fatal on purpose: the connection is still usable for
+                // sending, and `php artisan meta:subscribe` repairs it without
+                // dragging the customer back through consent.
+                $this->subscribePage($ch, $log);
+
                 $imported[] = $ch['name'];
             }
         } catch (\Throwable $e) {
@@ -310,6 +320,41 @@ class OnboardingService
         $payload->save();
 
         return ['log' => $log, 'imported' => $this->process($payload, $log)];
+    }
+
+    /**
+     * Subscribe the app to a Page's webhooks for a freshly imported channel.
+     *
+     * Facebook Pages subscribe themselves; Instagram subscribes the Page it
+     * is linked to, because IG messaging via Facebook Login is delivered
+     * through that Page.
+     *
+     * @param array{provider:string, external_id:string, name:string, access_token:?string, metadata:array} $ch
+     */
+    protected function subscribePage(array $ch, ChannelOnboardingLog $log): void
+    {
+        $pageId = match ($ch['provider']) {
+            ChannelConnection::PROVIDER_FACEBOOK_PAGE => $ch['external_id'],
+            ChannelConnection::PROVIDER_INSTAGRAM     => (string) ($ch['metadata']['page_id'] ?? ''),
+            default                                   => '',
+        };
+
+        // WhatsApp subscribes at the WABA level, not here.
+        if ($pageId === '' || empty($ch['access_token'])) {
+            return;
+        }
+
+        try {
+            $this->oauth->subscribeAppToPage($pageId, $ch['access_token']);
+            $log->step('subscribe_page', true, $ch['name'] . ' (page ' . $pageId . ')');
+        } catch (\Throwable $e) {
+            $log->step('subscribe_page', false, $e->getMessage()
+                . ' — the channel will not receive messages until this succeeds. Run: php artisan meta:subscribe');
+            Log::warning('Meta: page webhook subscription failed', [
+                'page'  => $pageId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     // ── internals ────────────────────────────────────────────────────

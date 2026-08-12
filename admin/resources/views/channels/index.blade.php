@@ -42,6 +42,46 @@
     .tva-ch-tile--facebook_page, .tva-ch-tile--messenger { border-top-color:#1877f2; }
     .tva-ch-tile--facebook_page .tva-ch-tile__icon, .tva-ch-tile--messenger .tva-ch-tile__icon { background:#1877f2; }
 
+    /* Brand glyphs sit on brand-coloured backgrounds (green button, green
+       tile), and BrandIcons renders them in their own brand colour. CSS fill
+       overrides the SVG presentation attribute, so this makes them legible
+       without touching the shared helper. */
+    .ch-glyph { display:inline-block; vertical-align:-2px; }
+    .ch-glyph svg, .tva-ch-tile__icon svg { fill:#fff; }
+
+    /* ── Onboarding activity modal: status tabs + per-attempt accordions ──
+       Accordions are native <details>, so "closed by default" needs no JS and
+       cannot desync from the markup. */
+    .log-tab {
+        display:inline-flex; align-items:center; gap:7px; padding:7px 13px;
+        border:1px solid #e2e8f0; border-radius:9px; background:#fff;
+        font-size:12.5px; font-weight:650; color:#475569; cursor:pointer;
+    }
+    .log-tab:hover { border-color:#cbd5e1; }
+    .log-tab.is-active { background:var(--tva-gradient); border-color:transparent; color:#fff; }
+    .log-tab__n { font-size:10.5px; padding:1px 6px; border-radius:999px; background:#f1f5f9; color:#475569; font-weight:700; }
+    .log-tab.is-active .log-tab__n { background:rgba(255,255,255,.25); color:#fff; }
+
+    .log-panel { display:none; }
+    .log-panel.is-active { display:block; }
+
+    .log-acc { border:1px solid #e2e8f0; border-radius:10px; margin-bottom:8px; background:#fff; }
+    .log-acc[open] { border-color:#cbd5e1; }
+    .log-acc__sum {
+        display:flex; align-items:center; gap:8px; padding:10px 12px; cursor:pointer;
+        list-style:none; flex-wrap:wrap;
+    }
+    .log-acc__sum::-webkit-details-marker { display:none; }   /* we draw our own chevron */
+    .log-acc__chev { color:#94a3b8; flex-shrink:0; transition:transform .15s; }
+    .log-acc[open] .log-acc__chev { transform:rotate(90deg); }
+    .log-acc__title { font-size:12.5px; color:#475569; flex:1; min-width:120px; }
+    .log-acc__when { font-size:11px; color:#94a3b8; white-space:nowrap; }
+    .log-acc__body { padding:4px 14px 14px; border-top:1px solid #f1f5f9; }
+
+    html.dark .log-tab, html.dark .log-acc { background:#1e293b; border-color:#334155; color:#cbd5e1; }
+    html.dark .log-acc__body { border-top-color:#334155; }
+    html.dark .log-tab__n { background:#0f172a; color:#cbd5e1; }
+
     /* toggle switch */
     .tva-switch { display:inline-flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; font-weight:600; color:#475569; }
     .tva-switch input { display:none; }
@@ -97,13 +137,13 @@
     <div class="flex flex-wrap items-center gap-2 mb-4">
         <div class="text-sm text-slate-500 mr-auto">Connect a platform — sign in with Facebook in a popup and pick what to link.</div>
         <button type="button" onclick="openConnect('facebook')" class="btn text-white" style="background:#1877f2;">
-            <i data-lucide="facebook" class="w-4 h-4 mr-2 inline"></i> Connect Facebook
+            <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('facebook', 16) !!}</span> Connect Facebook
         </button>
         <button type="button" onclick="openConnect('instagram')" class="btn text-white" style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);">
-            <i data-lucide="instagram" class="w-4 h-4 mr-2 inline"></i> Connect Instagram
+            <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('instagram', 16) !!}</span> Connect Instagram
         </button>
         <button type="button" onclick="connectWhatsApp()" class="btn text-white" style="background:#25d366;">
-            <i data-lucide="message-circle" class="w-4 h-4 mr-2 inline"></i> Connect WhatsApp
+            <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('whatsapp', 16) !!}</span> Connect WhatsApp
         </button>
         {{-- The customer's WhatsApp lives on their phone, not the machine
              they administer from. Scanning hands the flow to the device that
@@ -134,15 +174,55 @@
             @forelse ($connections as $conn)
                 <div class="tva-ch-tile tva-ch-tile--{{ $conn->provider }} {{ $conn->isEnabled() ? '' : 'is-off' }}">
                     <div class="flex items-center gap-3">
-                        <div class="tva-ch-tile__icon"><i data-lucide="{{ $icons[$conn->provider] ?? 'plug' }}" class="w-5 h-5"></i></div>
+                        <div class="tva-ch-tile__icon">
+                            @php $brandSlug = $conn->provider === 'facebook_page' ? 'facebook' : $conn->provider; @endphp
+                            @if (App\Support\BrandIcons::has($brandSlug))
+                                {!! App\Support\BrandIcons::render($brandSlug, 22, 'text-white') !!}
+                            @else
+                                <i data-lucide="{{ $icons[$conn->provider] ?? 'plug' }}" class="w-5 h-5"></i>
+                            @endif
+                        </div>
                         <div class="flex-1 min-w-0">
                             <div class="tva-ch-tile__name truncate">{{ $conn->name ?: ($providers[$conn->provider] ?? $conn->provider) }}</div>
                             <div class="text-xs text-slate-500">{{ $providers[$conn->provider] ?? $conn->provider }}</div>
                         </div>
                         <span class="tva-ch-chip {{ $conn->isEnabled() ? 'is-on' : 'is-off' }}">{{ $conn->isEnabled() ? 'ACTIVE' : 'INACTIVE' }}</span>
                     </div>
+                    {{-- The dialable number, when we have it. `external_id` on a
+                         WhatsApp row is Meta's phone_number_id — an internal
+                         reference nobody can call — so showing only that left
+                         operators unable to answer "what number do customers
+                         message?". The display number is stored in metadata at
+                         onboarding; `php artisan meta:subscribe --fix`
+                         backfills it for connections made before that. --}}
+                    @php $waNumber = $conn->metadata['display_phone_number'] ?? null; @endphp
+                    @if ($waNumber)
+                        <div class="text-sm" style="font-weight:650; color:#0f172a; letter-spacing:.01em;">
+                            <i data-lucide="phone" class="w-3.5 h-3.5 inline -mt-0.5 mr-1" style="color:#25d366;"></i>{{ $waNumber }}
+                        </div>
+                    @elseif ($conn->provider === 'whatsapp')
+                        <div class="text-[11px] text-slate-400">
+                            Number not recorded —
+                            <span title="Run: php artisan meta:subscribe --fix">run the channel repair command</span>
+                        </div>
+                    @endif
+
                     @if ($conn->external_id)
-                        <div class="text-[11px] text-slate-400 truncate" title="{{ $conn->external_id }}">ID: {{ $conn->external_id }}</div>
+                        <div class="text-[11px] text-slate-400 truncate" title="{{ $conn->external_id }}">
+                            {{ $conn->provider === 'whatsapp' ? 'Phone number ID' : 'ID' }}: {{ $conn->external_id }}
+                        </div>
+                    @endif
+
+                    {{-- A token that has silently lapsed is the other reason a
+                         channel goes quiet, and it was invisible until now. --}}
+                    @if (! $conn->tokenIsValid())
+                        <div class="text-[11px]" style="color:#b91c1c;">
+                            ⚠ Token expired — reconnect this channel
+                        </div>
+                    @elseif ($conn->token_expires_at && $conn->tokenExpiresInDays() !== null && $conn->tokenExpiresInDays() <= 14)
+                        <div class="text-[11px]" style="color:#a16207;">
+                            Token expires in {{ $conn->tokenExpiresInDays() }} day(s)
+                        </div>
                     @endif
                     <div class="tva-ch-tile__foot">
                         <form method="POST" action="{{ route('channels.toggle', ['client' => $client->slug, 'id' => $conn->id]) }}" class="flex-1">
@@ -191,131 +271,9 @@
         </div>
     </div>
 
-    {{-- ── Onboarding activity (logs) ──────────────────────────────────── --}}
+    {{-- Onboarding activity: summary card + one tabbed modal. --}}
     @if ($project)
-    @php $retryKey = ['facebook_page' => 'facebook', 'instagram' => 'instagram', 'whatsapp' => 'whatsapp', 'messenger' => 'facebook']; @endphp
-    <div class="tva-ch-card mt-4">
-        <div class="tva-ch-card__head">
-            <div style="width:36px; height:36px; border-radius:10px; background:#f1f5f9; color:#475569; display:flex; align-items:center; justify-content:center;">
-                <i data-lucide="history" class="w-4 h-4"></i>
-            </div>
-            <div class="flex-1"><div class="tva-ch-card__title">Onboarding activity</div></div>
-        </div>
-        @php $stepLabels = ['redirect_to_facebook'=>'Redirected to Facebook','consent'=>'User consent','token_exchange'=>'Token exchange','discover'=>'Discovered channels','import'=>'Imported channels','error'=>'Error']; @endphp
-        @forelse ($onboardingLogs as $log)
-            <div class="flex items-center gap-3 py-2" style="border-bottom:1px solid #f1f5f9;">
-                <span class="tva-ch-chip">{{ $providers[$log->provider] ?? $log->provider }}</span>
-                @php $sc = ['success' => 'is-on', 'failed' => 'is-off', 'started' => '']; @endphp
-                <span class="tva-ch-chip {{ $sc[$log->status] ?? '' }}" style="{{ $log->status==='started' ? 'background:#fef3c7;color:#92400e;' : '' }}">{{ strtoupper($log->status) }}</span>
-                <span class="text-xs text-slate-500 flex-1 truncate">
-                    @if ($log->status === 'success') Imported {{ data_get($log->result, 'count', 0) }} channel(s): {{ implode(', ', (array) data_get($log->result, 'channels', [])) }}
-                    @elseif ($log->status === 'failed') <span class="text-danger">{{ $log->error }}</span>
-                    @else In progress… @endif
-                </span>
-                @if ($log->isRetry())
-                    <span class="tva-ch-chip" title="Attempt number">#{{ $log->attempt }}</span>
-                @endif
-                <span class="text-[11px] text-slate-400">{{ $log->created_at?->diffForHumans() }}</span>
-                <button type="button" class="btn btn-sm btn-secondary" data-tva-modal-open="channel-log-{{ $log->id }}">
-                    <i data-lucide="file-text" class="w-3.5 h-3.5 mr-1 inline"></i> View log
-                </button>
-                @if ($log->status === 'failed')
-                    @if ($log->canReplay())
-                        {{-- The whole point of storing the payload: Meta already
-                             authorised us, so this replays our side only. --}}
-                        <form method="POST" action="{{ route('channels.onboarding.retry', ['client' => $client->slug, 'log' => $log->id]) }}" class="inline">
-                            @csrf
-                            <input type="hidden" name="project_id" value="{{ $projectId }}">
-                            <button type="submit" class="btn btn-sm btn-primary" title="Uses the authorisation Meta already gave us — no sign-in needed">
-                                <i data-lucide="refresh-cw" class="w-3.5 h-3.5 mr-1 inline"></i> Retry
-                            </button>
-                        </form>
-                    @else
-                        {{-- Nothing replayable stored (consent was denied, or the
-                             saved credentials lapsed) — this genuinely has to
-                             start at Meta again, and the tooltip says why. --}}
-                        <button type="button" onclick="openConnect('{{ $retryKey[$log->provider] ?? 'facebook' }}')"
-                                class="btn btn-sm btn-secondary"
-                                title="{{ $log->payload?->retryBlockedReason() ?? 'Nothing stored to replay — sign in again.' }}">
-                            <i data-lucide="external-link" class="w-3.5 h-3.5 mr-1 inline"></i> Reconnect
-                        </button>
-                    @endif
-                @endif
-            </div>
-
-            {{-- Per-attempt log modal: human-readable, color-coded steps --}}
-            <div id="channel-log-{{ $log->id }}" class="tva-modal" hidden>
-                <div class="tva-modal__backdrop" data-tva-modal-close></div>
-                <div class="tva-modal__panel" style="max-width:540px;">
-                    <div class="tva-modal__head">
-                        <i data-lucide="history" class="w-4 h-4 mr-2 inline" style="color:#6366f1;"></i>
-                        Onboarding log · {{ $providers[$log->provider] ?? $log->provider }}
-                        <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
-                    </div>
-                    <div class="tva-modal__body" style="max-height:62vh; overflow:auto;">
-                        <div class="flex items-center gap-2 mb-3 flex-wrap">
-                            <span class="tva-ch-chip {{ $sc[$log->status] ?? '' }}" style="{{ $log->status==='started' ? 'background:#fef3c7;color:#92400e;' : '' }}">{{ strtoupper($log->status) }}</span>
-                            {{-- Which entry point was used: the three flows fail in
-                                 different places, so this is the first thing worth
-                                 knowing when reading a failure. --}}
-                            <span class="tva-ch-chip">{{ str_replace('_', ' ', $log->method ?: 'redirect') }}</span>
-                            @if ($log->isRetry())<span class="tva-ch-chip">attempt {{ $log->attempt }}</span>@endif
-                            <span class="text-xs text-slate-400">{{ $log->created_at?->format('M j, Y H:i') }}</span>
-                        </div>
-
-                        {{-- Plain-language next action, keyed off the failure class
-                             the pipeline recorded — rather than leaving the operator
-                             to interpret a raw Graph error string. --}}
-                        @if ($log->guidance())
-                            <div class="mb-3 p-3 rounded" style="background:#eff6ff; border:1px solid #bfdbfe; color:#1e40af; font-size:12.5px;">
-                                <b>What to do:</b> {{ $log->guidance() }}
-                            </div>
-                        @endif
-
-                        @if ($log->payload && $log->status === 'failed')
-                            <div class="mb-3 text-xs" style="color:#475569;">
-                                @if ($log->payload->isRetryable())
-                                    ✅ Meta’s authorisation is saved (until
-                                    {{ $log->payload->expires_at?->format('M j, Y') ?? 'expiry' }}) — Retry replays
-                                    our side only, no sign-in needed. Stopped at
-                                    <b>{{ $log->payload->status }}</b>.
-                                @else
-                                    ⚠️ {{ $log->payload->retryBlockedReason() }}
-                                @endif
-                            </div>
-                        @endif
-                        @forelse ((array) $log->steps as $s)
-                            <div class="flex items-start gap-3 py-2" style="border-bottom:1px solid #f1f5f9;">
-                                <span style="font-size:15px; line-height:1.2; color:{{ ($s['ok'] ?? false) ? '#16a34a' : '#dc2626' }};">{{ ($s['ok'] ?? false) ? '✓' : '✗' }}</span>
-                                <div class="flex-1 min-w-0">
-                                    <div class="text-sm font-medium" style="color:{{ ($s['ok'] ?? false) ? '#0f172a' : '#dc2626' }};">{{ $stepLabels[$s['step'] ?? ''] ?? ($s['step'] ?? 'step') }}</div>
-                                    @if (!empty($s['detail']))
-                                        <div class="text-xs text-slate-500 break-words">{{ $s['detail'] }}</div>
-                                    @endif
-                                </div>
-                                <span class="text-[10px] text-slate-400 whitespace-nowrap">{{ $s['at'] ?? '' }}</span>
-                            </div>
-                        @empty
-                            <div class="text-xs text-slate-400">No steps recorded.</div>
-                        @endforelse
-                        @if ($log->error)
-                            <div class="mt-3 p-3 rounded" style="background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; font-size:12.5px;">
-                                <b>Error:</b> {{ $log->error }}
-                            </div>
-                        @endif
-                    </div>
-                    <div class="tva-modal__foot">
-                        <button type="button" class="btn btn-secondary" data-tva-modal-close>Close</button>
-                        @if ($log->status === 'failed')
-                            <button type="button" onclick="openConnect('{{ $retryKey[$log->provider] ?? 'facebook' }}')" class="btn btn-primary">Retry onboarding</button>
-                        @endif
-                    </div>
-                </div>
-            </div>
-        @empty
-            <div class="text-xs text-slate-400 py-3">No onboarding attempts yet.</div>
-        @endforelse
-    </div>
+        @include('channels._activity')
     @endif
 
     {{-- ── Connect channel modal ─────────────────────────────────────── --}}
@@ -413,6 +371,22 @@
         if (open) { var m = document.getElementById(open.getAttribute('data-tva-modal-open')); if (m) m.removeAttribute('hidden'); return; }
         var close = e.target.closest('[data-tva-modal-close]');
         if (close) { var modal = close.closest('.tva-modal'); if (modal) modal.setAttribute('hidden', ''); }
+    });
+
+    /* Status tabs inside the activity modal. Scoped by data attribute so it
+       cannot collide with the SEO console's tabs or anything added later. */
+    document.addEventListener('click', function (e) {
+        var tab = e.target.closest('[data-log-tab]');
+        if (!tab) return;
+        var wanted = tab.getAttribute('data-log-tab');
+        var modal  = tab.closest('.tva-modal');
+        if (!modal) return;
+        modal.querySelectorAll('[data-log-tab]').forEach(function (t) {
+            t.classList.toggle('is-active', t === tab);
+        });
+        modal.querySelectorAll('[data-log-panel]').forEach(function (p) {
+            p.classList.toggle('is-active', p.getAttribute('data-log-panel') === wanted);
+        });
     });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') document.querySelectorAll('.tva-modal:not([hidden])').forEach(function (m){ m.setAttribute('hidden',''); });

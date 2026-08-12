@@ -94,7 +94,7 @@ Must match byte-for-byte or the token exchange fails.
 
 ### 2.4 Webhooks
 App → **WhatsApp → Configuration → Webhook**:
-- Callback URL: `https://serveai.com.pk/api/meta/webhook`
+- Callback URL: `https://serveai.com.pk/api/whatsapp/webhook`
 - Verify token: your `META_WHATSAPP_VERIFY_TOKEN`
 - Subscribe to: `messages`, `message_template_status_update`
 
