@@ -46,6 +46,18 @@ class Kernel extends ConsoleKernel
             ->dailyAt('06:15')
             ->withoutOverlapping();
 
+        // ── Meta channels ────────────────────────────────────────────
+        //
+        // Instagram Login tokens live 60 days and, unlike Facebook Page
+        // tokens, have no permanent form. Meta will not refresh an already-
+        // expired one, so this runs daily and works ~20 days ahead of the
+        // deadline rather than on it. Miss the window and the customer has to
+        // reconnect from Instagram; the symptom is replies silently failing.
+        // A no-op when Instagram Login is not configured.
+        $schedule->command('meta:refresh-tokens')
+            ->dailyAt('04:40')
+            ->withoutOverlapping();
+
         // GeoLite2 refresh. Shared .mmdb — one file serves both the local-price
         // display and visitor analytics. MaxMind publishes weekly; the command
         // no-ops if the file is under 6 days old, and is a silent no-op with no

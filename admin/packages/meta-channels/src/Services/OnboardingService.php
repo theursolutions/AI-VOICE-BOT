@@ -42,6 +42,7 @@ class OnboardingService
     public function __construct(
         private OAuthService $oauth,
         private TokenService $tokens,
+        private InstagramLoginService $instagram,
     ) {}
 
     // ── Intake ───────────────────────────────────────────────────────
@@ -144,6 +145,15 @@ class OnboardingService
             return;
         }
 
+        // Instagram Login exchanges on api.instagram.com with its own
+        // credentials, and its tokens cannot be inspected via Facebook's
+        // /debug_token — so it gets its own rung rather than a pile of
+        // conditionals inside this one.
+        if ($payload->isInstagramLogin()) {
+            $this->ensureInstagramToken($payload, $log);
+            return;
+        }
+
         // Code → short-lived token, unless a flow handed us one directly.
         if (! $payload->short_lived_token) {
             if (! $payload->auth_code) {
@@ -200,11 +210,91 @@ class OnboardingService
         $log->step('scopes', true, implode(', ', $inspect['scopes']));
     }
 
+    /**
+     * The Instagram-Login equivalent of ensureToken(): code → 1-hour token →
+     * 60-day token, all on Instagram's own hosts.
+     *
+     * Scopes are read straight out of the exchange response. Facebook's
+     * /debug_token rejects an Instagram token, so the usual inspect() call
+     * is not available and `permissions` is the only honest source.
+     */
+    protected function ensureInstagramToken(ChannelOnboardingPayload $payload, ChannelOnboardingLog $log): void
+    {
+        $granted = [];
+
+        if (! $payload->short_lived_token) {
+            if (! $payload->auth_code) {
+                $this->abort($payload, $log, self::ERR_EXPIRED, 'No Instagram authorization code stored — the customer has to reconnect from Instagram.');
+            }
+            try {
+                $exchanged = $this->instagram->exchangeCode($payload->auth_code, (string) $payload->redirect_uri);
+            } catch (\Throwable $e) {
+                $this->abort($payload, $log, self::ERR_CODE_EXCHANGE, 'Could not exchange the Instagram authorization code (it is single-use and expires within minutes): ' . $e->getMessage());
+            }
+
+            $payload->short_lived_token = $exchanged['token'];
+            // The IGSID of the connected account. Recorded now because the
+            // /me lookup during discovery can fail independently, and without
+            // this we would have a working token attached to nothing.
+            $payload->phone_number_id = $exchanged['user_id'] ?: $payload->phone_number_id;
+            $granted = $exchanged['permissions'];
+            $payload->save();
+
+            $log->step('code_exchange', true, $exchanged['user_id'] ? 'ig user ' . $exchanged['user_id'] : null);
+        }
+
+        try {
+            $long = $this->instagram->longLived($payload->short_lived_token);
+        } catch (\Throwable $e) {
+            $this->abort($payload, $log, self::ERR_TOKEN_EXCHANGE, 'Could not upgrade the Instagram token to a long-lived one: ' . $e->getMessage());
+        }
+
+        $payload->long_lived_token = $long['token'];
+        $payload->token_expires_at = $long['expires_at'];
+        $payload->token_scopes     = $granted ?: $payload->token_scopes;
+        // Instagram long-lived tokens always expire (60 days), so unlike the
+        // Facebook path there is no permanent-token case to cap.
+        $payload->expires_at       = $long['expires_at'] ?? now()->addDays(60);
+        $payload->status           = ChannelOnboardingPayload::STATUS_TOKENIZED;
+        $payload->save();
+
+        $log->step('long_lived_token', true, $payload->token_expires_at
+            ? 'expires ' . $payload->token_expires_at->toDateTimeString()
+            : 'no expiry');
+
+        // People can untick permissions on Instagram's consent screen too.
+        // Naming them here beats a later "(#10) Application does not have
+        // permission for this action" with no clue which one is missing.
+        if ($granted) {
+            $missing = array_values(array_diff($this->instagram->scopes(), $granted));
+            if ($missing) {
+                $log->step('scopes', false, 'missing: ' . implode(', ', $missing));
+                $this->abort($payload, $log, self::ERR_MISSING_SCOPES, 'These Instagram permissions were not granted: ' . implode(', ', $missing) . '. Reconnect and leave every permission ticked.');
+            }
+            $log->step('scopes', true, implode(', ', $granted));
+        }
+    }
+
     /** tokenized → discovered. Asks Graph what was actually granted. */
     protected function ensureDiscovery(ChannelOnboardingPayload $payload, ChannelOnboardingLog $log): void
     {
         if (! empty($payload->discovery)) {
             $log->step('discover', true, count($payload->discovery) . ' channel(s) (resumed)');
+            return;
+        }
+
+        if ($payload->isInstagramLogin()) {
+            try {
+                $channels = $this->instagram->discover($payload->usableToken(), $payload->phone_number_id);
+            } catch (\Throwable $e) {
+                $this->abort($payload, $log, self::ERR_GRAPH, $e->getMessage());
+            }
+
+            $payload->discovery = $channels;
+            $payload->status    = ChannelOnboardingPayload::STATUS_DISCOVERED;
+            $payload->save();
+
+            $log->step('discover', true, $channels[0]['name'] ?? '1 account');
             return;
         }
 
@@ -253,7 +343,14 @@ class OnboardingService
                         'access_token'      => $ch['access_token'] ?: $payload->long_lived_token,
                         'short_lived_token' => $payload->short_lived_token,
                         'token_obtained_at' => now(),
-                        'token_expires_at'  => $ch['access_token'] ? null : $payload->token_expires_at,
+                        // A channel-supplied token normally means a Page token,
+                        // which never expires. Instagram Login breaks that rule:
+                        // it hands back a 60-day token, and recording it as
+                        // permanent would silently exclude the account from the
+                        // refresh sweep and break it two months later.
+                        'token_expires_at'  => ($ch['access_token'] && ! $payload->isInstagramLogin())
+                            ? null
+                            : $payload->token_expires_at,
                         'token_scopes'      => $payload->token_scopes,
                         'status'            => ChannelConnection::STATUS_ENABLED,
                         'metadata'          => $ch['metadata'] ?? [],
@@ -333,6 +430,23 @@ class OnboardingService
      */
     protected function subscribePage(array $ch, ChannelOnboardingLog $log): void
     {
+        // Instagram Login subscribes the IG account itself — there is no Page
+        // in this flow to subscribe instead.
+        if (($ch['metadata']['login'] ?? null) === 'instagram') {
+            try {
+                $this->instagram->subscribe($ch['external_id'], (string) $ch['access_token']);
+                $log->step('subscribe_instagram', true, $ch['name']);
+            } catch (\Throwable $e) {
+                $log->step('subscribe_instagram', false, $e->getMessage()
+                    . ' — the account will not receive messages until this succeeds. Run: php artisan meta:subscribe --fix');
+                Log::warning('Meta: Instagram webhook subscription failed', [
+                    'ig_id' => $ch['external_id'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
+            return;
+        }
+
         $pageId = match ($ch['provider']) {
             ChannelConnection::PROVIDER_FACEBOOK_PAGE => $ch['external_id'],
             ChannelConnection::PROVIDER_INSTAGRAM     => (string) ($ch['metadata']['page_id'] ?? ''),

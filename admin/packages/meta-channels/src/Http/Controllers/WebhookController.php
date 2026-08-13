@@ -156,19 +156,7 @@ class WebhookController
             // Cached for a day and keyed on the id: profiles change rarely,
             // and a Graph call on every inbound message would add latency to
             // the reply for no benefit.
-            $profile = Cache::remember(
-                'meta:profile:' . $provider . ':' . $psid,
-                now()->addDay(),
-                function () use ($conn, $psid, $provider) {
-                    try {
-                        return (new GraphClient($conn->access_token))->messengerProfile($psid, $provider);
-                    } catch (\Throwable $e) {
-                        // Non-fatal: a customer can decline profile sharing,
-                        // and the message still matters more than the name.
-                        return ['name' => null, 'profile_pic' => null];
-                    }
-                },
-            );
+            $profile = $this->senderProfile($conn, $psid, $provider);
 
             ProcessInboundMessage::dispatch(new InboundMessage(
                 projectId:         (int) $conn->project_id,
@@ -181,8 +169,64 @@ class WebhookController
                 accessToken:       $conn->access_token ?: null,
                 profilePic:        $profile['profile_pic'] ?? null,
                 attachments:       $attachments,
+                graphBase:         GraphClient::baseFor($conn->metadata),
             ));
         }
+    }
+
+    /**
+     * The sender's display name and photo.
+     *
+     * WhatsApp puts the name in the payload; Messenger and Instagram send
+     * only an opaque PSID/IGSID, so without this the inbox shows a 16-digit
+     * number and whoever is answering has no idea who they are talking to.
+     *
+     * Success is cached for a day — profiles change rarely, and a Graph call
+     * per inbound message would add latency to every reply.
+     *
+     * FAILURE IS CACHED FOR TEN MINUTES, and the difference matters. Caching
+     * a failed lookup for a day means that the moment App Review grants
+     * pages_user_profile — or the customer's rate limit clears — the inbox
+     * still shows numbers for another 24 hours, and the operator has no way
+     * to tell a permissions problem from a stale cache. The short window lets
+     * it heal on its own.
+     *
+     * @return array{name:?string, profile_pic:?string}
+     */
+    private function senderProfile(ChannelConnection $conn, string $psid, string $provider): array
+    {
+        $key = 'meta:profile:' . $provider . ':' . $psid;
+
+        if (($hit = Cache::get($key)) !== null) {
+            return $hit;
+        }
+
+        try {
+            $profile = GraphClient::forConnection($conn)->messengerProfile($psid, $provider);
+        } catch (\Throwable $e) {
+            $profile = ['name' => null, 'profile_pic' => null];
+            Log::info('MetaChannels: profile lookup threw', [
+                'provider' => $provider, 'error' => $e->getMessage(),
+            ]);
+        }
+
+        $resolved = ! empty($profile['name']) || ! empty($profile['profile_pic']);
+
+        if (! $resolved) {
+            // Named explicitly, because the usual cause is a permission the
+            // app does not hold yet rather than anything wrong in our code —
+            // and the symptom ("no customer names") points nowhere useful.
+            Log::info('MetaChannels: no profile returned for sender', [
+                'provider' => $provider,
+                'hint'     => $provider === ChannelConnection::PROVIDER_INSTAGRAM
+                    ? 'needs instagram_business_manage_messages + the customer must have messaged this account'
+                    : 'needs pages_user_profile (Advanced Access) on the Page token',
+            ]);
+        }
+
+        Cache::put($key, $profile, $resolved ? now()->addDay() : now()->addMinutes(10));
+
+        return $profile;
     }
 
     private function handleMessages(array $value, string $phoneNumberId, ChannelConnection $conn): void

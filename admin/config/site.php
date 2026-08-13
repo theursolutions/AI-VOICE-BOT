@@ -159,6 +159,9 @@ return [
             ['loc' => '/terms',          'changefreq' => 'yearly',  'priority' => '0.3'],
             ['loc' => '/refund-policy',  'changefreq' => 'yearly',  'priority' => '0.3'],
             ['loc' => '/cookies',        'changefreq' => 'yearly',  'priority' => '0.3'],
+            // Indexed on purpose. Meta expects the deletion instructions to be
+            // publicly discoverable, not a URL known only to the reviewer.
+            ['loc' => '/data-deletion',  'changefreq' => 'yearly',  'priority' => '0.3'],
         ],
     ],
 

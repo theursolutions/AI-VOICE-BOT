@@ -57,6 +57,47 @@ return [
         ],
     ],
 
+    /**
+     * Instagram API with Instagram Login — a SEPARATE product from the
+     * Facebook-Login path above, not a variant of it.
+     *
+     * Meta ships two ways to do Instagram messaging and they share almost
+     * nothing:
+     *
+     *                     Facebook Login              Instagram Login
+     *   authorize on      facebook.com                instagram.com
+     *   exchange on       graph.facebook.com          api.instagram.com
+     *   call Graph on     graph.facebook.com          graph.instagram.com
+     *   credentials       META_APP_ID/SECRET          its own id/secret
+     *   scope names       instagram_manage_messages   instagram_business_*
+     *   requires          a linked Facebook Page      nothing
+     *
+     * The last row is why this exists: Instagram Login works for a business
+     * account with no Facebook Page attached, which is most of them.
+     *
+     * The credentials are NOT the Meta app id/secret. Find them under
+     * App dashboard → Instagram → API setup with Instagram login →
+     * "Instagram app ID" / "Instagram app secret".
+     */
+    'instagram' => [
+        'app_id'     => env('INSTAGRAM_APP_ID'),
+        'app_secret' => env('INSTAGRAM_APP_SECRET'),
+
+        'authorize_base' => env('INSTAGRAM_AUTHORIZE_BASE', 'https://www.instagram.com'),
+        'api_base'       => env('INSTAGRAM_API_BASE', 'https://api.instagram.com'),
+        'graph_base'     => env('INSTAGRAM_GRAPH_BASE', 'https://graph.instagram.com'),
+        'graph_version'  => env('INSTAGRAM_GRAPH_VERSION', env('META_GRAPH_VERSION', 'v21.0')),
+
+        // instagram_business_manage_comments is included because comment
+        // ingestion rides the same subscription; drop it from env if the app
+        // has not been approved for it, or consent will fail wholesale.
+        'scopes' => env('INSTAGRAM_SCOPES',
+            'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments'),
+
+        // Webhook fields subscribed per IG account after onboarding.
+        'webhook_fields' => env('INSTAGRAM_WEBHOOK_FIELDS', 'messages,messaging_postbacks'),
+    ],
+
     'whatsapp' => [
         'access_token'        => env('META_WHATSAPP_ACCESS_TOKEN'),
         'phone_number_id'     => env('META_WHATSAPP_PHONE_NUMBER_ID'),

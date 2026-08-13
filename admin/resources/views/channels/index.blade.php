@@ -135,11 +135,21 @@
 
     @if ($project)
     <div class="flex flex-wrap items-center gap-2 mb-4">
-        <div class="text-sm text-slate-500 mr-auto">Connect a platform — sign in with Facebook in a popup and pick what to link.</div>
+        @php
+            // Which Instagram path is live decides what we can honestly
+            // promise on the button: Instagram Login needs no Facebook Page,
+            // the older Facebook-Login path does.
+            $igDirect = (bool) config('meta.instagram.app_id') && (bool) config('meta.instagram.app_secret');
+        @endphp
+        <div class="text-sm text-slate-500 mr-auto">Connect a platform — sign in in a popup and pick what to link.</div>
         <button type="button" onclick="openConnect('facebook')" class="btn text-white" style="background:#1877f2;">
             <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('facebook', 16) !!}</span> Connect Facebook
         </button>
-        <button type="button" onclick="openConnect('instagram')" class="btn text-white" style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);">
+        <button type="button" onclick="openConnect('instagram')" class="btn text-white"
+                style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);"
+                title="{{ $igDirect
+                    ? 'Sign in with Instagram — no Facebook Page needed'
+                    : 'Signs in with Facebook; your Instagram account must be linked to a Facebook Page' }}">
             <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('instagram', 16) !!}</span> Connect Instagram
         </button>
         <button type="button" onclick="connectWhatsApp()" class="btn text-white" style="background:#25d366;">

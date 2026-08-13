@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\BotAgent;
 use App\Models\Client;
+use App\Models\ConversationStatus;
+use App\Models\Lead;
 use App\Models\Message;
 use App\Models\Project;
 use App\Models\Session;
@@ -14,6 +16,7 @@ use App\Services\Tenant\TenantManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 use Msd\MetaChannels\MetaManager;
@@ -29,6 +32,24 @@ use Msd\MetaChannels\Services\GraphClient;
 class ChatController extends Controller
 {
     private const META_CHANNELS = ['whatsapp', 'instagram', 'facebook', 'messenger'];
+
+    /**
+     * How much of Meta's 24h window counts as "expiring soon".
+     *
+     * Two hours because that is roughly the shortest notice on which a human
+     * can still realistically pick a conversation up and answer it — a
+     * shorter warning is just a nicer-looking way of telling you it is
+     * already too late.
+     */
+    private const EXPIRING_SOON_SECONDS = 2 * 3600;
+
+    /**
+     * How long Messenger/Instagram replies keep working after the 24h window,
+     * using Meta's HUMAN_AGENT tag: 7 days from the customer's last message.
+     *
+     * WhatsApp has no equivalent — there, closed is closed.
+     */
+    private const HUMAN_AGENT_WINDOW_SECONDS = 7 * 86400;
 
     public function __construct(
         private TenantManager $tenants,
@@ -54,29 +75,64 @@ class ChatController extends Controller
         $filter = $request->query('filter', 'all');     // all | mine | queue
         $mine = $this->myAgent($project);
 
+        // Everything the console can filter on, parsed once.
+        $f = $this->parseFilters($request);
+
+        // Facets are counted over the UNFILTERED set, deliberately. A count
+        // that shrank to zero as you narrowed would tell you nothing — the
+        // point of showing "Instagram 12" is to answer "is it worth clicking?"
+        // before you click. Selecting only scalar columns keeps this cheap:
+        // no per-session message lookups happen here.
+        $facetRows = Session::where('project_id', $project->id)
+            ->whereIn('channel', self::META_CHANNELS)
+            ->orderByDesc('last_activity_at')
+            ->limit(1000)
+            // conversation_status_id only when the tenant DB has it: naming a
+            // column that does not exist throws, and this feature must degrade
+            // rather than take the whole inbox down.
+            ->get(array_merge(
+                ['id', 'channel', 'channel_account', 'status', 'handoff_status',
+                 'assigned_agent_id', 'last_inbound_at', 'last_activity_at', 'metadata'],
+                ConversationStatus::available() ? ['conversation_status_id'] : [],
+            ));
+
         $q = Session::where('project_id', $project->id)
             ->whereIn('channel', self::META_CHANNELS)
             ->orderByDesc('last_activity_at');
+
         if ($filter === 'mine' && $mine) {
             $q->where('assigned_agent_id', $mine->id);
         } elseif ($filter === 'queue') {
             $q->where('handoff_status', 'queued');
         }
-        $sessions = $q->limit(200)->get();
+
+        $this->applyFilters($q, $f, $now);
+
+        // Fetched a little over the display cap because the read/unread test
+        // reads a JSON key, which is not portable to push into SQL — it is
+        // applied below, after the rows are in memory.
+        $sessions = $q->limit(300)->get()
+            ->filter(fn (Session $s) => $this->matchesReadState($s, $f['read']))
+            ->filter(fn (Session $s) => ! $f['needs'] || data_get($s->metadata, 'meta.needs_human'))
+            ->take(200)
+            ->values();
 
         // Resolve assigned agent names in one query.
         $agentNames = BotAgent::whereIn('id', $sessions->pluck('assigned_agent_id')->filter()->unique())
             ->pluck('name', 'id');
 
-        $out = $sessions->map(function (Session $s) use ($now, $agentNames, $mine) {
+        // Statuses keyed by id, so each row's pill costs no extra query.
+        $statuses = collect($this->statusList($project))->keyBy('id');
+
+        $out = $sessions->map(function (Session $s) use ($now, $agentNames, $mine, $statuses) {
             $last = Message::where('session_id', $s->id)->orderByDesc('id')->first(['role', 'content', 'created_at']);
             $meta = (array) data_get($s->metadata, 'meta', []);
             return [
                 'id'              => $s->id,
                 'channel'         => $s->channel,
                 'channel_account' => $s->channel_account,
-                'name'            => $s->customer_name ?: $s->external_id,
-                'avatar'          => $meta['profile_pic'] ?? null,
+                'name'            => $this->contactName($s),
+                'avatar'          => $this->avatarUrl($meta),
                 'profile_url'     => $this->profileUrl($s, $meta),
                 'last_message'    => $this->preview($last),
                 'last_at'         => $s->last_activity_at,
@@ -93,13 +149,784 @@ class ChatController extends Controller
                 'handoff'         => $s->handoff_status ?: 'bot',
                 'assigned_to'     => $s->assigned_agent_id ? ($agentNames[$s->assigned_agent_id] ?? 'Agent') : null,
                 'mine'            => $mine && (int) $s->assigned_agent_id === (int) $mine->id,
+                'state'           => $this->conversationState($s, $now),
+                'kind'            => $this->conversationKind($s),
+                // Who is on this right now — the AI, or a named person.
+                'handler'         => $this->handlerFor($s, $agentNames),
+                // The customer asked for a person and none has replied yet.
+                'needs_human'     => (bool) ($meta['needs_human'] ?? false),
+                'status'          => $statuses[$s->getAttribute('conversation_status_id')] ?? null,
             ];
         })->values();
 
         return response()->json([
             'conversations' => $out,
             'me'            => $mine ? ['id' => $mine->id, 'presence' => $mine->presence] : null,
+            'facets'        => $this->facets($facetRows, $mine, $now),
+            'accounts'      => $this->accountOptions($project),
+            // The full list, not just the statuses in view — the filter has to
+            // offer one the current results do not contain, or it can never be
+            // used to find them.
+            'statuses'      => $statuses->values()->all(),
         ]);
+    }
+
+    /**
+     * Who is handling this conversation.
+     *
+     * The distinction the inbox needs is "is a PERSON on this?", which the
+     * columns only answer together: `handoff_status` says whether a handoff
+     * happened, `assigned_agent_id` says to whom, and a queued conversation
+     * has neither a person nor the bot — the customer is simply waiting.
+     *
+     * @param \Illuminate\Support\Collection $agentNames id => name
+     * @return array{type:string, name:string}
+     */
+    private function handlerFor(Session $s, $agentNames): array
+    {
+        if ($s->handoff_status === 'assigned' && $s->assigned_agent_id) {
+            return ['type' => 'agent', 'name' => $agentNames[$s->assigned_agent_id] ?? 'Agent'];
+        }
+        if ($s->handoff_status === 'queued') {
+            return ['type' => 'queued', 'name' => 'Waiting for an agent'];
+        }
+        if ($s->handoff_status === 'resolved') {
+            return ['type' => 'resolved', 'name' => 'Resolved'];
+        }
+
+        // Bot paused with nobody assigned means a person took it over ad hoc
+        // (an owner replying directly) — claiming the AI is handling it would
+        // be wrong.
+        if (data_get($s->metadata, 'meta.bot_paused')) {
+            return ['type' => 'human', 'name' => 'Handled by a person'];
+        }
+
+        return ['type' => 'bot', 'name' => 'AI agent'];
+    }
+
+    // ── Who is looking, and what may they do ─────────────────────────
+
+    /**
+     * Is the signed-in user the workspace owner?
+     *
+     * The owner is not necessarily a human AGENT — they hold seats for a team
+     * rather than taking chats themselves. So every "can I do this?" check
+     * here is `agent OR owner`, not `agent`: the person who pays for the
+     * workspace being locked out of its inbox is not a defensible default.
+     */
+    private function isOwner(Client $client): bool
+    {
+        return (bool) auth()->user()?->isOwnerOf($client->id);
+    }
+
+    /**
+     * Whether a free-form reply is possible right now, and if not, why.
+     *
+     * Computed server-side deliberately. Meta's rules differ per channel and
+     * change; duplicating them in JavaScript guarantees the two drift, and the
+     * failure mode is a composer that looks usable and then throws a 409 after
+     * the agent has typed a paragraph.
+     *
+     *   whatsapp     24h. Closed means closed — only an approved template
+     *                reopens it.
+     *   messenger/ig 24h free-form, then the HUMAN_AGENT tag extends replies
+     *                to 7 DAYS from the customer's last message. Past 7 days
+     *                nothing will send.
+     *
+     * @return array{allowed:bool, mode:string, reason:?string, expires_at:?int}
+     */
+    private function replyPolicy(Session $session): array
+    {
+        $open = $this->meta->serviceWindowOpen($session->last_inbound_at);
+        $last = (int) ($session->last_inbound_at ?? 0);
+
+        if ($open) {
+            return [
+                'allowed'    => true,
+                'mode'       => 'free',
+                'reason'     => null,
+                'expires_at' => $this->meta->serviceWindowExpiresAt($session->last_inbound_at),
+            ];
+        }
+
+        if (in_array($session->channel, ['facebook', 'messenger', 'instagram'], true)) {
+            $humanAgentUntil = $last > 0 ? $last + self::HUMAN_AGENT_WINDOW_SECONDS : 0;
+
+            if ($humanAgentUntil > time()) {
+                return [
+                    'allowed'    => true,
+                    'mode'       => 'human_agent',
+                    'reason'     => 'The 24-hour window closed. Replies are still delivered under Meta’s human-agent allowance, which runs out 7 days after the customer’s last message.',
+                    'expires_at' => $humanAgentUntil,
+                ];
+            }
+
+            return [
+                'allowed'    => false,
+                'mode'       => 'blocked',
+                'reason'     => 'More than 7 days since the customer last wrote. Meta will not deliver any reply until they message again.',
+                'expires_at' => null,
+            ];
+        }
+
+        return [
+            'allowed'    => false,
+            'mode'       => 'template',
+            'reason'     => 'The 24-hour window closed. Send an approved template to reopen the conversation.',
+            'expires_at' => null,
+        ];
+    }
+
+    // ── Transfer ─────────────────────────────────────────────────────
+
+    /**
+     * Human agents this conversation can be handed to.
+     *
+     * Includes the current assignee so the menu shows where it is now, and
+     * carries each agent's presence and current load — handing a chat to
+     * someone offline with six open threads is the mistake this data exists
+     * to prevent.
+     */
+    private function agentOptions(Project $project, Session $session): array
+    {
+        $agents = BotAgent::where('project_id', $project->id)
+            ->where('type', BotAgent::TYPE_HUMAN)
+            ->orderBy('name')
+            ->get(['id', 'name', 'presence', 'max_active_chats', 'user_id']);
+
+        if ($agents->isEmpty()) {
+            return [];
+        }
+
+        $load = Session::where('project_id', $project->id)
+            ->whereIn('assigned_agent_id', $agents->pluck('id'))
+            ->where('handoff_status', 'assigned')
+            ->selectRaw('assigned_agent_id, COUNT(*) as n')
+            ->groupBy('assigned_agent_id')
+            ->pluck('n', 'assigned_agent_id');
+
+        return $agents->map(fn (BotAgent $a) => [
+            'id'       => (int) $a->id,
+            'name'     => $a->name,
+            'presence' => $a->presence,
+            'load'     => (int) ($load[$a->id] ?? 0),
+            'max'      => $a->max_active_chats ? (int) $a->max_active_chats : null,
+            'current'  => (int) $session->assigned_agent_id === (int) $a->id,
+            'me'       => (int) $a->user_id === (int) auth()->id(),
+        ])->values()->all();
+    }
+
+    /**
+     * Hand a conversation to another agent (or back to the AI with a null id).
+     *
+     * Allowed for any human agent on the project and for the owner. A note is
+     * written into the thread itself, not just the session row: "who had this
+     * before me and why" is the first question on picking up a transferred
+     * chat, and a silently-reassigned conversation cannot answer it.
+     */
+    public function transfer(Request $request, Client $client, int $sessionId): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'agent'      => 'nullable|integer',
+            'note'       => 'nullable|string|max:280',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+        $session = $this->session($project, $sessionId);
+
+        $mine  = $this->myAgent($project);
+        $owner = $this->isOwner($client);
+
+        if (! $mine && ! $owner) {
+            return response()->json([
+                'error'   => 'not_permitted',
+                'message' => 'Only a human agent on this project, or the workspace owner, can transfer a conversation.',
+            ], 403);
+        }
+
+        $fromAgent = $session->assigned_agent_id ? BotAgent::find($session->assigned_agent_id) : null;
+        $from = $fromAgent
+            ? ['type' => 'agent', 'name' => $fromAgent->name]
+            : ['type' => 'bot', 'name' => 'AI agent'];
+
+        // Null means hand it back to the bot — the honest way to undo a
+        // transfer, and the only route back for an owner who picked it up.
+        if (empty($data['agent'])) {
+            $session->assigned_agent_id = null;
+            $session->handoff_status    = 'bot';
+            $to = ['type' => 'bot', 'name' => 'AI agent'];
+        } else {
+            $target = BotAgent::where('project_id', $project->id)
+                ->where('type', BotAgent::TYPE_HUMAN)
+                ->find((int) $data['agent']);
+
+            if (! $target) {
+                return response()->json(['error' => 'unknown_agent', 'message' => 'That agent is not on this project.'], 422);
+            }
+
+            $session->assigned_agent_id = $target->id;
+            $session->handoff_status    = 'assigned';
+            $to = ['type' => 'agent', 'name' => $target->name];
+        }
+
+        $session->update_at = time();
+        $session->save();
+
+        // Pause the bot when a human owns it; resume when handed back.
+        $this->mergeMeta($session, ['bot_paused' => ! empty($data['agent'])]);
+
+        $by = $mine?->name ?: (auth()->user()->name ?? 'the owner');
+
+        // Structured, not a sentence. The thread renders this as a separator
+        // with an avatar for a person and a glyph for the AI, which it can only
+        // do if the participants survive as data rather than being flattened
+        // into prose the front end would have to parse back out.
+        $this->systemNote($session, "Transferred from {$from['name']} to {$to['name']} by {$by}", [
+            'event' => 'transfer',
+            'from'  => $from,
+            'to'    => $to,
+            'by'    => $by,
+            'note'  => $data['note'] ?? null,
+        ]);
+
+        return response()->json(['ok' => true, 'assigned_to' => $to['name']]);
+    }
+
+    /**
+     * An internal note in the thread.
+     *
+     * Stored with role `system`, which the send path never touches, so it is
+     * visible to staff and never delivered to the customer.
+     */
+    /**
+     * How to label an outbound message.
+     *
+     * Owner-without-a-seat is the case that needs its own label: they are
+     * replying as the business, not as a rostered agent, and the team should
+     * be able to see that at a glance in the thread. An owner who IS also an
+     * agent is just an agent.
+     */
+    private function outboundAuthor(Session $session): string
+    {
+        $client = request()->route('client');
+        $clientId = $client instanceof Client ? $client->id : null;
+
+        if ($clientId && auth()->user()?->isOwnerOf($clientId)
+            && ! BotAgent::where('project_id', $session->project_id)
+                ->where('type', BotAgent::TYPE_HUMAN)
+                ->where('user_id', auth()->id())->exists()) {
+            return 'owner';
+        }
+
+        return 'agent';
+    }
+
+    private function systemNote(Session $session, string $text, array $extra = []): Message
+    {
+        return Message::create([
+            'session_id' => $session->id,
+            'project_id' => $session->project_id,
+            'role'       => 'system',
+            // `content` is the fallback wording, used if the front end does not
+            // recognise the event — a note that renders as nothing would be
+            // worse than one that renders plainly.
+            'content'    => $text,
+            'metadata'   => array_filter(['author' => 'system', 'internal' => true] + $extra),
+            'created_at' => time(),
+        ]);
+    }
+
+    // ── Conversation status (customer-defined) ───────────────────────
+
+    /** @return array<int,array{id:int,name:string,color:string,is_closing:bool}> */
+    private function statusList(Project $project): array
+    {
+        return ConversationStatus::forProject($project->id)
+            ->map(fn (ConversationStatus $s) => [
+                'id'         => (int) $s->id,
+                'name'       => $s->name,
+                'color'      => $s->color,
+                'is_closing' => (bool) $s->is_closing,
+            ])->values()->all();
+    }
+
+    /** Set (or clear, with a null id) the status on one conversation. */
+    public function setStatus(Request $request, Client $client, int $sessionId): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'status'     => 'nullable|integer',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+        $session = $this->session($project, $sessionId);
+
+        if (! ConversationStatus::available()) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'Conversation statuses need a database update on this workspace. Run: php artisan tenant:migrate',
+            ], 422);
+        }
+
+        $status = null;
+        if (! empty($data['status'])) {
+            // Scoped to the project: a status id from another workspace must
+            // not be settable by editing the request.
+            $status = ConversationStatus::where('project_id', $project->id)
+                ->where('id', (int) $data['status'])->active()->first();
+
+            if (! $status) {
+                return response()->json(['ok' => false, 'message' => 'Unknown status.'], 422);
+            }
+        }
+
+        $session->conversation_status_id = $status?->id;
+
+        // A closing status ends the conversation for real, rather than just
+        // colouring a chip — otherwise "Resolved" would leave the thread in
+        // the open queue and the label would be a lie.
+        if ($status?->is_closing) {
+            $session->handoff_status = 'resolved';
+        } elseif ($session->handoff_status === 'resolved') {
+            // Moving off a closing status reopens it, so a mis-click is one
+            // click to undo.
+            $session->handoff_status = 'bot';
+        }
+        $session->update_at = time();
+        $session->save();
+
+        return response()->json(['ok' => true, 'status_id' => $status?->id]);
+    }
+
+    /** List / create / update / delete the project's statuses. */
+    public function statuses(Request $request, Client $client): JsonResponse
+    {
+        $project = $this->guard($client, (int) $request->query('project_id'));
+
+        return response()->json(['statuses' => $this->statusList($project)]);
+    }
+
+    public function storeStatus(Request $request, Client $client): JsonResponse
+    {
+        $data = $this->validateStatus($request);
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        $status = ConversationStatus::create([
+            'project_id' => $project->id,
+            'name'       => $data['name'],
+            'color'      => $this->safeColor($data['color'] ?? null),
+            'is_closing' => (bool) ($data['is_closing'] ?? false),
+            'is_default' => (bool) ($data['is_default'] ?? false),
+            'sort_order' => (int) ConversationStatus::where('project_id', $project->id)->max('sort_order') + 1,
+            'status'     => ConversationStatus::STATUS_ACTIVE,
+            'created_at' => time(),
+        ]);
+
+        if ($status->is_default) {
+            $status->makeSoleDefault();
+        }
+
+        return response()->json(['ok' => true, 'statuses' => $this->statusList($project)]);
+    }
+
+    public function updateStatus(Request $request, Client $client, int $id): JsonResponse
+    {
+        $data = $this->validateStatus($request);
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        $status = ConversationStatus::where('project_id', $project->id)->where('id', $id)->firstOrFail();
+        $status->fill([
+            'name'       => $data['name'],
+            'color'      => $this->safeColor($data['color'] ?? null),
+            'is_closing' => (bool) ($data['is_closing'] ?? false),
+            'is_default' => (bool) ($data['is_default'] ?? false),
+        ]);
+        $status->update_at = time();
+        $status->save();
+
+        if ($status->is_default) {
+            $status->makeSoleDefault();
+        }
+
+        return response()->json(['ok' => true, 'statuses' => $this->statusList($project)]);
+    }
+
+    /**
+     * Archive a status.
+     *
+     * Archived, not deleted: conversations already carrying it would
+     * otherwise point at nothing, and their history would silently lose the
+     * label someone deliberately applied. Conversations keep the status; it
+     * just stops being offered for new ones.
+     */
+    public function destroyStatus(Request $request, Client $client, int $id): JsonResponse
+    {
+        $project = $this->guard($client, (int) $request->input('project_id'));
+
+        $status = ConversationStatus::where('project_id', $project->id)->where('id', $id)->firstOrFail();
+        $status->status = ConversationStatus::STATUS_ARCHIVED;
+        $status->update_at = time();
+        $status->save();
+
+        return response()->json(['ok' => true, 'statuses' => $this->statusList($project)]);
+    }
+
+    private function validateStatus(Request $request): array
+    {
+        return $request->validate([
+            'project_id' => 'required|integer',
+            'name'       => 'required|string|max:60',
+            'color'      => 'nullable|string|max:9',
+            'is_closing' => 'nullable|boolean',
+            'is_default' => 'nullable|boolean',
+        ]);
+    }
+
+    /** Only palette colours, so a status can never be styled invisible. */
+    private function safeColor(?string $color): string
+    {
+        return in_array($color, ConversationStatus::PALETTE, true)
+            ? $color
+            : ConversationStatus::PALETTE[0];
+    }
+
+    // ── Header metrics ───────────────────────────────────────────────
+
+    /**
+     * The four numbers worth putting in a conversation header.
+     *
+     * Chosen because each one changes what the agent does next:
+     *
+     *   window_expires_at   how long until a free-form reply becomes
+     *                       impossible — the only hard deadline in the inbox
+     *   started_at          how long this has been going on
+     *   first_response      how fast the first answer was, the metric a
+     *                       customer actually feels
+     *   conversion_rate     project-wide leads → converted, the same figure
+     *                       the dashboard reports, for context on whether
+     *                       this inbox is working
+     */
+    private function conversationMetrics(Session $session, Project $project): array
+    {
+        return [
+            'started_at'        => $session->started_at ? (int) $session->started_at : null,
+            'window_expires_at' => $this->meta->serviceWindowExpiresAt($session->last_inbound_at),
+            'window_seconds'    => MetaManager::SERVICE_WINDOW_SECONDS,
+            'first_response'    => $this->firstResponseSeconds($session),
+            'lead'              => $this->leadSummary($session),
+            'conversion_rate'   => $this->conversionRate($project),
+        ];
+    }
+
+    /**
+     * Seconds between the customer's first message and our first reply.
+     *
+     * Measured from the FIRST inbound, not the most recent, because this is a
+     * fixed historical fact about the conversation — recomputing it against
+     * the latest message would make a number that is supposed to be a record
+     * drift every time anyone spoke.
+     *
+     * Counts the bot's reply as a response, because from the customer's side
+     * it is one.
+     */
+    private function firstResponseSeconds(Session $session): ?int
+    {
+        $firstInbound = Message::where('session_id', $session->id)
+            ->where('role', 'user')->orderBy('id')->value('created_at');
+
+        if (! $firstInbound) {
+            return null;
+        }
+
+        $firstReply = Message::where('session_id', $session->id)
+            ->where('role', 'assistant')
+            ->where('created_at', '>=', $firstInbound)
+            ->orderBy('id')->value('created_at');
+
+        return $firstReply ? max(0, (int) $firstReply - (int) $firstInbound) : null;
+    }
+
+    /** The lead this conversation produced, if any. */
+    private function leadSummary(Session $session): ?array
+    {
+        $lead = Lead::where('session_id', $session->id)->orderByDesc('id')->first(['id', 'status', 'confidence']);
+
+        return $lead ? [
+            'status'     => $lead->status,
+            'confidence' => $lead->confidence !== null ? (int) round($lead->confidence * 100) : null,
+        ] : null;
+    }
+
+    /**
+     * Project-wide leads → converted, as a percentage.
+     *
+     * Deliberately the SAME formula the workspace dashboard uses
+     * (HomeController: converted / all leads), so the two cannot disagree —
+     * a header quoting a different success rate than the dashboard would
+     * make both untrustworthy.
+     *
+     * Cached briefly: it is identical for every conversation in the project,
+     * and it would otherwise run two COUNTs on every thread open.
+     */
+    private function conversionRate(Project $project): ?int
+    {
+        return Cache::remember("chat:convrate:{$project->id}", now()->addMinutes(5), function () use ($project) {
+            $total = Lead::where('project_id', $project->id)->count();
+            if ($total === 0) {
+                return null;   // no leads yet — 0% would imply failure
+            }
+            $converted = Lead::where('project_id', $project->id)->where('status', 'converted')->count();
+
+            return (int) round($converted / $total * 100);
+        });
+    }
+
+    // ── Filtering ────────────────────────────────────────────────────
+
+    /**
+     * Read the filter state off the query string.
+     *
+     * Everything is multi-select except `read` and `date`, which are
+     * genuinely exclusive — a conversation cannot be both read and unread,
+     * and overlapping date ranges would just mean the wider one.
+     *
+     * @return array{read:?string, date:?string, states:array, channels:array, accounts:array, kinds:array}
+     */
+    private function parseFilters(Request $request): array
+    {
+        $list = fn (string $key) => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) $request->query($key, '')),
+        )));
+
+        return [
+            'read'     => in_array($request->query('read'), ['read', 'unread'], true) ? $request->query('read') : null,
+            'date'     => in_array($request->query('date'), ['today', '7d', '30d'], true) ? $request->query('date') : null,
+            'states'   => array_intersect($list('states'), ['active', 'expiring', 'expired', 'closed']),
+            'channels' => array_intersect($list('channels'), self::META_CHANNELS),
+            'accounts' => $list('accounts'),
+            'kinds'    => array_intersect($list('kinds'), ['dm', 'comment']),
+            'handlers' => array_intersect($list('handlers'), ['bot', 'agent', 'queued']),
+            'statuses' => array_values(array_filter(array_map('intval', $list('conv_statuses')))),
+            // Applied in PHP alongside read/unread: it lives in the metadata
+            // JSON for the same portability reason.
+            'needs'    => $request->query('needs_human') === '1',
+        ];
+    }
+
+    /** Push everything that can be expressed in SQL into the query. */
+    private function applyFilters($q, array $f, int $now): void
+    {
+        if ($f['channels']) {
+            // Messenger and Facebook are one channel to a human. Selecting
+            // "Facebook" must match both spellings or half the inbox vanishes.
+            $channels = $f['channels'];
+            if (in_array('facebook', $channels, true)) {
+                $channels[] = 'messenger';
+            }
+            $q->whereIn('channel', array_unique($channels));
+        }
+
+        if ($f['accounts']) {
+            $q->whereIn('channel_account', $f['accounts']);
+        }
+
+        if ($f['statuses'] && ConversationStatus::available()) {
+            $q->whereIn('conversation_status_id', $f['statuses']);
+        }
+
+        if ($f['handlers']) {
+            $q->where(function ($outer) use ($f) {
+                foreach ($f['handlers'] as $handler) {
+                    $outer->orWhere(function ($w) use ($handler) {
+                        match ($handler) {
+                            'agent'  => $w->where('handoff_status', 'assigned')->whereNotNull('assigned_agent_id'),
+                            'queued' => $w->where('handoff_status', 'queued'),
+                            // The AI is only really handling it when no handoff
+                            // has happened at all.
+                            default  => $w->whereIn('handoff_status', ['bot', ''])->orWhereNull('handoff_status'),
+                        };
+                    });
+                }
+            });
+        }
+
+        if ($f['date']) {
+            $q->where('last_activity_at', '>=', match ($f['date']) {
+                'today' => now()->startOfDay()->getTimestamp(),
+                '7d'    => now()->subDays(7)->getTimestamp(),
+                default => now()->subDays(30)->getTimestamp(),
+            });
+        }
+
+        if ($f['states']) {
+            $windowOpensAfter = $now - MetaManager::SERVICE_WINDOW_SECONDS;
+            $soonThreshold    = $now - MetaManager::SERVICE_WINDOW_SECONDS + self::EXPIRING_SOON_SECONDS;
+
+            $q->where(function ($outer) use ($f, $windowOpensAfter, $soonThreshold) {
+                foreach ($f['states'] as $state) {
+                    $outer->orWhere(function ($w) use ($state, $windowOpensAfter, $soonThreshold) {
+                        match ($state) {
+                            // Closed is decided by us, not by Meta's clock, so
+                            // it is checked first and independently — a resolved
+                            // conversation is closed whether or not its reply
+                            // window happens to still be open.
+                            'closed'   => $w->where(fn ($x) => $x->where('status', '!=', 'active')
+                                                                 ->orWhere('handoff_status', 'resolved')),
+                            'expiring' => $w->where('status', 'active')->where('handoff_status', '!=', 'resolved')
+                                            ->where('last_inbound_at', '>', $windowOpensAfter)
+                                            ->where('last_inbound_at', '<=', $soonThreshold),
+                            'expired'  => $w->where('status', 'active')->where('handoff_status', '!=', 'resolved')
+                                            ->where(fn ($x) => $x->whereNull('last_inbound_at')
+                                                                 ->orWhere('last_inbound_at', '<=', $windowOpensAfter)),
+                            default    => $w->where('status', 'active')->where('handoff_status', '!=', 'resolved')
+                                            ->where('last_inbound_at', '>', $soonThreshold),
+                        };
+                    });
+                }
+            });
+        }
+    }
+
+    /**
+     * Read/unread, applied in PHP.
+     *
+     * "Unread" means the customer has said something since the last time an
+     * agent opened the thread — `read_at` lives in the metadata JSON, and
+     * MySQL and SQLite disagree enough on JSON path syntax that pushing this
+     * into SQL would break the test suite against one of them.
+     */
+    private function matchesReadState(Session $s, ?string $want): bool
+    {
+        if (! $want) {
+            return true;
+        }
+        $unread = (int) ($s->last_inbound_at ?? 0) > (int) data_get($s->metadata, 'meta.read_at', 0);
+
+        return $want === 'unread' ? $unread : ! $unread;
+    }
+
+    /**
+     * Where a conversation stands, as one word an agent can act on.
+     *
+     *   active    the customer wrote recently; reply freely
+     *   expiring  under EXPIRING_SOON_SECONDS of the 24h window left — the
+     *             one state worth interrupting someone for, because after it
+     *             passes a free reply is no longer possible
+     *   expired   window shut; only an approved template will reopen it
+     *   closed    resolved or ended on our side
+     */
+    private function conversationState(Session $s, int $now): string
+    {
+        if ($s->status !== 'active' || $s->handoff_status === 'resolved') {
+            return 'closed';
+        }
+        if (! $this->meta->serviceWindowOpen($s->last_inbound_at, $now)) {
+            return 'expired';
+        }
+
+        return ($this->meta->serviceWindowExpiresAt($s->last_inbound_at) - $now) <= self::EXPIRING_SOON_SECONDS
+            ? 'expiring'
+            : 'active';
+    }
+
+    /**
+     * A direct message or a comment on a post.
+     *
+     * NOTE: nothing sets `comment` yet — the `feed` webhook field is neither
+     * subscribed nor handled, so no comment ever reaches the inbox. The
+     * filter is wired end to end so it works the day ingestion lands; until
+     * then selecting it correctly returns nothing rather than silently
+     * showing DMs.
+     */
+    private function conversationKind(Session $s): string
+    {
+        return data_get($s->metadata, 'meta.kind') === 'comment' ? 'comment' : 'dm';
+    }
+
+    /**
+     * How many conversations sit in each bucket.
+     *
+     * @param \Illuminate\Support\Collection<int,Session> $rows
+     */
+    private function facets($rows, $mine, int $now): array
+    {
+        $counts = [
+            'all' => $rows->count(), 'mine' => 0, 'queue' => 0,
+            'unread' => 0, 'read' => 0, 'needs_reply' => 0, 'needs_human' => 0,
+            'states' => ['active' => 0, 'expiring' => 0, 'expired' => 0, 'closed' => 0],
+            'channels' => [], 'accounts' => [], 'kinds' => ['dm' => 0, 'comment' => 0],
+            'handlers' => ['bot' => 0, 'agent' => 0, 'queued' => 0],
+            'statuses' => [],
+        ];
+
+        foreach ($rows as $s) {
+            if (data_get($s->metadata, 'meta.needs_human')) {
+                $counts['needs_human']++;
+            }
+
+            $handler = $this->handlerFor($s, collect())['type'];
+            if (isset($counts['handlers'][$handler])) {
+                $counts['handlers'][$handler]++;
+            }
+
+            if ($sid = $s->getAttribute('conversation_status_id')) {
+                $counts['statuses'][$sid] = ($counts['statuses'][$sid] ?? 0) + 1;
+            }
+
+            $unread = (int) ($s->last_inbound_at ?? 0) > (int) data_get($s->metadata, 'meta.read_at', 0);
+            $state  = $this->conversationState($s, $now);
+
+            $counts[$unread ? 'unread' : 'read']++;
+            $counts['states'][$state]++;
+
+            // The headline number: a customer is waiting AND we can still
+            // answer without a template. That is the queue that actually
+            // costs money to ignore.
+            if ($unread && in_array($state, ['active', 'expiring'], true)) {
+                $counts['needs_reply']++;
+            }
+
+            if ($mine && (int) $s->assigned_agent_id === (int) $mine->id) {
+                $counts['mine']++;
+            }
+            if ($s->handoff_status === 'queued') {
+                $counts['queue']++;
+            }
+
+            $channel = $s->channel === 'messenger' ? 'facebook' : $s->channel;
+            $counts['channels'][$channel] = ($counts['channels'][$channel] ?? 0) + 1;
+
+            $account = (string) $s->channel_account;
+            if ($account !== '') {
+                $counts['accounts'][$account] = ($counts['accounts'][$account] ?? 0) + 1;
+            }
+
+            $counts['kinds'][$this->conversationKind($s)]++;
+        }
+
+        return $counts;
+    }
+
+    /**
+     * The Pages / numbers this project has connected, for the account filter.
+     *
+     * Named, never raw ids: "The UR Solutions" is a choice someone can make;
+     * "102938…" is not.
+     */
+    private function accountOptions(Project $project): array
+    {
+        return ChannelConnection::where('project_id', $project->id)
+            ->orderBy('provider')
+            ->get(['provider', 'external_id', 'name', 'metadata'])
+            ->map(fn (ChannelConnection $c) => [
+                'id'      => (string) $c->external_id,
+                'name'    => $c->name ?: data_get($c->metadata, 'display_phone_number') ?: 'Channel',
+                'channel' => $c->provider === 'facebook_page' ? 'facebook' : $c->provider,
+            ])
+            ->values()
+            ->all();
     }
 
     /** JSON thread + mark read. */
@@ -126,11 +953,19 @@ class ChatController extends Controller
             'handoff'        => $session->handoff_status ?: 'bot',
             'assigned_to'    => $session->assigned_agent_id ? (BotAgent::find($session->assigned_agent_id)->name ?? 'Agent') : null,
             'is_human_agent' => (bool) $this->myAgent($project),
+            'is_owner'       => $this->isOwner($client),
+            'reply_policy'   => $this->replyPolicy($session),
+            'agents'         => $this->agentOptions($project, $session),
+            'statuses'       => $this->statusList($project),
+            // Guarded because the column may not exist on a tenant DB whose
+            // migrations have not caught up — reading a missing attribute is
+            // safe, but being explicit documents that this can be absent.
+            'status_id'      => ($sid = $session->getAttribute('conversation_status_id')) ? (int) $sid : null,
+            'metrics'        => $this->conversationMetrics($session, $project),
             'contact'        => [
-                'name'        => $session->customer_name ?: $session->external_id,
+                'name'        => $this->contactName($session),
                 'channel'     => $session->channel,
-                'account'     => $session->channel_account,
-                'avatar'      => data_get($session->metadata, 'meta.profile_pic'),
+                'avatar'      => $this->avatarUrl((array) data_get($session->metadata, 'meta', [])),
                 'profile_url' => $this->profileUrl($session, (array) data_get($session->metadata, 'meta', [])),
                 // Which of your Pages/numbers this conversation arrived on.
                 // With several connected channels, "who is this?" is only half
@@ -173,17 +1008,24 @@ class ChatController extends Controller
             }
         }
 
-        $graph = new GraphClient($conn->access_token ?: null);
+        $graph = GraphClient::forConnection($conn);
         $open  = $this->meta->serviceWindowOpen($session->last_inbound_at);
         $to    = $session->external_id;
 
+        // One gate for every channel, from the same rules the UI renders — so
+        // a disabled composer and a rejected send can never disagree. Blocks
+        // WhatsApp past 24h AND Messenger/Instagram past the 7-day
+        // human-agent allowance, which previously reached Meta and came back
+        // as an opaque "Meta rejected the message".
+        $policy = $this->replyPolicy($session);
+        if (! $policy['allowed']) {
+            return response()->json([
+                'error'   => $policy['mode'] === 'template' ? 'window_expired' : 'window_blocked',
+                'message' => $policy['reason'],
+            ], 409);
+        }
+
         if ($provider === ChannelConnection::PROVIDER_WHATSAPP) {
-            if (!$open) {
-                return response()->json([
-                    'error'   => 'window_expired',
-                    'message' => 'The 24-hour window has closed. Send an approved template to re-open the chat.',
-                ], 409);
-            }
             $wamid = $graph->sendText($session->channel_account, $to, $data['text'], $contextWamid);
         } else {
             // Messenger/IG: outside 24h the HUMAN_AGENT tag extends to 7 days.
@@ -252,7 +1094,7 @@ class ChatController extends Controller
         $file = $request->file('file');
         $mime = $file->getMimeType() ?: 'application/octet-stream';
         $type = $this->mediaType($mime);
-        $graph = new GraphClient($conn->access_token ?: null);
+        $graph = GraphClient::forConnection($conn);
 
         $bytes    = $file->get();
         $filename = $file->getClientOriginalName() ?: 'file';
@@ -340,7 +1182,7 @@ class ChatController extends Controller
                 'parameters' => array_map(fn ($p) => ['type' => 'text', 'text' => (string) $p], $data['params']),
             ];
         }
-        $ok = (new GraphClient($conn->access_token ?: null))->sendTemplate(
+        $ok = GraphClient::forConnection($conn)->sendTemplate(
             $session->channel_account, $session->external_id, $data['template'], $data['language'] ?? 'en_US', $components,
         );
         if (!$ok) {
@@ -369,7 +1211,7 @@ class ChatController extends Controller
         if (!$this->meta->serviceWindowOpen($session->last_inbound_at)) {
             return response()->json(['error' => 'window_expired'], 409);
         }
-        $ok = (new GraphClient($conn->access_token ?: null))->sendInteractiveButtons(
+        $ok = GraphClient::forConnection($conn)->sendInteractiveButtons(
             $session->channel_account, $session->external_id, $data['body'], $data['buttons'],
         );
         if (!$ok) {
@@ -393,7 +1235,7 @@ class ChatController extends Controller
             return response()->json(['templates' => [], 'note' => 'No WABA id on this channel — add it on the Channels page to list templates.']);
         }
 
-        $raw = (new GraphClient($conn->access_token ?: null))->listTemplates((string) $waba);
+        $raw = GraphClient::forConnection($conn)->listTemplates((string) $waba);
         $templates = collect($raw)
             ->filter(fn ($t) => ($t['status'] ?? '') === 'APPROVED')
             ->map(fn ($t) => [
@@ -426,7 +1268,7 @@ class ChatController extends Controller
         if (!$this->meta->serviceWindowOpen($session->last_inbound_at)) {
             return response()->json(['error' => 'window_expired'], 409);
         }
-        $ok = (new GraphClient($conn->access_token ?: null))->sendFlow(
+        $ok = GraphClient::forConnection($conn)->sendFlow(
             $session->channel_account, $session->external_id,
             $data['flow_id'], $data['cta'], $data['body'],
             'sess' . $session->id, $data['screen'] ?? null, $data['header'] ?? null,
@@ -459,7 +1301,7 @@ class ChatController extends Controller
             return response()->json(['error' => 'window_expired'], 409);
         }
 
-        $graph = new GraphClient($conn->access_token ?: null);
+        $graph = GraphClient::forConnection($conn);
         $ids = array_values($data['retailer_ids']);
         if (count($ids) === 1) {
             $ok = $graph->sendProduct($session->channel_account, $session->external_id, $data['catalog_id'], $ids[0], $data['body'] ?? null);
@@ -624,7 +1466,12 @@ class ChatController extends Controller
             'role'       => 'assistant',
             'content'    => $content !== '' ? $content : null,
             'metadata'   => array_filter([
-                'author'      => 'agent',
+                // 'owner' when the workspace owner replies without holding an
+                // agent seat. The distinction is worth recording: the team
+                // needs to know the boss answered this one, and "agent" for
+                // someone who is not on the roster would be misleading.
+                'author'      => $this->outboundAuthor($session),
+                'author_name' => auth()->user()->name ?? null,
                 'attachments' => $attachments ?: null,
                 'wamid'       => $wamid,
                 'reply_to'    => $replyTo,
@@ -634,16 +1481,43 @@ class ChatController extends Controller
         $session->last_activity_at = $now;
         $session->update_at = $now;
         $session->save();
+
+        // A real person has now answered, so the "needs a human" flag has done
+        // its job. Cleared here rather than on assignment: being assigned is a
+        // promise, sending a message is the delivery.
+        if (data_get($session->metadata, 'meta.needs_human')) {
+            $this->mergeMeta($session, ['needs_human' => false]);
+        }
+
         return $msg;
     }
 
     private function shapeMessage(Message $m, int $sessionId): array
     {
         $author = data_get($m->metadata, 'author');
+
+        // `system` rows are internal notes (transfers). They are never sent to
+        // the customer, so they must not render as an outbound bubble.
+        $who = match (true) {
+            $m->role === 'user'   => 'customer',
+            $m->role === 'system' => 'system',
+            $author === 'owner'   => 'owner',
+            $author === 'agent'   => 'agent',
+            default               => 'bot',
+        };
+
         return [
             'id'          => $m->id,
             'direction'   => $m->role === 'user' ? 'in' : 'out',
-            'author'      => $m->role === 'user' ? 'customer' : ($author === 'agent' ? 'agent' : 'bot'),
+            'author'      => $who,
+            'author_name' => data_get($m->metadata, 'author_name'),
+            // Present only on internal events (currently transfers), so the
+            // thread can render a separator instead of a bubble.
+            'event'       => data_get($m->metadata, 'event'),
+            'from'        => data_get($m->metadata, 'from'),
+            'to'          => data_get($m->metadata, 'to'),
+            'by'          => data_get($m->metadata, 'by'),
+            'note'        => data_get($m->metadata, 'note'),
             'content'     => $m->content,
             'reply'       => data_get($m->metadata, 'reply_to'),
             'edited'      => (bool) data_get($m->metadata, 'edited'),
@@ -669,6 +1543,51 @@ class ChatController extends Controller
             }
         }
         return 0;
+    }
+
+    /**
+     * What to call this customer.
+     *
+     * Never the raw external_id. A PSID/IGSID is a 16-digit opaque number
+     * that tells the agent nothing, cannot be dialled, cannot be searched,
+     * and reads as a bug — showing it is strictly worse than admitting we do
+     * not have the name.
+     *
+     * A WhatsApp id is the exception: it IS the phone number, so it is
+     * genuinely useful and gets formatted rather than hidden.
+     */
+    private function contactName(Session $session): string
+    {
+        if ($name = trim((string) $session->customer_name)) {
+            return $name;
+        }
+
+        if ($session->channel === 'whatsapp') {
+            $digits = preg_replace('/\D+/', '', (string) ($session->customer_phone ?: $session->external_id));
+            if ($digits !== '') {
+                return '+' . $digits;
+            }
+        }
+
+        return match ($session->channel) {
+            'instagram'             => 'Instagram user',
+            'facebook', 'messenger' => 'Facebook user',
+            'whatsapp'              => 'WhatsApp user',
+            default                 => 'Guest',
+        };
+    }
+
+    /**
+     * The customer's photo, as a URL we serve.
+     *
+     * Deliberately ignores the legacy `profile_pic` key. That held Meta's
+     * signed CDN URL, which expires within days — every one of those stored
+     * before ContactAvatars existed is now a broken image, and rendering it
+     * looks worse than rendering the placeholder.
+     */
+    private function avatarUrl(array $meta): ?string
+    {
+        return $meta['avatar'] ?? null;
     }
 
     /** Display name of the Page / number this conversation arrived on. */

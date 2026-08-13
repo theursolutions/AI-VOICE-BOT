@@ -17,18 +17,22 @@ use Laravel\Socialite\Facades\Socialite;
 use Msd\MetaChannels\Models\ChannelConnection;
 use Msd\MetaChannels\Models\ChannelOnboardingLog;
 use Msd\MetaChannels\Models\ChannelOnboardingPayload;
+use Msd\MetaChannels\Services\InstagramLoginService;
 use Msd\MetaChannels\Services\OAuthService;
 use Msd\MetaChannels\Services\OnboardingService;
+use Msd\MetaChannels\Support\SignedRequest;
 
 /**
- * Channel onboarding — three ways in, one pipeline behind them.
+ * Channel onboarding — four ways in, one pipeline behind them.
  *
  *   redirect         classic Facebook Login in a popup (works everywhere)
+ *   instagram_login  Instagram's own OAuth, for business accounts with no
+ *                    Facebook Page attached — which is most of them
  *   embedded_signup  Meta's own WhatsApp popup — no redirect, ~2 minutes
  *   qr_handoff       desktop shows a QR, the customer finishes on the phone
  *                    where their WhatsApp actually lives
  *
- * All three converge on OnboardingService, which persists what Meta returns
+ * All four converge on OnboardingService, which persists what Meta returns
  * BEFORE trying to use it. That is what lets the retry button replay our
  * side of a failure without dragging the customer back through consent.
  */
@@ -43,6 +47,7 @@ class ChannelOnboardController extends Controller
     public function __construct(
         private OAuthService $oauth,
         private OnboardingService $onboarding,
+        private InstagramLoginService $instagram,
     ) {}
 
     // ── 1. Redirect flow ─────────────────────────────────────────────
@@ -55,16 +60,19 @@ class ChannelOnboardController extends Controller
 
         $project = $this->resolveProject($client, (int) $request->query('project_id'));
 
-        if (! $this->oauth->isConfigured()) {
+        $viaInstagram = $this->usesInstagramLogin($resolved);
+
+        if (! $viaInstagram && ! $this->oauth->isConfigured()) {
             return $this->popupClose('error', 'Meta app not configured — set META_APP_ID and META_APP_SECRET first.', $client, $project);
         }
 
         // Reuse the log a QR handoff already opened, so the desktop poller
         // is watching the same attempt the phone is completing.
-        $log = $this->resolveOrCreateLog($request, $project, $resolved, ChannelOnboardingPayload::METHOD_REDIRECT);
-        $log->step('redirect_to_facebook', true);
+        $log = $this->resolveOrCreateLog($request, $project, $resolved, $viaInstagram
+            ? ChannelOnboardingPayload::METHOD_INSTAGRAM_LOGIN
+            : ChannelOnboardingPayload::METHOD_REDIRECT);
 
-        return $this->redirectToFacebook($client, $project, $resolved, $log);
+        return $this->redirectForProvider($client, $project, $resolved, $log);
     }
 
     /** OAuth redirect target (fixed URL; context travels in encrypted `state`). */
@@ -114,6 +122,104 @@ class ChannelOnboardController extends Controller
         }
 
         return $this->popupClose('success', 'Connected ' . count($imported) . ' ' . $state['provider'] . ' channel(s): ' . implode(', ', $imported), $client, $project);
+    }
+
+    // ── 1b. Instagram Login callback ─────────────────────────────────
+
+    /**
+     * Where instagram.com sends the customer back to.
+     *
+     * A separate endpoint from the Facebook one on purpose: the redirect_uri
+     * is part of the signature of the token exchange, and the exchange hosts
+     * differ (api.instagram.com vs graph.facebook.com). Sharing one URL would
+     * mean guessing which flow a given callback belongs to, and guessing
+     * wrong yields "Invalid authorization code" with nothing to debug.
+     *
+     * Register this exact URL under App dashboard → Instagram → API setup
+     * with Instagram login → "OAuth redirect URIs".
+     */
+    public function instagramCallback(Request $request): Response
+    {
+        $state   = $this->decodeState((string) $request->query('state'));
+        $client  = $state ? Client::where('slug', $state['client'])->first() : null;
+        $project = $client ? Project::where('client_id', $client->id)->where('id', $state['project'])->first() : null;
+        $log     = $state ? ChannelOnboardingLog::find($state['log']) : null;
+
+        if (! $state || ! $project || ! $log) {
+            return $this->popupClose('error', 'Instagram onboarding failed: invalid or expired session.', $client, $project);
+        }
+
+        // Instagram reports a decline as error=access_denied with a
+        // human-readable error_description.
+        if ($request->query('error') || ! $request->query('code')) {
+            $reason = $request->query('error_description') ?: ($request->query('error') ?: 'no authorization code');
+            $log->error_code = OnboardingService::ERR_CONSENT_DENIED;
+            $log->step('consent', false, $reason);
+            $log->fail('Consent not granted: ' . $reason);
+            return $this->popupClose('error', 'Instagram onboarding cancelled: ' . $reason, $client, $project);
+        }
+        $log->step('consent', true);
+
+        // Persist before doing anything with it — same guarantee as the
+        // Facebook path, so a failure downstream is replayable.
+        $payload = $this->onboarding->ingestCode(
+            projectId:   $project->id,
+            userId:      $log->user_id,
+            provider:    ChannelConnection::PROVIDER_INSTAGRAM,
+            code:        (string) $request->query('code'),
+            redirectUri: $this->instagramCallbackUrl(),
+            log:         $log,
+            method:      ChannelOnboardingPayload::METHOD_INSTAGRAM_LOGIN,
+        );
+
+        try {
+            $imported = $this->onboarding->process($payload, $log);
+        } catch (\Throwable $e) {
+            Log::warning('Instagram onboarding failed', ['payload' => $payload->id, 'error' => $e->getMessage()]);
+
+            $suffix = $payload->fresh()->isRetryable()
+                ? ' Your Instagram authorisation was saved — press Retry on the Meta Onboarding page, no need to sign in again.'
+                : '';
+
+            return $this->popupClose('error', 'Instagram onboarding failed: ' . $e->getMessage() . $suffix, $client, $project);
+        }
+
+        return $this->popupClose('success', 'Connected ' . implode(', ', $imported) . ' on Instagram.', $client, $project);
+    }
+
+    /**
+     * Instagram calls this when someone removes our app from their account
+     * (Instagram → Settings → Apps and websites → Remove).
+     *
+     * Disabling rather than deleting is deliberate: the conversation history
+     * belongs to the business, not to the authorisation, and a customer who
+     * reconnects next week expects their inbox intact. Actual erasure is a
+     * separate, explicit request — see DataDeletionController.
+     */
+    public function instagramDeauthorize(Request $request): JsonResponse
+    {
+        $data = $this->parseSignedRequest((string) $request->input('signed_request'));
+
+        if ($data === null) {
+            Log::warning('Instagram deauthorize: bad or unsigned request');
+            return response()->json(['ok' => false], 400);
+        }
+
+        $igId = (string) ($data['user_id'] ?? '');
+        if ($igId === '') {
+            return response()->json(['ok' => true, 'disabled' => 0]);
+        }
+
+        $disabled = ChannelConnection::where('provider', ChannelConnection::PROVIDER_INSTAGRAM)
+            ->where('external_id', $igId)
+            ->update([
+                'status'       => ChannelConnection::STATUS_DISABLED,
+                'access_token' => null,
+            ]);
+
+        Log::info('Instagram deauthorize processed', ['ig_id' => $igId, 'disabled' => $disabled]);
+
+        return response()->json(['ok' => true, 'disabled' => $disabled]);
     }
 
     // ── 2. Embedded Signup (WhatsApp) ────────────────────────────────
@@ -278,7 +384,7 @@ class ChannelOnboardController extends Controller
         ]);
     }
 
-    /** Phone tapped "Continue" — send them to Facebook. */
+    /** Phone tapped "Continue" — send them to the right consent screen. */
     public function handoffGo(Request $request, int $log)
     {
         $onboarding = ChannelOnboardingLog::find($log);
@@ -288,13 +394,13 @@ class ChannelOnboardController extends Controller
         $client  = $project ? Client::find($project->client_id) : null;
         abort_unless($project && $client, 404);
 
-        if (! $this->oauth->isConfigured()) {
+        if (! $this->usesInstagramLogin($onboarding->provider) && ! $this->oauth->isConfigured()) {
             abort(503, 'Meta app not configured.');
         }
 
         $onboarding->step('phone_continue', true);
 
-        return $this->redirectToFacebook($client, $project, $onboarding->provider, $onboarding);
+        return $this->redirectForProvider($client, $project, $onboarding->provider, $onboarding);
     }
 
     /** Desktop polls this while the QR is on screen. */
@@ -349,16 +455,51 @@ class ChannelOnboardController extends Controller
 
     // ── helpers ──────────────────────────────────────────────────────
 
+    /**
+     * Send the customer to whichever consent screen this provider needs.
+     *
+     * Instagram is the interesting case: when Instagram Login credentials are
+     * present we prefer that path, because it works for a business account
+     * with no Facebook Page — the situation that made the Facebook-Login
+     * route fail for most Instagram customers. Without those credentials it
+     * falls back to the original behaviour, so nothing changes for anyone who
+     * has not set the new env vars.
+     */
+    private function redirectForProvider(Client $client, Project $project, string $provider, ChannelOnboardingLog $log)
+    {
+        if ($this->usesInstagramLogin($provider)) {
+            $log->step('redirect_to_instagram', true);
+            return $this->redirectToInstagram($client, $project, $log);
+        }
+
+        $log->step('redirect_to_facebook', true);
+        return $this->redirectToFacebook($client, $project, $provider, $log);
+    }
+
+    private function usesInstagramLogin(string $provider): bool
+    {
+        return $provider === ChannelConnection::PROVIDER_INSTAGRAM
+            && $this->instagram->isConfigured();
+    }
+
+    /** Consent on instagram.com — no Facebook Page required. */
+    private function redirectToInstagram(Client $client, Project $project, ChannelOnboardingLog $log): RedirectResponse
+    {
+        if ($log->method !== ChannelOnboardingPayload::METHOD_INSTAGRAM_LOGIN) {
+            $log->method = ChannelOnboardingPayload::METHOD_INSTAGRAM_LOGIN;
+            $log->save();
+        }
+
+        return redirect()->away($this->instagram->authUrl(
+            $this->instagramCallbackUrl(),
+            $this->encodeState($client, $project, ChannelConnection::PROVIDER_INSTAGRAM, $log),
+        ));
+    }
+
     /** Shared Socialite redirect used by both the popup and the phone. */
     private function redirectToFacebook(Client $client, Project $project, string $provider, ChannelOnboardingLog $log)
     {
-        $state = Crypt::encryptString(json_encode([
-            'client'   => $client->slug,
-            'project'  => $project->id,
-            'provider' => $provider,
-            'log'      => $log->id,
-            'ts'       => time(),
-        ]));
+        $state = $this->encodeState($client, $project, $provider, $log);
 
         $scopes = array_filter(explode(',', (string) (config('meta.app.scopes')[$provider] ?? '')));
 
@@ -437,6 +578,32 @@ HTML;
     private function callbackUrl(): string
     {
         return route('meta.oauth.callback');
+    }
+
+    private function instagramCallbackUrl(): string
+    {
+        return route('meta.instagram.callback');
+    }
+
+    /**
+     * Encrypted round-trip context. Both OAuth callbacks are fixed URLs with
+     * no {client} segment, so everything they need to resume travels here.
+     */
+    private function encodeState(Client $client, Project $project, string $provider, ChannelOnboardingLog $log): string
+    {
+        return Crypt::encryptString(json_encode([
+            'client'   => $client->slug,
+            'project'  => $project->id,
+            'provider' => $provider,
+            'log'      => $log->id,
+            'ts'       => time(),
+        ]));
+    }
+
+    /** Verify a Meta `signed_request` against every app secret we hold. */
+    private function parseSignedRequest(string $signed): ?array
+    {
+        return $signed === '' ? null : SignedRequest::parse($signed, SignedRequest::secrets());
     }
 
     private function decodeState(string $raw): ?array

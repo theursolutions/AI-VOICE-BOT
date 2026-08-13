@@ -27,6 +27,7 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
         private AgentRouter $router,
         private TenantManager $tenants,
         private PythonClient $python,
+        private ContactAvatars $avatars,
     ) {}
 
     public function handle(InboundMessage $m): ?string
@@ -69,9 +70,8 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
                 'last_activity_at' => $now,
                 'last_inbound_at'  => $now,
                 'metadata'         => ['meta' => array_filter([
-                    'provider'    => $m->provider,
-                    'channel_id'  => $m->channelExternalId,
-                    'profile_pic' => $m->profilePic,
+                    'provider'   => $m->provider,
+                    'channel_id' => $m->channelExternalId,
                 ])],
                 'created_at'       => $now,
                 'update_at'        => $now,
@@ -100,16 +100,27 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
         if (!$session->customer_name && $m->senderName) {
             $session->customer_name = $m->senderName;
         }
-        // Same for the avatar. Backfilling here matters because Messenger and
-        // Instagram profiles are only fetched from Graph, which was added
-        // after some conversations already existed — without this they would
-        // stay faceless forever.
-        if ($m->profilePic && ! data_get($session->metadata, 'meta.profile_pic')) {
-            $meta = (array) $session->metadata;
-            $meta['meta'] = array_merge((array) ($meta['meta'] ?? []), [
-                'profile_pic' => $m->profilePic,
-            ]);
-            $session->metadata = $meta;
+        // The avatar is DOWNLOADED, not linked. Meta's profile_pic is a signed
+        // CDN URL that expires within days, so the obvious implementation —
+        // store the URL, render it later — gives you an inbox of broken images
+        // that all worked on the day the conversation started.
+        //
+        // Cheap in practice: needsRefresh() compares the URL path with the
+        // signature stripped, so the daily profile lookup re-signing the same
+        // photo does not trigger a re-download.
+        $metaBag = (array) data_get($session->metadata, 'meta', []);
+
+        if ($this->avatars->needsRefresh($metaBag, $m->profilePic)) {
+            $stored = $this->avatars->store($m->profilePic, $m->provider, $m->from);
+            if ($stored) {
+                $meta = (array) $session->metadata;
+                $meta['meta'] = array_merge($metaBag, [
+                    'avatar'     => $stored,
+                    'avatar_src' => $m->profilePic,
+                    'avatar_at'  => $now,
+                ]);
+                $session->metadata = $meta;
+            }
         }
         $session->save();
 
@@ -176,7 +187,7 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
     private function transcribeAudio(InboundMessage $m, array $att): ?string
     {
         try {
-            $graph = new GraphClient($m->accessToken);
+            $graph = new GraphClient($m->accessToken, $m->graphBase);
             $media = !empty($att['media_id'])
                 ? $graph->downloadWhatsAppMedia($att['media_id'])
                 : (!empty($att['url']) ? $graph->downloadUrl($att['url'], $att['mime'] ?? null) : null);

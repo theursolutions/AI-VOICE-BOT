@@ -33,6 +33,14 @@ class ChannelOnboardingPayload extends Model
 
     public const METHOD_REDIRECT        = 'redirect';
     public const METHOD_EMBEDDED_SIGNUP = 'embedded_signup';
+    /** Instagram API with Instagram Login — a different OAuth host entirely. */
+    public const METHOD_INSTAGRAM_LOGIN = 'instagram_login';
+
+    /** Is this attempt on the Instagram-Login path rather than Facebook Login? */
+    public function isInstagramLogin(): bool
+    {
+        return $this->method === self::METHOD_INSTAGRAM_LOGIN;
+    }
 
     protected $fillable = [
         'project_id', 'user_id', 'log_id', 'provider', 'method',

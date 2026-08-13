@@ -100,6 +100,9 @@
                     <a href="{{ url('/terms') }}">Terms of Service</a>
                     <a href="{{ url('/refund-policy') }}">Refund Policy</a>
                     <a href="{{ url('/cookies') }}">Cookie Policy</a>
+                    {{-- Meta requires the deletion instructions to be reachable
+                         from the site, not only from the app dashboard. --}}
+                    <a href="{{ url('/data-deletion') }}">Data Deletion</a>
                 </div>
                 <div class="site-footer__col site-footer__col--contact">
                     <h3>Get in touch</h3>
