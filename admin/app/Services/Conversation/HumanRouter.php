@@ -31,6 +31,23 @@ class HumanRouter
             $session->assigned_agent_id = null;
             $session->handoff_status = 'queued';
         }
+
+        // Record that a PERSON is needed, as its own fact rather than
+        // something the inbox has to infer.
+        //
+        // `handoff_status` alone cannot answer this: it becomes `assigned` the
+        // instant an agent is picked, so a conversation where the customer
+        // asked for a human and nobody has yet replied looks identical to one
+        // being actively handled. This flag is set when the bot gives up and
+        // cleared when a human actually sends something — see
+        // ChatController::persistOutbound.
+        $meta = (array) $session->metadata;
+        $meta['meta'] = array_merge((array) ($meta['meta'] ?? []), [
+            'needs_human'    => true,
+            'needs_human_at' => time(),
+        ]);
+        $session->metadata = $meta;
+
         $session->update_at = time();
         $session->save();
 

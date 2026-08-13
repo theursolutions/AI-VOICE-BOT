@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
 use Msd\MetaChannels\Models\ChannelConnection;
+use Msd\MetaChannels\Services\InstagramLoginService;
 use Msd\MetaChannels\Services\OAuthService;
 
 /**
@@ -33,14 +34,16 @@ class MetaSubscribe extends Command
     /** What we need Meta to send us, given what the webhook controller handles. */
     private const WANTED = ['messages', 'messaging_postbacks'];
 
-    public function __construct(private OAuthService $oauth)
-    {
+    public function __construct(
+        private OAuthService $oauth,
+        private InstagramLoginService $instagram,
+    ) {
         parent::__construct();
     }
 
     public function handle(): int
     {
-        if (! $this->oauth->isConfigured()) {
+        if (! $this->oauth->isConfigured() && ! $this->instagram->isConfigured()) {
             $this->error('Meta app not configured — set META_APP_ID and META_APP_SECRET.');
             return self::FAILURE;
         }
@@ -67,6 +70,14 @@ class MetaSubscribe extends Command
             // nobody can call.
             if ($c->provider === ChannelConnection::PROVIDER_WHATSAPP) {
                 $this->backfillWhatsappNumber($c, $label);
+                continue;
+            }
+
+            // Instagram Login accounts subscribe themselves on
+            // graph.instagram.com — they have no linked Page to subscribe,
+            // and checking for one would report a healthy account as broken.
+            if (($c->metadata['login'] ?? null) === 'instagram') {
+                $problems += $this->checkInstagramLogin($c, $label);
                 continue;
             }
 
@@ -141,6 +152,51 @@ class MetaSubscribe extends Command
         $this->line('  3. Webhook deliveries in the app dashboard show 200 responses');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Check (and with --fix, repair) an Instagram-Login account's own
+     * subscription. Also reports the token deadline, because these tokens
+     * always expire — unlike Page tokens, which never do.
+     *
+     * @return int 1 if the channel needs attention, 0 if healthy
+     */
+    private function checkInstagramLogin(ChannelConnection $c, string $label): int
+    {
+        if (! $c->access_token) {
+            $this->warn("  ⚠ {$label} — no access token stored; reconnect this channel");
+            return 1;
+        }
+
+        try {
+            $fields = $this->instagram->subscribedFields($c->external_id, $c->access_token);
+        } catch (\Throwable $e) {
+            $this->error("  ✗ {$label} — could not read subscriptions: " . $e->getMessage());
+            return 1;
+        }
+
+        $missing = array_values(array_diff(['messages'], $fields));
+
+        if (! $missing) {
+            $days = $c->tokenExpiresInDays();
+            $note = $days === null ? '' : " · token expires in {$days}d";
+            $this->info("  ok     {$label} — subscribed to " . implode(', ', $fields) . $note);
+            return 0;
+        }
+
+        if (! $this->option('fix')) {
+            $this->warn("  ⚠ {$label} — NOT subscribed to: " . implode(', ', $missing) . '  (run with --fix)');
+            return 1;
+        }
+
+        try {
+            $this->instagram->subscribe($c->external_id, $c->access_token);
+            $this->info("  fixed  {$label} — subscribed");
+            return 0;
+        } catch (\Throwable $e) {
+            $this->error("  ✗ {$label} — subscribe failed: " . $e->getMessage());
+            return 1;
+        }
     }
 
     /**

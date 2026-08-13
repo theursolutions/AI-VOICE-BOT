@@ -145,7 +145,7 @@ the app itself — which is fine for your own testing and useless for customers.
 ### Also required before approval
 - Privacy Policy URL → `https://serveai.com.pk/privacy` ✅ live
 - Terms of Service URL → `https://serveai.com.pk/terms` ✅ live
-- Data Deletion Instructions URL → **you still need this** (see §5)
+- Data Deletion Instructions URL → `https://serveai.com.pk/data-deletion` ✅ live (see §5)
 - App icon, category, and a real description
 
 **Typically 1–4 weeks**, and rejection on the first attempt is common. The
@@ -168,15 +168,141 @@ the popup. Nothing else changes — no deploy of code, no UI work.
 
 ---
 
-## 5. Still to build
+## 4b. Instagram API with Instagram Login
 
-- [ ] **Data Deletion Instructions URL** — Meta requires it for App Review.
-      A short public page explaining how a customer deletes their data, plus
-      ideally the deletion *callback* endpoint. Blocks approval.
-- [ ] **Token refresh sweep** — a scheduled command using
-      `ChannelConnection::tokenExpiringWithin(7)` to re-exchange before
-      expiry. Not urgent while page tokens are permanent, but WhatsApp user
-      tokens do lapse at 60 days.
+Meta ships **two** ways to do Instagram messaging. They look interchangeable
+and share almost nothing:
+
+|                | Facebook Login            | Instagram Login              |
+|----------------|---------------------------|------------------------------|
+| authorize on   | `facebook.com`            | `instagram.com`              |
+| exchange on    | `graph.facebook.com`      | `api.instagram.com`          |
+| call Graph on  | `graph.facebook.com`      | `graph.instagram.com`        |
+| credentials    | `META_APP_ID` / `SECRET`  | its own id + secret          |
+| scopes         | `instagram_manage_messages` | `instagram_business_*`     |
+| **requires**   | **a linked Facebook Page** | **nothing**                 |
+
+That last row is the whole reason this exists. Most Instagram business
+accounts are not linked to a Facebook Page, and for those the Facebook-Login
+route finds nothing and reports "No Instagram business accounts linked to
+the granted pages" — which is accurate and completely unhelpful.
+
+### 4b.1 Get the credentials
+
+App dashboard → **Instagram → API setup with Instagram login**. Copy the
+**Instagram app ID** and **Instagram app secret** from step 3 on that page.
+These are *not* the values under Settings → Basic.
+
+```dotenv
+INSTAGRAM_APP_ID=<instagram app id>
+INSTAGRAM_APP_SECRET=<instagram app secret>
+```
+
+Setting these switches `Connect Instagram` to the Instagram-Login flow.
+Leave them blank and it keeps using Facebook Login, so this change is safe
+to deploy before you are ready to use it.
+
+### 4b.2 Register the three URLs
+
+Same page → **Business login settings**. All three must match exactly:
+
+| Field | URL |
+|---|---|
+| OAuth redirect URI | `https://serveai.com.pk/meta/instagram/callback` |
+| Deauthorize callback URL | `https://serveai.com.pk/meta/instagram/deauthorize` |
+| Data deletion request URL | `https://serveai.com.pk/meta/data-deletion` |
+
+> Meta **pings the data-deletion URL when you save it**. Deploy first, or the
+> field rejects the value and the error does not say why.
+
+Instagram requires HTTPS on the redirect URI with no localhost exemption —
+unlike Facebook. Test against the deployed site or a tunnel.
+
+### 4b.3 Webhooks
+
+The callback URL is the same one everything else uses —
+`https://serveai.com.pk/api/whatsapp/webhook` — because Meta posts all
+products to one endpoint and the controller routes on `object`. Under
+Instagram → Webhooks, subscribe the **`messages`** field.
+
+Per-account subscription happens automatically at the end of onboarding
+(`subscribe_instagram` on the log). To check or repair it:
+
+```bash
+php artisan meta:subscribe          # report
+php artisan meta:subscribe --fix    # subscribe anything that isn't
+```
+
+### 4b.4 Tokens expire — this one bites later
+
+Facebook Page tokens are permanent. **Instagram Login tokens are not**: 60
+days, always, with no permanent equivalent. Left alone, every Instagram
+account stops working two months after it is connected, and the only symptom
+is replies silently failing to send.
+
+`meta:refresh-tokens` runs daily at 04:40 and refreshes anything within 20
+days of expiry. Two constraints shape that schedule:
+
+- a token must be **at least 24 hours old** to be refreshable;
+- an **expired** token cannot be refreshed at all — the customer has to
+  reconnect from Instagram.
+
+So the sweep works well ahead of the deadline rather than on it. **This
+requires the Laravel scheduler to be running.** If it is not, Instagram will
+appear to work perfectly for two months and then break.
+
+```bash
+php artisan meta:refresh-tokens --dry-run   # what would be refreshed
+php artisan schedule:list                   # confirm it is scheduled
+```
+
+### 4b.5 App Review
+
+Instagram Login needs its own Advanced Access for
+`instagram_business_manage_messages`. Until then it works only for accounts
+holding a role on the app. `instagram_business_basic` is granted by default.
+
+If consent fails wholesale with an "Invalid Scopes" style error, drop
+`instagram_business_manage_comments` from `INSTAGRAM_SCOPES` — one
+unapproved permission fails the entire screen, not just itself.
+
+---
+
+## 5. Data deletion
+
+Required by Meta for any app holding messaging permissions. Three URLs that
+are easy to confuse:
+
+| Route | Purpose | Dashboard field |
+|---|---|---|
+| `GET /data-deletion` | human instructions | Data Deletion **Instructions** URL |
+| `POST /meta/data-deletion` | signed machine callback | Data Deletion **Request** URL |
+| `GET /meta/data-deletion/status/{code}` | where the callback's reply points | — |
+
+The callback verifies Meta's `signed_request` HMAC against every app secret
+we hold (Facebook, Instagram, WhatsApp) and returns
+`{url, confirmation_code}`. Verification is the *only* thing protecting it:
+the endpoint is unauthenticated by necessity and it destroys conversation
+history, so without the HMAC anyone who learned a PSID could wipe a
+customer's inbox.
+
+Erasure itself is queued (`PurgeMetaUserData`) because Meta's callback
+timeout is short and the work spans every tenant database. **The queue worker
+must be running** or requests sit at "In progress" indefinitely.
+
+What is deleted: every conversation and message for that platform id, across
+every project with a Meta channel, plus cached profile name/photo. What is
+kept: the `data_deletion_requests` row itself — provider, opaque id,
+timestamps, no content. That row is the proof the deletion happened, which
+is exactly what the endpoint exists to be able to demonstrate.
+
+---
+
+## 5b. Still to build
+
+- [ ] **Post comments** — the `feed` webhook field is neither subscribed nor
+      handled, so comments on Page/IG posts are not ingested at all. The
+      inbox shows DMs only.
 - [ ] **Payload purge** — delete `channel_onboarding_payloads` rows past
       `expires_at`. They hold encrypted credentials, so they shouldn't
       linger indefinitely.

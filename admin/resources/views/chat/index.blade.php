@@ -2,19 +2,162 @@
 
 @section('content')
 <style>
+    /* The `hidden` attribute is enforced only by the UA stylesheet's
+       `[hidden] { display:none }` — the weakest rule there is. Any class that
+       sets `display` silently beats it, so .tva-fp (flex), .tva-af (flex) and
+       .tva-qf__badge (inline-flex) all rendered while still reporting
+       `el.hidden === true`. That is why the filter panel sat open on load and
+       ignored every click: the JS toggle was working perfectly and the CSS
+       was overruling it, so nothing in the toggle logic looked wrong.
+       One rule fixes all of them, and any future [hidden] in this component. */
+    .tva-chat [hidden] { display:none !important; }
+
     /* ── Shell: fixed height, only the thread scrolls ── */
     .tva-chat { display:flex; height: calc(100vh - 160px); min-height:520px; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; background:#fff; margin-top:14px; }
     html.dark .tva-chat { background:#0f172a; border-color:#334155; }
 
     .tva-chat__list { width:330px; min-width:290px; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; min-height:0; }
     html.dark .tva-chat__list { border-right-color:#334155; }
-    .tva-chat__listhead { padding:12px 14px; border-bottom:1px solid #e2e8f0; flex:0 0 auto; }
+    .tva-chat__listhead { padding:12px 14px; border-bottom:1px solid #e2e8f0; flex:0 0 auto; position:relative; }
     html.dark .tva-chat__listhead { border-bottom-color:#334155; }
     .tva-seg { display:flex; background:#f1f5f9; border-radius:10px; padding:3px; gap:2px; }
     html.dark .tva-seg { background:#0f172a; }
     .tva-seg button { flex:1; border:none; background:transparent; font-size:12px; font-weight:600; color:#64748b; padding:6px 6px; border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:5px; transition:.12s; }
     .tva-seg button.is-active { background:#fff; color:#4f46e5; box-shadow:0 1px 3px rgba(0,0,0,.12); }
     html.dark .tva-seg button.is-active { background:#334155; color:#fff; }
+    .tva-seg button { position:relative; }
+    /* Lucide writes its own width/height attributes onto the <svg> it swaps
+       in, which beat the Tailwind w-3.5/h-3.5 classes — hence icons rendering
+       far larger than the 12px label beside them. Sized here, where the
+       attributes cannot win. */
+    .tva-seg button svg { width:12px !important; height:12px !important; flex-shrink:0; }
+    .tva-seg__n { font-size:10px; font-weight:700; opacity:.7; font-variant-numeric:tabular-nums; }
+    .tva-seg__n:empty { display:none; }
+
+    /* ── Quick filters ───────────────────────────────────────────────
+       WRAPS, because it has to. Four labelled chips are ~374px of content and
+       the column gives them 302px (330px less 14px padding either side).
+       Flex items do not shrink below their content by default and the labels
+       are nowrap, so on one line the last chip was pushed straight out past
+       the column border and over the divider.
+       Wrapping is the honest fix: nothing is hidden and nothing is clipped. */
+    .tva-qf { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:9px; }
+    /* margin-auto rather than a spacer div: on a single line it still pins
+       Filters to the right, and when the row wraps it pins it to the right of
+       whichever line it lands on — a flex-grow spacer would claim a line of
+       its own. */
+    #filterBtn { margin-left:auto; }
+    .tva-qf__chip { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0;
+                    background:#fff; color:#475569; font-size:11.5px; font-weight:600;
+                    padding:5px 9px; border-radius:999px; cursor:pointer; transition:.12s; white-space:nowrap; }
+    .tva-qf__chip:hover { border-color:#c7d2fe; color:#4f46e5; }
+    .tva-qf__chip.is-on { background:#eef2ff; border-color:#a5b4fc; color:#4338ca; }
+    .tva-qf__chip svg { width:12px !important; height:12px !important; flex-shrink:0; }
+    html.dark .tva-qf__chip { background:#1e293b; border-color:#334155; color:#cbd5e1; }
+    html.dark .tva-qf__chip.is-on { background:#312e81; border-color:#4f46e5; color:#e0e7ff; }
+
+    /* A bare funnel glyph gave no clue what it did or that it was a menu.
+       Labelled, with a chevron that turns when open. */
+    .tva-qf__chip--more { padding:5px 9px; gap:4px; }
+    .tva-qf__chip--more .tva-qf__caret { transition:transform .15s; opacity:.6; }
+    .tva-qf__chip--more.is-open .tva-qf__caret { transform:rotate(180deg); }
+    .tva-qf__chip--more.is-open { background:#eef2ff; border-color:#a5b4fc; color:#4338ca; }
+
+    .tva-qf__n { font-size:10px; font-weight:700; opacity:.8; font-variant-numeric:tabular-nums; }
+    .tva-qf__n:empty { display:none; }
+    .tva-qf__dot { width:7px; height:7px; border-radius:50%; background:#6366f1; flex-shrink:0; }
+    /* How many filters are on, inline in the button rather than floating off
+       its corner — a notification-style dot read as an alert, when all it is
+       reporting is a count. */
+    .tva-qf__badge { min-width:15px; height:15px; padding:0 4px; border-radius:999px;
+                     background:#4f46e5; color:#fff; font-size:9.5px; font-weight:700;
+                     display:inline-flex; align-items:center; justify-content:center; }
+
+    /* ── Active filter pills ───────────────────────────────────────── */
+    .tva-af { display:flex; flex-wrap:wrap; gap:5px; margin-top:8px; align-items:center; }
+    /* Outlined and neutral, not filled indigo. These are a record of what is
+       already applied, so they should sit quietly behind the controls that
+       change it — a row of saturated pills competed with the chips above and
+       made an ordinary two-filter view look like an error state. */
+    .tva-af__pill { display:inline-flex; align-items:center; gap:2px; background:#f8fafc;
+                    border:1px solid #e2e8f0; color:#475569; border-radius:6px;
+                    padding:2px 3px 2px 8px; font-size:10.5px; font-weight:600; line-height:1.7;
+                    max-width:100%; min-width:0; overflow:hidden; white-space:nowrap; }
+    .tva-af__pill em { font-style:normal; color:#94a3b8; font-weight:600; margin-right:3px; }
+    .tva-af__pill button { border:none; background:transparent; color:#94a3b8; cursor:pointer; line-height:0;
+                           padding:2px; border-radius:4px; display:flex; }
+    .tva-af__pill button svg { width:11px !important; height:11px !important; }
+    .tva-af__pill button:hover { color:#dc2626; background:#fef2f2; }
+    .tva-af__clear { border:none; background:transparent; color:#64748b; font-size:10.5px; font-weight:600;
+                     cursor:pointer; padding:2px 4px; border-radius:4px; }
+    .tva-af__clear:hover { color:#4f46e5; background:#eef2ff; }
+    html.dark .tva-af__pill { background:#0f172a; border-color:#334155; color:#cbd5e1; }
+    html.dark .tva-af__pill em { color:#64748b; }
+
+    /* ── Filter panel ──────────────────────────────────────────────── */
+    /* Spans the list column exactly — left AND right pinned, no fixed width.
+       It was 430px anchored to the right inside a 330px column, so it
+       overhung the left edge and .tva-chat's overflow:hidden sliced it off.
+       Pinning both sides makes clipping structurally impossible at any
+       column width. */
+    .tva-fp { position:absolute; z-index:40; left:14px; right:14px; top:100%; margin-top:4px;
+              background:#fff; border:1px solid #e2e8f0; border-radius:12px;
+              box-shadow:0 12px 32px rgba(15,23,42,.14); overflow:hidden;
+              max-height:min(62vh, 390px); display:flex; flex-direction:column; }
+    html.dark .tva-fp { background:#1e293b; border-color:#334155; }
+    /* One column: at 300px there is no honest way to fit two without every
+       label wrapping.
+     *
+     * flex:1 1 auto AND min-height:0 are both required for overflow-y to do
+     * anything here. A flex item defaults to min-height:auto, which refuses to
+     * shrink below its content — so the scrollbar never appeared, the groups
+     * kept their full height, and the footer was pushed past .tva-fp's
+     * overflow:hidden edge where Clear and Done could not be clicked. */
+    .tva-fp__grid { flex:1 1 auto; min-height:0; overflow-y:auto; padding:11px 12px 3px;
+                    overscroll-behavior:contain; }
+    .tva-fp__group { margin-bottom:9px; min-width:0; }
+    .tva-fp__group:last-child { margin-bottom:4px; }
+    /* Thin scrollbar so the panel doesn't lose 15px of label width to it. */
+    .tva-fp__grid::-webkit-scrollbar { width:7px; }
+    .tva-fp__grid::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:99px; }
+    html.dark .tva-fp__grid::-webkit-scrollbar-thumb { background:#475569; }
+    .tva-fp__h { font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+                 color:#94a3b8; margin-bottom:5px; }
+    /* min-width:0 on the container lets its flex children actually shrink;
+       without it a long label (a Page name, a custom status) makes the button
+       wider than the panel and it spills past the sidebar edge. */
+    .tva-fp__opts { display:flex; flex-wrap:wrap; gap:4px; min-width:0; }
+    .tva-fp__opts button { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0;
+                           background:#f8fafc; color:#475569; font-size:11px; font-weight:600;
+                           padding:4px 8px; border-radius:7px; cursor:pointer; transition:.12s;
+                           max-width:100%; min-width:0; overflow:hidden; }
+    /* The label is the only part allowed to be truncated — the colour dot and
+       the count stay whole, because a clipped number is worse than no number. */
+    .tva-fp__opts button > span:not([class]) { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+    .tva-fp__opts button:hover { border-color:#c7d2fe; }
+    .tva-fp__opts button.is-on { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+    .tva-fp__opts button svg { width:12px !important; height:12px !important; flex-shrink:0; }
+    .tva-fp__opts button b { font-weight:700; opacity:.65; font-variant-numeric:tabular-nums; }
+    .tva-fp__opts button b:empty { display:none; }
+    /* A zero-count option stays clickable but stops competing for attention. */
+    .tva-fp__opts button.is-empty:not(.is-on) { opacity:.45; }
+    html.dark .tva-fp__opts button { background:#0f172a; border-color:#334155; color:#cbd5e1; }
+
+    .tva-empty-sm { text-align:center; font-size:11.5px; color:#94a3b8; padding:28px 18px; line-height:1.6; }
+    /* Same four colours in the list rows and the Status filter, so a dot
+       means exactly one thing wherever it appears. */
+    .tva-st { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .tva-st--active { background:#22c55e; } .tva-st--expiring { background:#f59e0b; }
+    .tva-st--expired { background:#ef4444; } .tva-st--closed { background:#94a3b8; }
+
+    /* flex:0 0 auto pins the footer: it must never be the thing that shrinks
+       or gets pushed out, because it holds the only two ways to leave. */
+    .tva-fp__foot { flex:0 0 auto; display:flex; align-items:center; justify-content:space-between; gap:8px;
+                    padding:8px 12px; border-top:1px solid #e2e8f0; background:#f8fafc; }
+    html.dark .tva-fp__foot { border-top-color:#334155; background:#0f172a; }
+    .tva-fp__clear { border:none; background:transparent; color:#64748b; font-size:11.5px; font-weight:600; cursor:pointer; }
+    .tva-fp__clear:hover { color:#dc2626; }
+
     .tva-search { position:relative; margin-top:9px; }
     .tva-search > i, .tva-search > svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); width:15px; height:15px; color:#94a3b8; pointer-events:none; z-index:1; }
     .tva-search input { padding-left:34px !important; }
@@ -25,6 +168,10 @@
     .tva-convo.is-active { background:#eef2ff; } html.dark .tva-convo.is-active { background:#1e293b; }
     .tva-convo__av { width:42px; height:42px; border-radius:50%; background:var(--tva-gradient); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:600; flex-shrink:0; overflow:hidden; }
     .tva-convo__av img { width:100%; height:100%; object-fit:cover; }
+    /* Initials fill the disc themselves so they can carry their own colour —
+       the parent's gradient would otherwise show through behind them. */
+    .tva-convo__ini { width:100%; height:100%; display:flex; align-items:center; justify-content:center;
+                      font-size:14px; font-weight:600; letter-spacing:.02em; }
     .tva-convo__name { font-weight:600; font-size:13.5px; color:#0f172a; } html.dark .tva-convo__name { color:#f1f5f9; }
     .tva-convo__last { font-size:12px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:185px; }
     .tva-badge { font-size:9px; font-weight:700; padding:1px 6px; border-radius:999px; text-transform:uppercase; }
@@ -32,6 +179,167 @@
     .tva-badge--facebook,.tva-badge--messenger { background:#dbeafe; color:#1d4ed8; }
     .tva-dot { width:8px; height:8px; border-radius:50%; display:inline-block; }
     .tva-dot--unread { background:#6366f1; } .tva-dot--open { background:#22c55e; } .tva-dot--closed { background:#ef4444; }
+
+    /* ── Header metrics ───────────────────────────────────────────────
+       Icon + value only. Four numbers fit in a header exactly as long as
+       none of them spells itself out; every chip carries its full wording in
+       a title attribute instead. */
+    .tva-mx { display:flex; align-items:center; gap:4px; }
+    .tva-mx__c { position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:4px;
+                 background:#f8fafc; border:1px solid #e8edf3; border-radius:7px;
+                 padding:3px 7px; font-size:11px; color:#64748b; white-space:nowrap; cursor:default; }
+    .tva-mx__c b { font-weight:700; color:#334155; font-variant-numeric:tabular-nums; }
+    .tva-mx__c svg { width:12px !important; height:12px !important; opacity:.7; flex-shrink:0; }
+    html.dark .tva-mx__c { background:#0f172a; border-color:#334155; color:#94a3b8; }
+    html.dark .tva-mx__c b { color:#e2e8f0; }
+
+    /* Only the reply-window chip changes colour. If everything signalled
+       urgency, nothing would. */
+    .tva-mx__c.is-ok   { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
+    .tva-mx__c.is-ok b { color:#166534; }
+    .tva-mx__c.is-warn { background:#fffbeb; border-color:#fde68a; color:#b45309; }
+    .tva-mx__c.is-warn b { color:#92400e; }
+    .tva-mx__c.is-dead { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+    .tva-mx__c.is-dead b { color:#991b1b; }
+    /* Fraction of the 24 hours still left — the trend, without arithmetic. */
+    .tva-mx__bar { position:absolute; left:0; bottom:0; height:2px; background:currentColor; opacity:.5; }
+    .tva-mx__c--lead b { text-transform:capitalize; }
+
+    @media (max-width: 1180px) {
+        /* Narrow windows keep the deadline and drop the context. */
+        .tva-mx__c:not(.is-ok):not(.is-warn):not(.is-dead) { display:none; }
+    }
+
+    /* ── Conversation status control ──────────────────────────────── */
+    .tva-cs { position:relative; }
+    .tva-cs__btn { display:inline-flex; align-items:center; gap:6px; border:1px solid #e2e8f0; background:#fff;
+                   border-radius:8px; padding:5px 9px; font-size:11.5px; font-weight:600; color:#475569;
+                   cursor:pointer; transition:.12s; max-width:190px; }
+    .tva-cs__btn:hover { border-color:#c7d2fe; color:#4f46e5; }
+    .tva-cs__btn svg { width:12px !important; height:12px !important; opacity:.6; flex-shrink:0; }
+    .tva-cs__dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+    html.dark .tva-cs__btn { background:#1e293b; border-color:#334155; color:#cbd5e1; }
+
+    .tva-cs__menu { position:absolute; z-index:45; right:0; top:100%; margin-top:5px; min-width:216px;
+                    background:#fff; border:1px solid #e2e8f0; border-radius:11px; padding:5px;
+                    box-shadow:0 12px 30px rgba(15,23,42,.15); }
+    html.dark .tva-cs__menu { background:#1e293b; border-color:#334155; }
+    .tva-cs__opt { display:flex; align-items:center; gap:8px; width:100%; border:none; background:transparent;
+                   font-size:12px; font-weight:600; color:#475569; padding:7px 9px; border-radius:7px;
+                   cursor:pointer; text-align:left; }
+    .tva-cs__opt:hover { background:#f1f5f9; }
+    .tva-cs__opt.is-on { background:#eef2ff; color:#4338ca; }
+    .tva-cs__opt--clear { color:#94a3b8; font-weight:500; }
+    html.dark .tva-cs__opt { color:#cbd5e1; } html.dark .tva-cs__opt:hover { background:#0f172a; }
+    .tva-cs__tag { font-size:8.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+                   color:#64748b; background:#e2e8f0; padding:1px 5px; border-radius:4px; }
+    .tva-cs__sep { height:1px; background:#e2e8f0; margin:4px 0; }
+    html.dark .tva-cs__sep { background:#334155; }
+    .tva-cs__manage { display:flex; align-items:center; gap:7px; width:100%; border:none; background:transparent;
+                      font-size:11.5px; font-weight:600; color:#4f46e5; padding:7px 9px; border-radius:7px; cursor:pointer; }
+    .tva-cs__manage:hover { background:#eef2ff; }
+    .tva-cs__manage svg { width:12px !important; height:12px !important; }
+
+    .tva-cs__ini { width:20px; height:20px; border-radius:50%; background:#e0e7ff; color:#4338ca;
+                   font-size:8.5px; font-weight:700; display:flex; align-items:center; justify-content:center;
+                   flex-shrink:0; }
+    .tva-cs__sub { display:flex; align-items:center; gap:4px; font-size:9.5px; font-weight:500;
+                   color:#94a3b8; text-transform:capitalize; margin-top:1px; }
+    .tva-cs__none { font-size:11px; color:#94a3b8; padding:10px 11px; line-height:1.6; }
+
+    /* ── Row tags: handler · needs-a-person · status ───────────────
+       Ordered by urgency, not category. "Needs a person" is the only one that
+       is a call to action, so it comes first and is the only one that shouts. */
+    .tva-tags { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+    .tva-tag { display:inline-flex; align-items:center; gap:3px; font-size:9.5px; font-weight:600;
+               border:1px solid #e2e8f0; background:#f8fafc; color:#64748b;
+               padding:1px 6px 1px 4px; border-radius:999px; line-height:1.6; white-space:nowrap;
+               /* A long agent or status name must not widen the row past the
+                  330px column and force it to scroll sideways. */
+               max-width:100%; overflow:hidden; text-overflow:ellipsis; }
+    .tva-tag svg { width:10px !important; height:10px !important; flex-shrink:0; }
+    .tva-tag__ini { width:14px; height:14px; border-radius:50%; background:#c7d2fe; color:#3730a3;
+                    font-size:7px; font-weight:700; display:flex; align-items:center; justify-content:center;
+                    flex-shrink:0; }
+    .tva-tag--alert { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+    .tva-tag--agent { background:#eef2ff; border-color:#c7d2fe; color:#4338ca; }
+    .tva-tag--bot   { background:#f0f9ff; border-color:#bae6fd; color:#0369a1; }
+    .tva-tag--wait  { background:#fffbeb; border-color:#fde68a; color:#b45309; }
+    html.dark .tva-tag { background:#0f172a; border-color:#334155; color:#94a3b8; }
+
+    .tva-qf__chip--alert.is-on { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
+
+    /* ── Thread events (transfers) ─────────────────────────────────
+       A rule across the full width with the event floated in the middle: it
+       belongs to neither party, so it sits on neither side. */
+    .tva-ev { display:flex; align-items:center; justify-content:center; margin:14px 0 10px; position:relative; }
+    .tva-ev::before { content:''; position:absolute; left:0; right:0; top:50%; height:1px; background:#e2e8f0; }
+    html.dark .tva-ev::before { background:#334155; }
+    .tva-ev__body { position:relative; display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;
+                    justify-content:center; background:#f6f7fb; border:1px solid #e2e8f0; border-radius:999px;
+                    padding:4px 11px; font-size:10.5px; font-weight:600; color:#64748b; }
+    html.dark .tva-ev__body { background:#0b1220; border-color:#334155; color:#94a3b8; }
+    .tva-ev__p { display:inline-flex; align-items:center; gap:4px; color:#334155; }
+    html.dark .tva-ev__p { color:#e2e8f0; }
+    /* A person gets initials, the AI a glyph — the asymmetry is what makes the
+       handover direction readable without reading the words. */
+    .tva-ev__ini { width:17px; height:17px; border-radius:50%; background:#c7d2fe; color:#3730a3;
+                   font-size:7.5px; font-weight:700; display:flex; align-items:center; justify-content:center; }
+    .tva-ev__bot { width:17px; height:17px; border-radius:50%; background:#bae6fd; color:#0369a1;
+                   display:flex; align-items:center; justify-content:center; }
+    .tva-ev__bot svg { width:10px !important; height:10px !important; }
+    .tva-ev__arrow { width:12px !important; height:12px !important; opacity:.5; }
+    .tva-ev__by { font-weight:500; opacity:.8; }
+    .tva-ev__note { font-weight:500; font-style:italic; opacity:.9; }
+
+    .tva-msg__admin { display:inline-block; background:#4f46e5; color:#fff; font-size:8px; font-weight:700;
+                      letter-spacing:.05em; text-transform:uppercase; padding:1px 5px; border-radius:4px;
+                      margin-right:5px; vertical-align:1px; }
+
+    /* ── Locked composer ──────────────────────────────────────────── */
+    .tva-composer-row.is-locked textarea { background:#f8fafc; color:#94a3b8; cursor:not-allowed; }
+    html.dark .tva-composer-row.is-locked textarea { background:#0f172a; }
+    .tva-composer-row button:disabled { opacity:.4; cursor:not-allowed; }
+    .tva-policy { font-size:11px; line-height:1.5; color:#b45309; background:#fffbeb;
+                  border:1px solid #fde68a; border-radius:8px; padding:6px 9px; margin-bottom:7px; }
+    /* Softer when the reply still works and this is only an explanation. */
+    .tva-policy.is-soft { color:#0369a1; background:#f0f9ff; border-color:#bae6fd; }
+    html.dark .tva-policy { background:#1c1917; border-color:#57534e; }
+
+    /* ── Status manager ───────────────────────────────────────────── */
+    .tva-sm { max-width:400px; }
+    .tva-sm__row { display:flex; align-items:center; gap:8px; padding:7px 2px; font-size:12px; color:#334155;
+                   border-bottom:1px solid #f1f5f9; }
+    html.dark .tva-sm__row { color:#e2e8f0; border-bottom-color:#334155; }
+    .tva-sm__ico { border:none; background:transparent; color:#94a3b8; cursor:pointer; padding:3px;
+                   border-radius:5px; line-height:0; }
+    .tva-sm__ico svg { width:13px !important; height:13px !important; }
+    .tva-sm__ico:hover { background:#f1f5f9; color:#4f46e5; }
+    .tva-sm__ico--del:hover { background:#fef2f2; color:#dc2626; }
+    .tva-sm__form { display:flex; flex-direction:column; gap:9px; margin-top:13px; padding-top:13px;
+                    border-top:1px dashed #e2e8f0; }
+    html.dark .tva-sm__form { border-top-color:#334155; }
+    .tva-sm__sw { display:flex; gap:6px; flex-wrap:wrap; }
+    .tva-sm__c { width:22px; height:22px; border-radius:6px; border:2px solid transparent; cursor:pointer; }
+    .tva-sm__c.is-on { border-color:#0f172a; box-shadow:0 0 0 2px #fff inset; }
+    html.dark .tva-sm__c.is-on { border-color:#fff; box-shadow:0 0 0 2px #1e293b inset; }
+    .tva-sm__chk { display:flex; align-items:center; gap:7px; font-size:11.5px; color:#64748b; cursor:pointer; }
+    /* @tailwindcss/forms sets appearance:none on [type=checkbox] and expects
+       utility classes (h-4 w-4 text-indigo-600 …) to supply the box. A bare
+       input therefore renders as nothing at all — which is why this option
+       looked like it was missing rather than unstyled. Given the size and
+       colour explicitly so it does not depend on the plugin's expectations. */
+    .tva-sm__chk input[type="checkbox"] { appearance:none; -webkit-appearance:none;
+        width:15px; height:15px; flex-shrink:0; margin:0; cursor:pointer;
+        border:1.5px solid #cbd5e1; border-radius:4px; background:#fff; position:relative; transition:.12s; }
+    .tva-sm__chk input[type="checkbox"]:hover { border-color:#a5b4fc; }
+    .tva-sm__chk input[type="checkbox"]:checked { background:#4f46e5; border-color:#4f46e5; }
+    /* Tick drawn as a rotated border corner — no icon font or SVG needed. */
+    .tva-sm__chk input[type="checkbox"]:checked::after {
+        content:''; position:absolute; left:4px; top:1px; width:4px; height:8px;
+        border:solid #fff; border-width:0 1.8px 1.8px 0; transform:rotate(45deg); }
+    .tva-sm__chk input[type="checkbox"]:focus-visible { outline:2px solid #a5b4fc; outline-offset:1px; }
+    html.dark .tva-sm__chk input[type="checkbox"] { background:#0f172a; border-color:#475569; }
 
     /* ── Main column ── */
     .tva-chat__main { flex:1 1 auto; display:flex; flex-direction:column; min-width:0; min-height:0; }
@@ -184,11 +492,28 @@
                        font-variant-numeric:tabular-nums; letter-spacing:.01em; }
     html.dark .tva-convo__time { color:#64748b; }
 
-    /* Channel shown as a mark, not a word — see channelIcon(). Square-ish so
-       a row of them lines up regardless of provider name length. */
-    .tva-badge--icon { display:inline-flex; align-items:center; justify-content:center;
-                       padding:3px 6px; line-height:0; }
-    .tva-badge__txt { font-size:9.5px; letter-spacing:.03em; text-transform:uppercase; }
+    /* Channel shown as a mark, not a word — see channelIcon().
+     *
+     * A true circle in the platform's OWN colour with a white glyph, rather
+     * than the earlier tinted rounded-rect. Two reasons it reads better: a
+     * column of circles aligns perfectly whatever the provider, and these are
+     * the colours people already recognise from the apps themselves, so the
+     * channel registers without being read. Instagram gets its gradient. */
+    .tva-badge--icon { width:19px; height:19px; padding:0; border-radius:50%;
+                       display:inline-flex; align-items:center; justify-content:center;
+                       line-height:0; color:#fff; flex-shrink:0;
+                       box-shadow:0 1px 2px rgba(15,23,42,.16); }
+    .tva-badge--icon svg { width:11px; height:11px; }
+    .tva-badge--icon.tva-badge--whatsapp  { background:#25d366; color:#fff; }
+    .tva-badge--icon.tva-badge--facebook,
+    .tva-badge--icon.tva-badge--messenger { background:#1877f2; color:#fff; }
+    .tva-badge--icon.tva-badge--instagram { color:#fff;
+        background:radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
+    /* Channels with no brand mark (web, phone, API) keep a neutral disc so
+       the row still lines up instead of collapsing. */
+    .tva-badge--icon:not([class*="--whatsapp"]):not([class*="--facebook"]):not([class*="--messenger"]):not([class*="--instagram"])
+        { background:#94a3b8; }
+    .tva-badge__txt { font-size:8px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; }
     #hdrChannel { display:inline-flex; align-items:center; }
     #hdrName a { color:inherit; text-decoration:none; border-bottom:1px dashed currentColor; }
     #hdrName a:hover { opacity:.8; }
@@ -213,15 +538,130 @@
 
     <div class="tva-chat">
         <div class="tva-chat__list">
+            {{-- Filters are arranged by how often they get used, so the common
+                 case costs no clicks at all:
+
+                   row 1  ownership — the switch an agent flips all day
+                   row 2  search
+                   row 3  one-tap chips for the two questions actually asked
+                          hourly ("who is waiting?", "what expires soon?"),
+                          plus everything else behind a single popover
+                   row 4  appears only once something is on, so the filter
+                          state can never be a mystery
+
+                 Counts sit on every option. They are what turns a filter list
+                 into a dashboard — you can see there are 12 unanswered
+                 Instagram chats without filtering to find out. --}}
             <div class="tva-chat__listhead">
                 <div class="tva-seg" id="filterTabs">
-                    <button data-f="all" class="is-active"><i data-lucide="inbox" class="w-3.5 h-3.5"></i> All</button>
-                    <button data-f="mine"><i data-lucide="user" class="w-3.5 h-3.5"></i> Mine</button>
-                    <button data-f="queue"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Queue</button>
+                    <button data-f="all" class="is-active"><i data-lucide="inbox" class="w-3.5 h-3.5"></i> All <span class="tva-seg__n" data-n="all"></span></button>
+                    <button data-f="mine"><i data-lucide="user" class="w-3.5 h-3.5"></i> Mine <span class="tva-seg__n" data-n="mine"></span></button>
+                    <button data-f="queue"><i data-lucide="clock" class="w-3.5 h-3.5"></i> Queue <span class="tva-seg__n" data-n="queue"></span></button>
                 </div>
+
                 <div class="tva-search">
                     <i data-lucide="search"></i>
                     <input id="chatSearch" type="text" class="form-control form-control-sm" placeholder="Search conversations…">
+                </div>
+
+                <div class="tva-qf">
+                    <button type="button" class="tva-qf__chip" data-quick="needs_reply"
+                            title="The customer is waiting and Meta's 24-hour window is still open — you can reply without an approved template">
+                        <i data-lucide="corner-up-left"></i> Waiting
+                        <span class="tva-qf__n" data-n="needs_reply"></span>
+                    </button>
+                    <button type="button" class="tva-qf__chip tva-qf__chip--alert" data-quick="needs_human"
+                            title="The customer asked for a person, or the AI escalated — and nobody has replied yet">
+                        <i data-lucide="hand"></i> Needs a person
+                        <span class="tva-qf__n" data-n="needs_human"></span>
+                    </button>
+                    <button type="button" class="tva-qf__chip" data-quick="unread" title="Unread conversations">
+                        <span class="tva-qf__dot"></span> Unread
+                        <span class="tva-qf__n" data-n="unread"></span>
+                    </button>
+
+                    <button type="button" id="filterBtn" class="tva-qf__chip tva-qf__chip--more" title="More filters">
+                        Filters
+                        <span id="filterCount" class="tva-qf__badge" hidden></span>
+                        <i data-lucide="chevron-down" class="tva-qf__caret"></i>
+                    </button>
+                </div>
+
+                <div id="activeFilters" class="tva-af" hidden></div>
+
+                {{-- Live-applies on every click. An Apply button would be one
+                     extra click on every single interaction to protect against
+                     a mistake that costs one click to undo. --}}
+                <div id="filterPanel" class="tva-fp" hidden>
+                    <div class="tva-fp__grid">
+                        <div class="tva-fp__group">
+                            <div class="tva-fp__h">Status</div>
+                            <div class="tva-fp__opts" data-group="states">
+                                <button data-v="active"><span class="tva-st tva-st--active"></span> Active <b data-n="states.active"></b></button>
+                                <button data-v="expiring"><span class="tva-st tva-st--expiring"></span> Expiring soon <b data-n="states.expiring"></b></button>
+                                <button data-v="expired"><span class="tva-st tva-st--expired"></span> Expired <b data-n="states.expired"></b></button>
+                                <button data-v="closed"><span class="tva-st tva-st--closed"></span> Closed <b data-n="states.closed"></b></button>
+                            </div>
+                        </div>
+
+                        <div class="tva-fp__group">
+                            <div class="tva-fp__h">Handled by</div>
+                            <div class="tva-fp__opts" data-group="handlers">
+                                <button data-v="bot"><i data-lucide="bot"></i> AI agent <b data-n="handlers.bot"></b></button>
+                                <button data-v="agent"><i data-lucide="user"></i> A person <b data-n="handlers.agent"></b></button>
+                                <button data-v="queued"><i data-lucide="clock"></i> Queued <b data-n="handlers.queued"></b></button>
+                            </div>
+                        </div>
+
+                        <div class="tva-fp__group" id="convStatusGroup" hidden>
+                            <div class="tva-fp__h">Conversation status</div>
+                            <div class="tva-fp__opts" data-group="conv_statuses" id="convStatusOpts"></div>
+                        </div>
+
+                        <div class="tva-fp__group">
+                            <div class="tva-fp__h">Read state</div>
+                            <div class="tva-fp__opts" data-group="read" data-single="1">
+                                <button data-v="unread">Unread <b data-n="unread"></b></button>
+                                <button data-v="read">Read <b data-n="read"></b></button>
+                            </div>
+                        </div>
+
+                        <div class="tva-fp__group">
+                            <div class="tva-fp__h">Last activity</div>
+                            <div class="tva-fp__opts" data-group="date" data-single="1">
+                                <button data-v="today">Today</button>
+                                <button data-v="7d">Last 7 days</button>
+                                <button data-v="30d">Last 30 days</button>
+                            </div>
+                        </div>
+
+                        <div class="tva-fp__group">
+                            <div class="tva-fp__h">Channel</div>
+                            <div class="tva-fp__opts" data-group="channels">
+                                <button data-v="whatsapp">WhatsApp <b data-n="channels.whatsapp"></b></button>
+                                <button data-v="instagram">Instagram <b data-n="channels.instagram"></b></button>
+                                <button data-v="facebook">Facebook <b data-n="channels.facebook"></b></button>
+                            </div>
+                        </div>
+
+                        <div class="tva-fp__group">
+                            <div class="tva-fp__h">Conversation type</div>
+                            <div class="tva-fp__opts" data-group="kinds">
+                                <button data-v="dm"><i data-lucide="message-circle" class="w-3.5 h-3.5"></i> Direct messages <b data-n="kinds.dm"></b></button>
+                                <button data-v="comment"><i data-lucide="message-square" class="w-3.5 h-3.5"></i> Post comments <b data-n="kinds.comment"></b></button>
+                            </div>
+                        </div>
+
+                        <div class="tva-fp__group" id="accountGroup" hidden>
+                            <div class="tva-fp__h">Page / number</div>
+                            <div class="tva-fp__opts" data-group="accounts" id="accountOpts"></div>
+                        </div>
+                    </div>
+
+                    <div class="tva-fp__foot">
+                        <button type="button" id="filterClear" class="tva-fp__clear">Clear all</button>
+                        <button type="button" id="filterDone" class="btn btn-sm btn-primary">Done</button>
+                    </div>
                 </div>
             </div>
             <div id="chatConvos" class="tva-chat__convos"></div>
@@ -238,12 +678,50 @@
                     <div class="tva-convo__av" id="hdrAvatar"></div>
                     <div class="min-w-0">
                         <div class="tva-convo__name" id="hdrName"></div>
-                        <div class="text-xs text-slate-500"><span id="hdrChannel"></span> · <span id="hdrAccount"></span></div>
+                        {{-- The raw channel_account (page id / phone_number_id)
+                             used to sit here. It is an internal identifier: it
+                             cannot be dialled or opened, and it made the header
+                             read like a debug dump. The Page's NAME plus its
+                             channel mark answers "which of ours is this on?"
+                             without any of that. --}}
+                        <div class="text-xs text-slate-500"><span id="hdrChannel"></span></div>
                     </div>
+                    {{-- Metrics before controls, reading left to right: what is
+                         true about this conversation, then what you can do
+                         about it. Each is icon + short value with the full
+                         wording in the tooltip — a header has room for four
+                         numbers only if none of them spells itself out. --}}
                     <div class="ml-auto flex items-center gap-2">
+                        <div id="hdrMetrics" class="tva-mx"></div>
+
+                        <div class="tva-cs">
+                            <button type="button" id="transferBtn" class="tva-cs__btn" title="Transfer this conversation">
+                                <i data-lucide="users"></i>
+                                <span id="transferLabel">Transfer</span>
+                                <i data-lucide="chevron-down" class="tva-cs__caret"></i>
+                            </button>
+                            <div id="transferMenu" class="tva-cs__menu" hidden>
+                                <div id="transferOpts"></div>
+                            </div>
+                        </div>
+
+                        <div class="tva-cs">
+                            <button type="button" id="statusBtn" class="tva-cs__btn" title="Set conversation status">
+                                <span class="tva-cs__dot" id="statusDot"></span>
+                                <span id="statusLabel">Status</span>
+                                <i data-lucide="chevron-down" class="tva-cs__caret"></i>
+                            </button>
+                            <div id="statusMenu" class="tva-cs__menu" hidden>
+                                <div id="statusOpts"></div>
+                                <div class="tva-cs__sep"></div>
+                                <button type="button" class="tva-cs__manage" onclick="openStatusManager()">
+                                    <i data-lucide="settings-2"></i> Manage statuses
+                                </button>
+                            </div>
+                        </div>
+
                         <span id="hdrHandoff" class="tva-chip" style="display:none;"></span>
                         <button id="handoffBtn" class="btn btn-sm" style="display:none;"></button>
-                        <span id="hdrWindow" class="tva-chip"></span>
                         <button id="galleryBtn" class="btn btn-sm btn-secondary" title="Shared media"><i data-lucide="image" class="w-3 h-3"></i></button>
                         <button id="botToggle" class="btn btn-sm btn-secondary" title="Pause/resume the AI for this chat">
                             <i data-lucide="bot" class="w-3 h-3 mr-1 inline"></i><span id="botToggleLabel">Bot on</span>
@@ -265,6 +743,11 @@
                         <button class="wa-only" onclick="composerAction('catalog')"><i data-lucide="shopping-bag" class="w-4 h-4"></i> Send catalog products</button>
                         <button class="wa-only" onclick="composerAction('template')"><i data-lucide="file-text" class="w-4 h-4"></i> Send template</button>
                     </div>
+
+                    {{-- Why the composer is locked (or why a reply still works
+                         past 24h). Rendered from the server's reply policy so
+                         the explanation can never contradict the enforcement. --}}
+                    <div id="policyNote" class="tva-policy" hidden></div>
 
                     <div class="tva-composer-row" id="composerRow">
                         <button class="tva-iconbtn" id="btnMore" title="More options"><i data-lucide="plus" class="w-4 h-4"></i></button>
@@ -297,6 +780,18 @@
     <div id="msgMenu"></div>
     <div class="tva-toasts" id="tvaToasts"></div>
     <div class="tva-ov" id="tvaDlg"><div class="tva-dlg"></div></div>
+
+    <div class="tva-ov" id="statusMgr" onclick="if(event.target===this) closeStatusManager()">
+        <div class="tva-dlg tva-sm">
+            <div class="tva-dlg__title">Conversation statuses</div>
+            <div class="tva-dlg__text">Your own labels for where a conversation stands. One marked
+                <em>closes</em> will resolve the conversation when applied.</div>
+            <div id="statusMgrBody"></div>
+            <div class="flex justify-end mt-3">
+                <button class="btn btn-sm btn-secondary" onclick="closeStatusManager()">Close</button>
+            </div>
+        </div>
+    </div>
     <div class="tva-gallery" id="galleryOverlay">
         <div class="flex items-center mb-3" style="color:#fff;">
             <b class="flex-1">Shared media</b>
@@ -333,7 +828,40 @@ function refreshTyping(){
         if(near) box.scrollTop=box.scrollHeight;
     }
 }
-function initials(n){ return (n||'?').trim().slice(0,2).toUpperCase(); }
+// Initials from the FIRST and LAST name — "Ayesha Khan" → AK.
+//
+// Not the first two characters of the string, which is what this used to do
+// and which gave "Ay". A single-word name has no last name to take, so it
+// keeps two letters from the one word it has.
+function initials(name){
+    const parts = String(name || '').trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return '?';
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// Placeholder for a contact with no photo.
+//
+// The hue is derived from the conversation id rather than the name, so rows
+// stay visually distinct even where several contacts are unresolved and
+// share the same placeholder text.
+function avatarFallback(seed, name){
+    let n = 0;
+    const s = String(seed || '?');
+    for (let i = 0; i < s.length; i++) n = (n * 31 + s.charCodeAt(i)) >>> 0;
+    const hue = n % 360;
+
+    return '<span class="tva-convo__ini" style="background:hsl(' + hue + ',52%,90%);color:hsl(' + hue + ',45%,32%)">'
+        + h(initials(name)) + '</span>';
+}
+
+// A broken <img> is worse than no <img>: a stale Meta CDN link renders as the
+// browser's torn-page icon. onerror swaps in the initials instead.
+function avatarHtml(url, seed, name){
+    if (!url) return avatarFallback(seed, name);
+    return '<img src="' + h(url) + '" alt="" loading="lazy"'
+        + ' onerror="this.parentNode.innerHTML=' + h(JSON.stringify(avatarFallback(seed, name))) + '">';
+}
 
 /* Channel identity as a mark rather than a word.
    The full provider name ("facebook_page") ate a third of the row and told an
@@ -345,12 +873,20 @@ const CHANNEL_MARKS = {
     instagram:     'M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 0 1-1.38-.9 3.7 3.7 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zm0 5.68A4.16 4.16 0 1 0 16.16 12 4.16 4.16 0 0 0 12 7.84zm0 6.86A2.7 2.7 0 1 1 14.7 12 2.7 2.7 0 0 1 12 14.7zm5.3-7.1a.97.97 0 1 1-.97-.97.97.97 0 0 1 .97.97z',
     facebook_page: 'M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.97h-1.52c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z',
 };
+// Keyed on sessions.channel, which is NOT the same vocabulary as the Meta
+// provider name. A Messenger conversation is stored as `facebook`, not
+// `facebook_page` (see CrmInboundMessageHandler::channelFor) — keying only on
+// the provider names meant every Facebook conversation missed the lookup and
+// fell through to the text fallback, printing the word "facebook" in the
+// badge. Both spellings are mapped so either vocabulary resolves.
+CHANNEL_MARKS.facebook  = CHANNEL_MARKS.facebook_page;
 CHANNEL_MARKS.messenger = CHANNEL_MARKS.facebook_page;
 
 const CHANNEL_LABELS = {
     whatsapp: 'WhatsApp', instagram: 'Instagram',
-    facebook_page: 'Facebook', messenger: 'Messenger',
-    web: 'Web chat', twilio: 'Phone', plivo: 'Phone', api: 'API', internal: 'Internal',
+    facebook: 'Facebook', facebook_page: 'Facebook', messenger: 'Messenger',
+    web: 'Web chat', voice: 'Voice', phone: 'Phone', sms: 'SMS',
+    twilio: 'Phone', plivo: 'Phone', api: 'API', internal: 'Internal',
 };
 
 function channelLabel(ch){ return CHANNEL_LABELS[ch] || (ch||'').replace(/_/g,' '); }
@@ -405,38 +941,283 @@ function composerAction(type){
 
 // ── Conversation list ──
 let currentFilter='all';
+
+// Multi-select dimensions are Sets; `read` and `date` are single-valued
+// because they are genuinely exclusive.
+const MULTI = ['states','channels','accounts','kinds','handlers','conv_statuses'];
+const FILTERS = {
+    states: new Set(), channels: new Set(), accounts: new Set(), kinds: new Set(),
+    handlers: new Set(), conv_statuses: new Set(),
+    read: null, date: null, needs_human: false,
+};
+const FILTER_LABELS = {
+    states:   {active:'Active', expiring:'Expiring soon', expired:'Expired', closed:'Closed'},
+    channels: {whatsapp:'WhatsApp', instagram:'Instagram', facebook:'Facebook'},
+    kinds:    {dm:'Direct messages', comment:'Post comments'},
+    handlers: {bot:'AI agent', agent:'A person', queued:'Queued'},
+    read:     {unread:'Unread', read:'Read'},
+    date:     {today:'Today', '7d':'Last 7 days', '30d':'Last 30 days'},
+};
+let ACCOUNT_NAMES = {}, STATUS_NAMES = {};
+
+function filterQuery(){
+    const p = new URLSearchParams({project_id: CHAT.projectId, filter: currentFilter});
+    for (const k of MULTI) {
+        if (FILTERS[k].size) p.set(k, [...FILTERS[k]].join(','));
+    }
+    if (FILTERS.read) p.set('read', FILTERS.read);
+    if (FILTERS.date) p.set('date', FILTERS.date);
+    if (FILTERS.needs_human) p.set('needs_human','1');
+    return p.toString();
+}
+
+function activeFilterCount(){
+    return MULTI.reduce((n,k)=>n+FILTERS[k].size, 0)
+         + (FILTERS.read ? 1 : 0) + (FILTERS.date ? 1 : 0) + (FILTERS.needs_human ? 1 : 0);
+}
+
 async function loadConvos(){
     try{
-        const r=await api(CHAT.convosUrl+'?project_id='+CHAT.projectId+'&filter='+currentFilter);
-        const d=await r.json(); renderConvos(d.conversations||[]); applyPresence(d.me);
+        const r=await api(CHAT.convosUrl+'?'+filterQuery());
+        const d=await r.json();
+        renderConvos(d.conversations||[]);
+        applyPresence(d.me);
+        applyFacets(d.facets||{}, d.accounts||[]);
+        applyStatusFilterOptions(d.statuses||[]);
     }catch(e){}
+}
+
+// ── Filter chrome ──
+function facetAt(facets, path){
+    return path.split('.').reduce((o,k)=> (o==null?undefined:o[k]), facets);
+}
+
+function applyFacets(facets, accounts){
+    // Counts everywhere they were declared, resolved by dotted path so the
+    // markup stays the single source of truth for which count goes where.
+    document.querySelectorAll('[data-n]').forEach(el=>{
+        const v = facetAt(facets, el.dataset.n);
+
+        // Quick chips drop a zero rather than printing it. Standard badge
+        // behaviour, and it buys back the width that was pushing this row past
+        // the column edge — the chip's own presence already says the filter
+        // exists, and an empty result is what the list will show anyway.
+        // Panel options and the All/Mine/Queue tabs keep their zeros, where
+        // "none" is the answer to a question the user asked.
+        const hideZero = el.classList.contains('tva-qf__n');
+
+        el.textContent = (v === undefined || v === null || (hideZero && v === 0)) ? '' : v;
+
+        const btn = el.closest('.tva-fp__opts button');
+        if (btn) btn.classList.toggle('is-empty', v === 0);
+    });
+
+    // The Page/number list is per-project and only worth showing when there
+    // is a choice to make.
+    const sig = accounts.map(a=>a.id).join('|');
+    if (sig !== (applyFacets._sig||'')) {
+        applyFacets._sig = sig;
+        ACCOUNT_NAMES = {};
+        const box = document.getElementById('accountOpts');
+        box.innerHTML = accounts.map(a=>{
+            ACCOUNT_NAMES[a.id] = a.name;
+            return '<button data-v="'+h(a.id)+'">'+channelIcon(a.channel)+' <span>'+h(a.name)+'</span>'
+                 + '<b data-n="accounts.'+h(a.id)+'"></b></button>';
+        }).join('');
+        document.getElementById('accountGroup').hidden = accounts.length < 2;
+        syncFilterUI();
+        // Re-run so the freshly built buttons get their counts too.
+        if (accounts.length) applyFacets(facets, []);
+    }
+}
+
+function applyStatusFilterOptions(statuses){
+    const sig = statuses.map(s=>s.id+':'+s.name).join('|');
+    if (sig === (applyStatusFilterOptions._sig||'')) return;
+    applyStatusFilterOptions._sig = sig;
+
+    STATUS_NAMES = {};
+    document.getElementById('convStatusOpts').innerHTML = statuses.map(s=>{
+        STATUS_NAMES[s.id] = s.name;
+        // Name in its own unclassed <span> so the CSS can ellipsis it — a
+        // custom status can be 60 characters and would otherwise widen the
+        // button past the panel.
+        return '<button data-v="'+s.id+'"><span class="tva-cs__dot" style="background:'+h(s.color)+'"></span>'
+             + '<span>'+h(s.name)+'</span> <b data-n="statuses.'+s.id+'"></b></button>';
+    }).join('');
+    document.getElementById('convStatusGroup').hidden = statuses.length === 0;
+    syncFilterUI();
+}
+
+function syncFilterUI(){
+    document.querySelectorAll('.tva-fp__opts').forEach(box=>{
+        const g = box.dataset.group;
+        box.querySelectorAll('button').forEach(b=>{
+            const on = box.dataset.single ? FILTERS[g] === b.dataset.v : FILTERS[g].has(b.dataset.v);
+            b.classList.toggle('is-on', on);
+        });
+    });
+
+    document.querySelector('[data-quick="unread"]').classList.toggle('is-on', FILTERS.read === 'unread');
+    document.querySelector('[data-quick="needs_reply"]').classList.toggle('is-on', isNeedsReply());
+    document.querySelector('[data-quick="needs_human"]').classList.toggle('is-on', FILTERS.needs_human);
+
+    const n = activeFilterCount(), badge = document.getElementById('filterCount');
+    badge.textContent = n; badge.hidden = n === 0;
+
+    renderActiveFilters();
+}
+
+// "Needs reply" is a saved combination, not a dimension of its own: unread,
+// and still inside the window where a free-form answer is allowed.
+function isNeedsReply(){
+    return FILTERS.read === 'unread'
+        && FILTERS.states.size === 2
+        && FILTERS.states.has('active') && FILTERS.states.has('expiring');
+}
+
+// Each pill names its dimension ("Channel: Instagram"), because the value
+// alone is ambiguous once several filters are on — "Active" could plausibly
+// be a status or an agent, and "Today" could be a date or a shift.
+const FILTER_DIMENSIONS = {
+    states:'Window', channels:'Channel', kinds:'Type', handlers:'Handled by',
+    accounts:'Page', conv_statuses:'Status', read:'', date:'Activity', needs_human:'',
+};
+
+function renderActiveFilters(){
+    const pills = [];
+    const add = (group, value, label) =>
+        pills.push('<span class="tva-af__pill">'
+            + (FILTER_DIMENSIONS[group] ? '<em>' + h(FILTER_DIMENSIONS[group]) + '</em>' : '')
+            + h(label)
+            + '<button onclick="removeFilter(\''+group+'\',\''+h(value)+'\')" title="Remove this filter">'
+            + '<i data-lucide="x"></i></button></span>');
+
+    for (const g of ['states','channels','kinds','handlers']) {
+        FILTERS[g].forEach(v => add(g, v, FILTER_LABELS[g][v] || v));
+    }
+    FILTERS.accounts.forEach(v => add('accounts', v, ACCOUNT_NAMES[v] || v));
+    FILTERS.conv_statuses.forEach(v => add('conv_statuses', v, STATUS_NAMES[v] || v));
+    if (FILTERS.needs_human) add('needs_human', '1', 'Needs a person');
+    if (FILTERS.read) add('read', FILTERS.read, FILTER_LABELS.read[FILTERS.read]);
+    if (FILTERS.date) add('date', FILTERS.date, FILTER_LABELS.date[FILTERS.date]);
+
+    const box = document.getElementById('activeFilters');
+    box.hidden = pills.length === 0;
+    box.innerHTML = pills.join('')
+        + (pills.length > 1 ? '<button class="tva-af__clear" onclick="clearFilters()">Clear all</button>' : '');
+    if (window.lucide) lucide.createIcons();
+}
+
+function removeFilter(group, value){
+    if (group === 'needs_human') FILTERS.needs_human = false;
+    else if (group === 'read' || group === 'date') FILTERS[group] = null;
+    // Sets are keyed by the option's own type; status ids arrive as numbers
+    // from the payload and as strings from a pill's onclick, so try both.
+    else { FILTERS[group].delete(value); FILTERS[group].delete(Number(value)); }
+    syncFilterUI(); loadConvos();
+}
+
+function clearFilters(){
+    MULTI.forEach(k=>FILTERS[k].clear());
+    FILTERS.read = null; FILTERS.date = null; FILTERS.needs_human = false;
+    syncFilterUI(); loadConvos();
 }
 function applyPresence(me){
     const sel=document.getElementById('presenceSel');
     if(me){ sel.style.display=''; if(!sel.dataset.touched) sel.value=me.presence; }
     else { sel.style.display='none'; }
 }
-function handoffBadge(c){
-    if(c.handoff==='queued') return '<span class="tva-badge" style="background:#fef3c7;color:#92400e;">⏳ QUEUE</span>';
-    if(c.handoff==='assigned') return `<span class="tva-badge" style="background:#e0e7ff;color:#3730a3;">🙋 ${h(c.assigned_to||'Agent')}</span>`;
-    return '';
-}
+// (handoffBadge removed — rowTags() supersedes it and shows the same handoff
+//  state alongside the assignee avatar and the conversation status.)
 function renderConvos(list){
     const q=(document.getElementById('chatSearch').value||'').toLowerCase();
     document.getElementById('chatConvos').innerHTML = list.filter(c=>!q||(c.name||'').toLowerCase().includes(q)).map(c=>`
         <div class="tva-convo ${c.id===activeSid?'is-active':''}" onclick="openThread(${c.id})">
-            <div class="tva-convo__av">${c.avatar?`<img src="${h(c.avatar)}">`:h(initials(c.name))}</div>
+            <div class="tva-convo__av">${avatarHtml(c.avatar, c.id, c.name)}</div>
             <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2"><span class="tva-convo__name flex-1 truncate">${h(c.name)}</span><span class="tva-badge tva-badge--${c.channel} tva-badge--icon" title="${h(channelLabel(c.channel))}">${channelIcon(c.channel)}</span></div>
                 <div class="flex items-center gap-2 mt-0.5">
                     <span class="tva-convo__last flex-1">${h(c.last_message)}</span>
                     <span class="tva-convo__time">${timeAgo(c.last_at)}</span>
                     ${c.unread_count>0?`<span class="tva-unread">${c.unread_count>99?'99+':c.unread_count}</span>`:(c.unread?'<span class="tva-dot tva-dot--unread"></span>':'')}
-                    <span class="tva-dot ${c.window_open?'tva-dot--open':'tva-dot--closed'}" title="${c.window_open?'24h window open':'window closed'}"></span>
+                    <span class="tva-st tva-st--${c.state||'active'}" title="${h(STATE_HINTS[c.state]||'')}"></span>
                 </div>
-                ${handoffBadge(c)?`<div class="mt-1">${handoffBadge(c)}</div>`:''}
+                ${rowTags(c)}
             </div>
-        </div>`).join('') || '<div class="text-center text-xs text-slate-400 py-8">No conversations.</div>';
+        </div>`).join('') || emptyListHtml(q);
+}
+
+/**
+ * The third line of a conversation row: who owns it, whether a person is
+ * needed, and the customer-defined status.
+ *
+ * Ordered by urgency, not by category — "needs a human" is the only one that
+ * is a call to action, so it comes first and is the only one that shouts.
+ */
+function rowTags(c){
+    const tags = [];
+
+    if (c.needs_human) {
+        tags.push('<span class="tva-tag tva-tag--alert" title="The customer asked for a person, or the AI escalated — nobody has replied yet">'
+            + '<i data-lucide="hand"></i>Needs a person</span>');
+    }
+
+    const hd = c.handler || {type:'bot', name:'AI agent'};
+    if (hd.type === 'agent') {
+        // A named person gets an avatar, so a glance down the column shows who
+        // is carrying what.
+        tags.push('<span class="tva-tag tva-tag--agent" title="Assigned to '+h(hd.name)+'">'
+            + '<span class="tva-tag__ini">'+h(initials(hd.name))+'</span>'+h(hd.name)+'</span>');
+    } else if (hd.type === 'bot') {
+        tags.push('<span class="tva-tag tva-tag--bot" title="The AI is handling this conversation">'
+            + '<i data-lucide="bot"></i>AI agent</span>');
+    } else if (hd.type === 'queued') {
+        tags.push('<span class="tva-tag tva-tag--wait" title="Escalated — waiting for an agent to free up">'
+            + '<i data-lucide="clock"></i>Queued</span>');
+    } else if (hd.type === 'human') {
+        tags.push('<span class="tva-tag tva-tag--agent" title="A person has taken this over">'
+            + '<i data-lucide="user"></i>Person</span>');
+    }
+
+    if (c.status) {
+        tags.push('<span class="tva-tag" style="color:'+h(c.status.color)+';border-color:'+h(c.status.color)+'44;'
+            + 'background:'+h(c.status.color)+'14" title="Status: '+h(c.status.name)+'">'
+            + '<span class="tva-cs__dot" style="background:'+h(c.status.color)+'"></span>'+h(c.status.name)+'</span>');
+    }
+
+    return tags.length ? '<div class="tva-tags">'+tags.join('')+'</div>' : '';
+}
+
+// The state dot doubles as the legend for the Status filter — same four
+// colours, so a row's colour and a filter option's colour mean one thing.
+const STATE_HINTS = {
+    active:   'Active — reply freely',
+    expiring: 'Expiring soon — under 2 hours to reply without a template',
+    expired:  '24-hour window closed — only an approved template will reopen it',
+    closed:   'Closed',
+};
+
+/**
+ * An empty list has to say WHY it is empty, because the three reasons need
+ * three different actions: clear a filter, clear the search, or wait for a
+ * message. "No conversations." covered all three and helped with none.
+ */
+function emptyListHtml(query){
+    if (query) {
+        return '<div class="tva-empty-sm">No conversation matches “' + h(query) + '”.</div>';
+    }
+    if (FILTERS.kinds.has('comment') && FILTERS.kinds.size === 1) {
+        // Honest about a real gap rather than looking broken: comments are not
+        // ingested yet, so this filter cannot have results.
+        return '<div class="tva-empty-sm">Post comments aren’t being collected yet — only direct messages'
+             + ' reach the inbox for now.<br><button class="tva-af__clear" onclick="clearFilters()">Clear filters</button></div>';
+    }
+    if (activeFilterCount() > 0) {
+        return '<div class="tva-empty-sm">Nothing matches these filters.'
+             + '<br><button class="tva-af__clear" onclick="clearFilters()">Clear filters</button></div>';
+    }
+    return '<div class="tva-empty-sm">No conversations yet.</div>';
 }
 function applyHandoff(d){
     const badge=document.getElementById('hdrHandoff'); const btn=document.getElementById('handoffBtn'); const ho=d.handoff||'bot';
@@ -467,7 +1248,9 @@ async function loadThread(full){
     try{
         const r=await api(msgUrl('messages')+'?project_id='+CHAT.projectId+'&after='+(full?0:lastMsgId));
         const d=await r.json();
-        if(full){ applyHeader(d); applyHandoff(d); }
+        if(full){ applyHeader(d); applyHandoff(d); applyStatuses(d); applyTransfer(d); }
+        applyMetrics(d);       // refreshed on every poll so the timer never drifts
+        applyReplyPolicy(d);   // and so the composer unlocks the moment they reply
         appendMessages(d.messages||[]);
         applyWindow(d);
         currentBotPaused = !!d.bot_paused;
@@ -493,22 +1276,354 @@ function applyHeader(d){
             ? '<a href="' + h(c.channel_url) + '" target="_blank" rel="noopener" title="Open ' + chLabel + '">' + chInner + '</a>'
             : chInner)
         : '';
-    document.getElementById('hdrAccount').textContent=c.account||'';
-    document.getElementById('hdrAvatar').innerHTML=c.avatar?`<img src="${h(c.avatar)}">`:h(initials(c.name));
+    document.getElementById('hdrAvatar').innerHTML=avatarHtml(c.avatar, activeSid, c.name);
     setBot(d.bot_paused);
     document.querySelectorAll('.wa-only').forEach(b=> b.style.display=(c.channel==='whatsapp')?'flex':'none');
 }
 function applyWindow(d){
-    const chip=document.getElementById('hdrWindow'), banner=document.getElementById('windowBanner'), ta=document.getElementById('chatInput');
+    // The countdown itself now lives in the metric strip, which ticks every
+    // second — a single owner, so the header cannot show one number while the
+    // banner implies another.
+    const banner=document.getElementById('windowBanner'), ta=document.getElementById('chatInput');
     if(d.window_open){
-        const left=d.window_expires?Math.max(0,Math.floor((d.window_expires-Date.now()/1000)/3600)):null;
-        chip.className='tva-chip tva-chip--open'; chip.textContent=left!==null?`${left}h left`:'open'; banner.innerHTML=''; ta.disabled=false;
+        banner.innerHTML=''; ta.disabled=false;
     }else{
-        chip.className='tva-chip tva-chip--closed'; chip.textContent='Expired';
         banner.innerHTML='<div class="tva-window-banner"><i data-lucide="clock" class="w-4 h-4"></i><span>24-hour window closed. Reply via an approved <b>template</b> to start a new conversation.</span></div>';
         if(window.lucide) try{lucide.createIcons();}catch(_){}
     }
 }
+
+// ── Header metrics ──
+let METRICS = null;
+
+/** "23h 41m" · "48m" · "4m 07s" — coarse far out, precise when it matters. */
+function fmtCountdown(sec){
+    if (sec <= 0) return 'Expired';
+    const hh=Math.floor(sec/3600), mm=Math.floor((sec%3600)/60), ss=sec%60;
+    if (hh > 0)  return hh+'h '+String(mm).padStart(2,'0')+'m';
+    if (mm >= 5) return mm+'m';
+    // Under five minutes the seconds are the whole point.
+    return mm+'m '+String(ss).padStart(2,'0')+'s';
+}
+
+/** Elapsed time in one unit — "45s", "12m", "3h", "6d". */
+function fmtDur(sec){
+    if (sec === null || sec === undefined) return '—';
+    if (sec < 60)    return Math.round(sec)+'s';
+    if (sec < 3600)  return Math.round(sec/60)+'m';
+    if (sec < 86400) return Math.round(sec/3600)+'h';
+    return Math.round(sec/86400)+'d';
+}
+
+function applyMetrics(d){
+    METRICS = d.metrics || null;
+    renderMetrics();
+}
+
+function renderMetrics(){
+    const box = document.getElementById('hdrMetrics');
+    if (!box) return;
+    if (!METRICS) { box.innerHTML=''; return; }
+
+    const m = METRICS, now = Date.now()/1000, chips = [];
+
+    // 1. The reply window — the only hard deadline in the inbox, so it leads
+    //    and it is the only chip that changes colour.
+    if (m.window_expires_at) {
+        const left = Math.floor(m.window_expires_at - now);
+        const tone = left <= 0 ? 'is-dead' : (left < 7200 ? 'is-warn' : 'is-ok');
+        // Thin bar showing how much of the 24 hours is left, so the trend is
+        // readable at a glance without doing arithmetic on the number.
+        const pct = Math.max(0, Math.min(100, (left / (m.window_seconds||86400)) * 100));
+        chips.push('<span class="tva-mx__c '+tone+'" title="'+(left<=0
+                ? 'Meta’s 24-hour reply window has closed — only an approved template can reopen it'
+                : 'Time left to reply without an approved template')+'">'
+            + '<i data-lucide="timer"></i><b>'+h(fmtCountdown(left))+'</b>'
+            + '<span class="tva-mx__bar" style="width:'+pct.toFixed(1)+'%"></span></span>');
+    }
+
+    // 2. When it started.
+    if (m.started_at) {
+        chips.push('<span class="tva-mx__c" title="Conversation started '+h(new Date(m.started_at*1000).toLocaleString())+'">'
+            + '<i data-lucide="play"></i><b>'+h(fmtDur(now - m.started_at))+'</b></span>');
+    }
+
+    // 3. First response time — the number a customer actually feels.
+    chips.push('<span class="tva-mx__c" title="'+(m.first_response===null
+            ? 'No reply has been sent yet'
+            : 'First reply took '+m.first_response+'s after the customer’s first message')+'">'
+        + '<i data-lucide="zap"></i><b>'+h(fmtDur(m.first_response))+'</b></span>');
+
+    // 4. Project-wide leads → converted. Same formula as the dashboard.
+    if (m.conversion_rate !== null && m.conversion_rate !== undefined) {
+        chips.push('<span class="tva-mx__c" title="Leads converted across this project — the same figure as the dashboard">'
+            + '<i data-lucide="trending-up"></i><b>'+m.conversion_rate+'%</b></span>');
+    }
+
+    // 5. This conversation's own lead, when it produced one.
+    if (m.lead) {
+        chips.push('<span class="tva-mx__c tva-mx__c--lead" title="This conversation produced a lead'
+            + (m.lead.confidence!==null?' · '+m.lead.confidence+'% confidence':'')+'">'
+            + '<i data-lucide="user-check"></i><b>'+h(m.lead.status)+'</b></span>');
+    }
+
+    box.innerHTML = chips.join('');
+    if (window.lucide) try{ lucide.createIcons(); }catch(_){}
+}
+
+// One second is the right cadence: the last five minutes of the window are
+// counted in seconds, and anything slower would visibly stall there.
+setInterval(()=>{ if (METRICS && activeSid) renderMetrics(); }, 1000);
+
+// ── Reply window enforcement ──
+// The rules come from the server (ChatController::replyPolicy). Meta's
+// allowances differ per channel and change; deciding this in JS as well would
+// guarantee the two drift, and the failure mode is a composer that looks
+// usable and then 409s after the agent has typed a paragraph.
+function applyReplyPolicy(d){
+    const p = d.reply_policy || {allowed:true, mode:'free'};
+    const ta = document.getElementById('chatInput');
+    const row = document.getElementById('composerRow');
+
+    ta.disabled = !p.allowed;
+    ta.placeholder = p.allowed
+        ? (p.mode === 'human_agent' ? 'Reply (human-agent window)…' : 'Type a message…')
+        : 'Replies are closed until the customer writes again';
+    row.classList.toggle('is-locked', !p.allowed);
+
+    // Everything that sends is gated together — leaving the attach or voice
+    // buttons live on a locked conversation just moves the failure.
+    ['btnSend','btnVoice','btnMore','btnEmoji'].forEach(id=>{
+        const b=document.getElementById(id); if(b) b.disabled = !p.allowed;
+    });
+
+    // Templates are the one thing that still works on an expired WhatsApp
+    // thread — it is the documented way back in, so it stays enabled.
+    const tpl=document.getElementById('btnTemplate');
+    if (tpl) tpl.disabled = false;
+
+    const note=document.getElementById('policyNote');
+    if (note) {
+        note.hidden = !p.reason;
+        note.className = 'tva-policy' + (p.allowed ? ' is-soft' : '');
+        note.textContent = p.reason || '';
+    }
+}
+
+// ── Transfer ──
+let AGENTS = [], IS_OWNER = false;
+
+function applyTransfer(d){
+    AGENTS = d.agents || [];
+    IS_OWNER = !!d.is_owner;
+    renderTransferControl(d);
+}
+
+function renderTransferControl(d){
+    const cur = AGENTS.find(a=>a.current) || null;
+    document.getElementById('transferLabel').textContent = cur ? cur.name : 'Transfer';
+
+    if (!AGENTS.length) {
+        document.getElementById('transferOpts').innerHTML =
+            '<div class="tva-cs__none">No human agents on this project yet.<br>'
+            + 'Add them under <b>Agents</b> to hand conversations over.</div>';
+        return;
+    }
+
+    // Presence and current load are shown because handing a chat to someone
+    // offline with six open threads is the mistake this data prevents.
+    document.getElementById('transferOpts').innerHTML = AGENTS.map(a=>{
+        const dot = a.presence==='online' ? '#22c55e' : (a.presence==='away' ? '#f59e0b' : '#94a3b8');
+        const full = a.max !== null && a.load >= a.max;
+        return '<button type="button" class="tva-cs__opt'+(a.current?' is-on':'')+'" onclick="transferTo('+a.id+')">'
+            + '<span class="tva-cs__ini">'+h(initials(a.name))+'</span>'
+            + '<span class="flex-1 min-w-0"><span class="block truncate">'+h(a.name)+(a.me?' (you)':'')+'</span>'
+            + '<span class="tva-cs__sub"><span class="tva-cs__dot" style="background:'+dot+'"></span>'
+            + h(a.presence)+' · '+a.load+(a.max!==null?'/'+a.max:'')+' open</span></span>'
+            + (full?'<span class="tva-cs__tag">full</span>':'')
+            + '</button>';
+    }).join('')
+    + '<div class="tva-cs__sep"></div>'
+    + '<button type="button" class="tva-cs__opt tva-cs__opt--clear" onclick="transferTo(null)">'
+    + '<i data-lucide="bot"></i> Hand back to the AI</button>';
+}
+
+async function transferTo(agentId){
+    document.getElementById('transferMenu').hidden = true;
+
+    const r = await api(msgUrl('transfer'), {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({project_id: CHAT.projectId, agent: agentId}),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(()=>({}));
+        tvaToast(e.message || 'Could not transfer this conversation.','error');
+        return;
+    }
+    const d = await r.json();
+    tvaToast('Transferred to '+(d.assigned_to||'the AI'),'success');
+    loadThread(true); loadConvos();
+}
+
+// ── Conversation status ──
+let STATUSES = [], CURRENT_STATUS = null;
+
+function applyStatuses(d){
+    STATUSES = d.statuses || [];
+    CURRENT_STATUS = d.status_id || null;
+    renderStatusControl();
+}
+
+function renderStatusControl(){
+    const cur = STATUSES.find(s=>s.id===CURRENT_STATUS) || null;
+    document.getElementById('statusLabel').textContent = cur ? cur.name : 'Set status';
+    const dot = document.getElementById('statusDot');
+    dot.style.background = cur ? cur.color : 'transparent';
+    dot.style.boxShadow  = cur ? 'none' : 'inset 0 0 0 1.5px #cbd5e1';
+
+    document.getElementById('statusOpts').innerHTML = STATUSES.map(s=>
+        '<button type="button" class="tva-cs__opt'+(s.id===CURRENT_STATUS?' is-on':'')+'" onclick="setStatus('+s.id+')">'
+        + '<span class="tva-cs__dot" style="background:'+h(s.color)+'"></span>'
+        + '<span class="flex-1 truncate">'+h(s.name)+'</span>'
+        + (s.is_closing?'<span class="tva-cs__tag">closes</span>':'')
+        + '</button>'
+    ).join('')
+    + (CURRENT_STATUS ? '<button type="button" class="tva-cs__opt tva-cs__opt--clear" onclick="setStatus(null)">Clear status</button>' : '');
+}
+
+// Managed from the inbox rather than a settings page: statuses are only ever
+// edited while looking at the conversations they describe, and a round trip
+// to Settings to add "Waiting on parts" then back is three navigations for
+// one word.
+const STATUS_PALETTE = @json(\App\Models\ConversationStatus::PALETTE);
+
+function openStatusManager(){
+    document.getElementById('statusMenu').hidden = true;
+    document.getElementById('statusMgr').classList.add('open');
+    renderStatusManager();
+}
+function closeStatusManager(){ document.getElementById('statusMgr').classList.remove('open'); }
+
+function renderStatusManager(editing){
+    const rows = STATUSES.map(s=>
+        '<div class="tva-sm__row">'
+        + '<span class="tva-cs__dot" style="background:'+h(s.color)+'"></span>'
+        + '<span class="flex-1 truncate">'+h(s.name)+'</span>'
+        + (s.is_closing?'<span class="tva-cs__tag">closes</span>':'')
+        + '<button class="tva-sm__ico" title="Rename" onclick="editStatusRow('+s.id+')"><i data-lucide="pencil"></i></button>'
+        + '<button class="tva-sm__ico tva-sm__ico--del" title="Archive" onclick="archiveStatus('+s.id+')"><i data-lucide="archive"></i></button>'
+        + '</div>').join('');
+
+    const e = editing || {id:null, name:'', color:STATUS_PALETTE[0], is_closing:false};
+    document.getElementById('statusMgrBody').innerHTML = rows
+        + '<div class="tva-sm__form">'
+        + '<input id="smName" class="form-control form-control-sm" maxlength="60" placeholder="Status name" value="'+h(e.name)+'">'
+        + '<div class="tva-sm__sw">' + STATUS_PALETTE.map(c=>
+            '<button type="button" class="tva-sm__c'+(c===e.color?' is-on':'')+'" style="background:'+c+'" data-c="'+c+'"'
+            + ' onclick="pickStatusColor(this)" title="'+c+'"></button>').join('') + '</div>'
+        + '<label class="tva-sm__chk"><input type="checkbox" id="smClosing"'+(e.is_closing?' checked':'')+'>'
+        + ' Marks the conversation resolved</label>'
+        + '<div class="flex gap-2">'
+        + '<button class="btn btn-sm btn-primary flex-1" onclick="saveStatus('+(e.id||'null')+')">'+(e.id?'Save':'Add status')+'</button>'
+        + (e.id?'<button class="btn btn-sm btn-secondary" onclick="renderStatusManager()">Cancel</button>':'')
+        + '</div></div>';
+    document.getElementById('statusMgrBody').dataset.color = e.color;
+    if (window.lucide) try{ lucide.createIcons(); }catch(_){}
+}
+
+function pickStatusColor(btn){
+    document.getElementById('statusMgrBody').dataset.color = btn.dataset.c;
+    btn.closest('.tva-sm__sw').querySelectorAll('.tva-sm__c').forEach(b=>b.classList.toggle('is-on', b===btn));
+}
+function editStatusRow(id){ renderStatusManager(STATUSES.find(s=>s.id===id)); }
+
+async function saveStatus(id){
+    const name = (document.getElementById('smName').value||'').trim();
+    if (!name) { tvaToast('Give the status a name.','error'); return; }
+
+    const body = JSON.stringify({
+        project_id: CHAT.projectId, name,
+        color: document.getElementById('statusMgrBody').dataset.color,
+        is_closing: document.getElementById('smClosing').checked,
+    });
+    const url = CHAT.base + '/statuses' + (id ? '/' + id : '');
+    const r = await api(url, {method: id?'PATCH':'POST', headers:{'Content-Type':'application/json'}, body});
+    if (!r.ok) { tvaToast('Could not save the status.','error'); return; }
+
+    const d = await r.json();
+    STATUSES = d.statuses || STATUSES;
+    renderStatusControl(); renderStatusManager();
+    tvaToast(id?'Status updated':'Status added','success');
+}
+
+async function archiveStatus(id){
+    // Archived, not deleted — conversations already labelled with it keep the
+    // label. Said plainly here so nobody expects a hard delete.
+    const ok = await tvaConfirm({
+        title:'Archive this status?',
+        text:'It stops being offered for new conversations. Any conversation already using it keeps it.',
+        confirmText:'Archive',
+    });
+    if (!ok) return;
+
+    const r = await api(CHAT.base+'/statuses/'+id, {
+        method:'DELETE', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({project_id: CHAT.projectId}),
+    });
+    if (!r.ok) { tvaToast('Could not archive it.','error'); return; }
+
+    const d = await r.json();
+    STATUSES = d.statuses || [];
+    if (!STATUSES.some(s=>s.id===CURRENT_STATUS)) CURRENT_STATUS = null;
+    renderStatusControl(); renderStatusManager(); loadConvos();
+}
+
+async function setStatus(id){
+    document.getElementById('statusMenu').hidden = true;
+    const prev = CURRENT_STATUS;
+    CURRENT_STATUS = id; renderStatusControl();      // optimistic
+
+    const r = await api(msgUrl('status'), {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({project_id: CHAT.projectId, status: id}),
+    });
+    if (!r.ok) {
+        CURRENT_STATUS = prev; renderStatusControl();
+        tvaToast('Could not set the status.','error');
+        return;
+    }
+    // A closing status resolves the conversation server-side, so both the
+    // thread header and the list have to be refetched rather than patched.
+    loadThread(true); loadConvos();
+}
+/**
+ * An internal event, drawn as a separator across the thread rather than a
+ * bubble on one side — it belongs to neither party.
+ *
+ * A person is shown as an avatar disc with their initials; the AI as a glyph.
+ * That asymmetry is the point: at a glance you can see whether a human or the
+ * bot was on either end of the handover.
+ */
+function renderEvent(m){
+    if (m.event !== 'transfer' || !m.from || !m.to) {
+        // Unknown event — fall back to the sentence the server also stored, so
+        // a newer event type degrades to plain text instead of vanishing.
+        return '<div class="tva-ev"><span class="tva-ev__body">'+h(m.content||'')+'</span></div>';
+    }
+
+    const party = p => p.type === 'agent'
+        ? '<span class="tva-ev__p"><span class="tva-ev__ini">'+h(initials(p.name))+'</span>'+h(p.name)+'</span>'
+        : '<span class="tva-ev__p"><span class="tva-ev__bot"><i data-lucide="bot"></i></span>'+h(p.name)+'</span>';
+
+    return '<div class="tva-ev"><span class="tva-ev__body">'
+        + party(m.from)
+        + '<i data-lucide="arrow-right" class="tva-ev__arrow"></i>'
+        + party(m.to)
+        + (m.by ? '<span class="tva-ev__by">by '+h(m.by)+'</span>' : '')
+        + (m.note ? '<span class="tva-ev__note">'+h(m.note)+'</span>' : '')
+        + '</span></div>';
+}
+
 function appendMessages(msgs){
     const box=document.getElementById('chatThread'); const nearBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 120;
     const tr=document.getElementById('typingRow'); if(tr) tr.remove();   // keep new content below the typing row
@@ -517,10 +1632,23 @@ function appendMessages(msgs){
         window.MSGS=window.MSGS||{}; window.MSGS[m.id]=m;
         const dk=dayKey(m.created_at);
         if(dk && dk!==window.lastDay){ box.insertAdjacentHTML('beforeend',`<div class="tva-sep">${h(fmtDay(m.created_at))}</div>`); window.lastDay=dk; }
+
+        // Internal events are not messages — they were never sent to anyone.
+        // Rendering one as an outbound bubble would claim the customer saw
+        // "Transferred from … to …", which they did not.
+        if (m.author === 'system') { box.insertAdjacentHTML('beforeend', renderEvent(m)); return; }
+
         window.MEDIA=window.MEDIA||[];
         (m.attachments||[]).forEach(a=>{ if(['image','sticker','video','document','audio'].includes(a.type)) window.MEDIA.push(a); });
         const cls=m.direction==='in'?'tva-msg--in':(m.author==='bot'?'tva-msg--bot':'tva-msg--out');
-        const author=m.author==='customer'?'':(m.author==='bot'?'<div class="tva-msg__author">🤖 AI</div>':'<div class="tva-msg__author">🙋 Agent</div>');
+        // The owner gets their own label. When the boss answers a customer
+        // directly the team needs to see that in the history — "Agent" for
+        // someone who holds no seat would be actively misleading.
+        const author=m.author==='customer' ? '' : (
+            m.author==='bot'   ? '<div class="tva-msg__author">🤖 AI</div>' :
+            m.author==='owner' ? '<div class="tva-msg__author"><span class="tva-msg__admin">Admin</span>'
+                                 + h(m.author_name||'')+'</div>'
+                               : '<div class="tva-msg__author">🙋 '+h(m.author_name||'Agent')+'</div>');
         const txt=m.content?`<div class="tva-msg__txt">${h(m.content)}</div>`:'';
         const atts=renderAtts(m.attachments||[]);
         const who=r=>r==='customer'?'Customer':(r==='bot'?'AI':'Agent');
@@ -673,7 +1801,14 @@ async function sendProductMsg(){
 
 // ── Template popover (inside chat) ──
 let tplChosen=null;
-function closePops(){ ['emojiPicker','tplPanel','composerMenu'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; }); }
+function closePops(){
+    ['emojiPicker','tplPanel','composerMenu'].forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; });
+    // The filter panel uses [hidden] rather than inline display, so it needs
+    // its own line here — otherwise opening the emoji picker leaves it open.
+    const fp=document.getElementById('filterPanel');
+    if(fp){ fp.hidden=true; document.getElementById('filterBtn').classList.remove('is-open'); }
+    ['statusMenu','transferMenu'].forEach(id=>{ const el=document.getElementById(id); if(el) el.hidden=true; });
+}
 async function openTemplates(){
     const panel=document.getElementById('tplPanel'); const show=panel.style.display!=='block'; closePops();
     if(!show) return; panel.style.display='block'; tplChosen=null;
@@ -734,6 +1869,71 @@ document.querySelectorAll('#filterTabs button').forEach(b=>b.onclick=()=>{
     currentFilter=b.dataset.f;
     document.querySelectorAll('#filterTabs button').forEach(x=>x.classList.toggle('is-active', x===b));
     loadConvos();
+});
+
+// ── Filter interactions ──
+// Delegated, because the Page/number options are built from the server
+// response and would miss a listener bound at load.
+document.getElementById('filterPanel').addEventListener('click', e=>{
+    const btn = e.target.closest('.tva-fp__opts button');
+    if (!btn) return;
+    const box = btn.closest('.tva-fp__opts'), g = box.dataset.group, v = btn.dataset.v;
+
+    if (box.dataset.single) {
+        FILTERS[g] = FILTERS[g] === v ? null : v;   // re-click clears
+    } else {
+        FILTERS[g].has(v) ? FILTERS[g].delete(v) : FILTERS[g].add(v);
+    }
+    syncFilterUI(); loadConvos();
+});
+
+document.querySelectorAll('[data-quick]').forEach(b=>b.onclick=()=>{
+    if (b.dataset.quick === 'unread') {
+        FILTERS.read = FILTERS.read === 'unread' ? null : 'unread';
+    } else if (b.dataset.quick === 'needs_human') {
+        FILTERS.needs_human = !FILTERS.needs_human;
+    } else {
+        // One tap sets the whole combination, and a second tap takes it back
+        // off — including the states it switched on, so it never leaves a
+        // filter behind that the user did not choose themselves.
+        if (isNeedsReply()) { FILTERS.read = null; FILTERS.states.clear(); }
+        else { FILTERS.read = 'unread'; FILTERS.states.clear(); FILTERS.states.add('active'); FILTERS.states.add('expiring'); }
+    }
+    syncFilterUI(); loadConvos();
+});
+
+function setFilterPanel(open){
+    document.getElementById('filterPanel').hidden = !open;
+    document.getElementById('filterBtn').classList.toggle('is-open', open);
+    if (open && window.lucide) try{ lucide.createIcons(); }catch(_){}
+}
+document.getElementById('filterBtn').onclick=()=>{
+    const show=document.getElementById('filterPanel').hidden;
+    closePops();
+    setFilterPanel(show);
+};
+document.getElementById('filterDone').onclick=()=>setFilterPanel(false);
+
+[['statusBtn','statusMenu'], ['transferBtn','transferMenu']].forEach(([btnId, menuId])=>{
+    document.getElementById(btnId).onclick=e=>{
+        e.stopPropagation();
+        const m=document.getElementById(menuId); const show=m.hidden;
+        closePops(); m.hidden=!show;
+        if (show && window.lucide) try{ lucide.createIcons(); }catch(_){}
+    };
+    document.addEventListener('click', e=>{
+        const m=document.getElementById(menuId);
+        if (m && !m.hidden && !m.contains(e.target) && !e.target.closest('#'+btnId)) m.hidden=true;
+    });
+});
+document.getElementById('filterClear').onclick=clearFilters;
+
+// Click-away. Guarded on the panel's own subtree so selecting an option does
+// not close the thing you are selecting in.
+document.addEventListener('click', e=>{
+    const p=document.getElementById('filterPanel');
+    if (!p || p.hidden) return;
+    if (!p.contains(e.target) && !e.target.closest('#filterBtn')) setFilterPanel(false);
 });
 document.getElementById('presenceSel').onchange=async function(){
     this.dataset.touched='1';

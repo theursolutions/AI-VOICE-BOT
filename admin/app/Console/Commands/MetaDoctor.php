@@ -102,7 +102,37 @@ class MetaDoctor extends Command
             ? '  ✅ Webhook verify token set'
             : '  ○  META_WHATSAPP_VERIFY_TOKEN not set — inbound WhatsApp webhooks cannot be subscribed.');
 
-        $this->line('     Webhook callback URL: ' . url('/api/meta/webhook'));
+        // The single webhook URL Meta calls for WhatsApp, Messenger AND
+        // Instagram. Historically printed as /api/meta/webhook, which does not
+        // exist — an operator who pasted it into the dashboard got a failed
+        // verification and nothing explaining why.
+        $this->line('     Webhook callback URL: ' . url('/api/whatsapp/webhook'));
+
+        // ── Instagram Login ──────────────────────────────────────────
+        $this->newLine();
+        $this->line('<options=bold>Instagram API with Instagram Login</> (separate product, separate credentials)');
+
+        $ig = (array) config('meta.instagram', []);
+
+        if (empty($ig['app_id']) || empty($ig['app_secret'])) {
+            $this->line('  ○  Not configured. "Connect Instagram" will use Facebook Login instead,');
+            $this->line('     which only works for IG accounts linked to a Facebook Page.');
+            $this->line('     To enable: App dashboard → Instagram → API setup with Instagram login,');
+            $this->line('     then set INSTAGRAM_APP_ID and INSTAGRAM_APP_SECRET.');
+        } else {
+            $this->line('  ✅ Configured (app id ' . $ig['app_id'] . ') — "Connect Instagram" uses Instagram Login');
+            $this->line('     Scopes: ' . ($ig['scopes'] ?? ''));
+            $this->newLine();
+            $this->line('     These three URLs must be registered verbatim under');
+            $this->line('     Instagram → API setup with Instagram login → Business login settings:');
+            $this->line('       OAuth redirect      ' . url('/meta/instagram/callback'));
+            $this->line('       Deauthorize         ' . url('/meta/instagram/deauthorize'));
+            $this->line('       Data deletion       ' . url('/meta/data-deletion'));
+
+            if (! str_starts_with(url('/'), 'https://')) {
+                $this->warn('  ⚠ Instagram requires HTTPS redirect URIs — localhost is not exempt, unlike Facebook.');
+            }
+        }
 
         // ── Summary ──────────────────────────────────────────────────
         $this->newLine();

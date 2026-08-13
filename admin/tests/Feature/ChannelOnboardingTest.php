@@ -7,6 +7,7 @@ use Mockery;
 use Msd\MetaChannels\Models\ChannelConnection;
 use Msd\MetaChannels\Models\ChannelOnboardingLog;
 use Msd\MetaChannels\Models\ChannelOnboardingPayload;
+use Msd\MetaChannels\Services\InstagramLoginService;
 use Msd\MetaChannels\Services\OAuthService;
 use Msd\MetaChannels\Services\OnboardingService;
 use Msd\MetaChannels\Services\TokenService;
@@ -65,7 +66,15 @@ class ChannelOnboardingTest extends TestCase
             'error'      => null,
         ]);
 
-        return new OnboardingService($oauth, $tokens);
+        // Never reached on the Facebook path; asserted rather than left loose
+        // so a regression that routes a WhatsApp payload through Instagram
+        // fails loudly here instead of at a customer.
+        $instagram = Mockery::mock(InstagramLoginService::class);
+        $instagram->shouldReceive('exchangeCode')->never();
+        $instagram->shouldReceive('discover')->never();
+        $instagram->shouldReceive('subscribe')->never();
+
+        return new OnboardingService($oauth, $tokens, $instagram);
     }
 
     private function freshLog(): ChannelOnboardingLog
@@ -189,7 +198,8 @@ class ChannelOnboardingTest extends TestCase
         $payload->discovery = null;
         $payload->save();
 
-        $result = (new OnboardingService($oauth, $tokens))->retry($payload->fresh(), 1);
+        $result = (new OnboardingService($oauth, $tokens, Mockery::mock(InstagramLoginService::class)))
+            ->retry($payload->fresh(), 1);
 
         $this->assertSame(['Serve AI Sales'], $result['imported']);
         $this->assertSame(2, $result['log']->attempt);

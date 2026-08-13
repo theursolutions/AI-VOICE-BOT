@@ -34,6 +34,28 @@ Route::view('/about',          'pages.about')->name('about');
 Route::view('/contact',        'pages.contact')->name('contact');
 Route::view('/privacy',        'pages.privacy')->name('privacy');
 Route::view('/terms',          'pages.terms')->name('terms');
+
+// ── Data deletion ────────────────────────────────────────────────────────
+// Required by Meta for any app holding messaging permissions, and a hard
+// blocker on App Review. Three distinct URLs that are easy to confuse:
+//
+//   /data-deletion                     the human instructions page
+//                                      → "Data Deletion Instructions URL"
+//   /meta/data-deletion                the machine callback (POST, signed)
+//                                      → "Data Deletion Request URL"
+//   /meta/data-deletion/status/{code}  where the callback's reply points
+//
+// Meta pings the callback when you save it in the dashboard, so it must be
+// live before the field will accept the URL.
+Route::get('/data-deletion', [App\Http\Controllers\DataDeletionController::class, 'instructions'])
+    ->name('data-deletion');
+Route::get('/meta/data-deletion/status/{code}', [App\Http\Controllers\DataDeletionController::class, 'status'])
+    ->where('code', '[A-Za-z0-9]+')->name('data-deletion.status');
+// Server-to-server: no session, no CSRF token — authorisation is the HMAC on
+// `signed_request` and nothing else.
+Route::post('/meta/data-deletion', [App\Http\Controllers\DataDeletionController::class, 'callback'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+    ->name('data-deletion.callback');
 Route::view('/refund-policy',  'pages.refund')->name('refund-policy');
 Route::view('/cookies',        'pages.cookies')->name('cookies');
 Route::view('/security',       'pages.security')->name('security.page');
@@ -185,6 +207,22 @@ Route::middleware('auth')
     ->get('/meta/oauth/callback', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'callback'])
     ->name('meta.oauth.callback');
 
+// Instagram Login callback — a DIFFERENT endpoint from the one above, not a
+// duplicate. Instagram Login exchanges its code on api.instagram.com and the
+// redirect_uri is part of that exchange, so the two flows cannot share a URL.
+// Register this under: App dashboard → Instagram → API setup with Instagram
+// login → "OAuth redirect URIs".
+Route::middleware('auth')
+    ->get('/meta/instagram/callback', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'instagramCallback'])
+    ->name('meta.instagram.callback');
+
+// Instagram calls these two server-to-server, with no session and no CSRF
+// token — authorisation is the HMAC on `signed_request` and nothing else.
+// Both must be registered in the same Instagram product settings.
+Route::post('/meta/instagram/deauthorize', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'instagramDeauthorize'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class])
+    ->name('meta.instagram.deauthorize');
+
 // ── Backward-compat: top-level /dashboard → /c/{active-slug}/dashboard ───
 Route::middleware(['auth', 'active.client'])->get('/dashboard', function () {
     $user = auth()->user();
@@ -302,6 +340,17 @@ Route::middleware(['auth', 'active.client'])
         Route::post('/chat/{sessionId}/product',         [App\Http\Controllers\Admin\ChatController::class, 'sendProduct'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.product');
         Route::post('/chat/{sessionId}/toggle-bot',     [App\Http\Controllers\Admin\ChatController::class, 'toggleBot'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.toggle-bot');
         Route::post('/chat/presence',                   [App\Http\Controllers\Admin\ChatController::class, 'presence'])->name('chat.presence');
+
+        // Conversation statuses — customer-defined labels, managed from the
+        // inbox itself rather than a separate settings page: they are only
+        // ever edited while looking at the conversations they describe.
+        Route::get   ('/chat/statuses',       [App\Http\Controllers\Admin\ChatController::class, 'statuses'])->name('chat.statuses');
+        Route::post  ('/chat/statuses',       [App\Http\Controllers\Admin\ChatController::class, 'storeStatus'])->name('chat.statuses.store');
+        Route::patch ('/chat/statuses/{id}',  [App\Http\Controllers\Admin\ChatController::class, 'updateStatus'])->where('id', '[0-9]+')->name('chat.statuses.update');
+        Route::delete('/chat/statuses/{id}',  [App\Http\Controllers\Admin\ChatController::class, 'destroyStatus'])->where('id', '[0-9]+')->name('chat.statuses.destroy');
+        Route::post  ('/chat/{sessionId}/status', [App\Http\Controllers\Admin\ChatController::class, 'setStatus'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.set-status');
+        // Manual hand-off to a named agent, or back to the AI with a null id.
+        Route::post  ('/chat/{sessionId}/transfer', [App\Http\Controllers\Admin\ChatController::class, 'transfer'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.transfer');
         Route::post('/chat/{sessionId}/claim',          [App\Http\Controllers\Admin\ChatController::class, 'claim'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.claim');
         Route::post('/chat/{sessionId}/resolve',        [App\Http\Controllers\Admin\ChatController::class, 'resolve'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.resolve');
         Route::get ('/chat/{sessionId}/media/{messageId}/{index}', [App\Http\Controllers\Admin\ChatController::class, 'media'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->where('messageId', \App\Support\Hashid::ROUTE_PATTERN)->whereNumber('index')->name('chat.media');

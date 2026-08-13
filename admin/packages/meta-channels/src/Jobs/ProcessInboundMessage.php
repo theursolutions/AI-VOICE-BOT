@@ -41,7 +41,7 @@ class ProcessInboundMessage implements ShouldQueue
             return;
         }
 
-        $graph = new GraphClient($this->message->accessToken);
+        $graph = new GraphClient($this->message->accessToken, $this->message->graphBase);
 
         if ($this->message->provider === ChannelConnection::PROVIDER_WHATSAPP) {
             // WhatsApp Cloud API
@@ -63,11 +63,18 @@ class ProcessInboundMessage implements ShouldQueue
         if ($m->provider === ChannelConnection::PROVIDER_WHATSAPP || $m->senderName) {
             return;
         }
-        $profile = Cache::remember(
-            "meta:profile:{$m->provider}:{$m->from}",
-            now()->addHours(24),
-            fn () => (new GraphClient($m->accessToken))->getUserProfile($m->from, $m->provider) ?? [],
-        );
+        $key = "meta:profile:{$m->provider}:{$m->from}";
+
+        $profile = Cache::get($key);
+        if ($profile === null) {
+            $profile = (new GraphClient($m->accessToken, $m->graphBase))->getUserProfile($m->from, $m->provider) ?? [];
+
+            // Short TTL on a miss so the inbox heals by itself once the
+            // permission lands, instead of showing bare ids for another day.
+            Cache::put($key, $profile, empty($profile['name']) && empty($profile['profile_pic'])
+                ? now()->addMinutes(10)
+                : now()->addHours(24));
+        }
         if (!empty($profile['name'])) {
             $m->senderName = $profile['name'];
         }

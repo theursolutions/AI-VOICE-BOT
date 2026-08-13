@@ -631,7 +631,7 @@ class WebFlowRunner
             return false;
         }
 
-        $graph = new GraphClient($conn->access_token ?: null);
+        $graph = GraphClient::forConnection($conn);
         $from  = (string) $conn->external_id;
         $ptype = (string) ($data['payload_type'] ?? 'text');
         $text  = $this->interpolate((string) ($data['text'] ?? ''), $session);

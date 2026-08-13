@@ -4,12 +4,18 @@ namespace Msd\MetaChannels\Services;
 
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
+use Msd\MetaChannels\Models\ChannelConnection;
 
 /**
  * Meta Graph API client — WhatsApp messaging + Business Calling signaling.
  *
  * An optional per-connection token can be passed; otherwise the app-level
  * token from config('meta.whatsapp.access_token') is used.
+ *
+ * The host is overridable because Instagram accounts onboarded through
+ * Instagram Login are served by graph.instagram.com, and their tokens are
+ * rejected outright by graph.facebook.com. Prefer forConnection(), which
+ * picks the right host from the connection itself.
  */
 class GraphClient
 {
@@ -17,12 +23,40 @@ class GraphClient
     private string $version;
     private ?string $token;
 
-    public function __construct(?string $token = null)
+    public function __construct(?string $token = null, ?string $base = null, ?string $version = null)
     {
         $cfg = config('meta.whatsapp');
-        $this->base    = rtrim($cfg['graph_base'] ?? 'https://graph.facebook.com', '/');
-        $this->version = $cfg['graph_version'] ?? 'v21.0';
+        $this->base    = rtrim($base ?: ($cfg['graph_base'] ?? 'https://graph.facebook.com'), '/');
+        $this->version = $version ?: ($cfg['graph_version'] ?? 'v21.0');
         $this->token   = $token ?: ($cfg['access_token'] ?? null);
+    }
+
+    /**
+     * A client pointed at the right Graph host for a connection.
+     *
+     * Always use this instead of `new GraphClient($conn->access_token)`. The
+     * two hosts are not interchangeable: an Instagram-Login token sent to
+     * graph.facebook.com fails with a generic OAuth error that says nothing
+     * about the host being wrong, which is a genuinely hard afternoon.
+     */
+    public static function forConnection(?ChannelConnection $conn): self
+    {
+        return new self($conn?->access_token ?: null, self::baseFor($conn?->metadata));
+    }
+
+    /**
+     * The Graph host implied by a connection's metadata, or null for the
+     * default (graph.facebook.com).
+     *
+     * Keyed on `metadata.login`, which InstagramLoginService stamps at
+     * discovery time — the only durable signal distinguishing the two
+     * Instagram onboarding paths, since both produce provider=instagram.
+     */
+    public static function baseFor(mixed $metadata): ?string
+    {
+        return data_get($metadata, 'login') === 'instagram'
+            ? (string) config('meta.instagram.graph_base', 'https://graph.instagram.com')
+            : null;
     }
 
     // -- Messaging ----------------------------------------------------------

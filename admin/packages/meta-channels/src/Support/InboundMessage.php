@@ -22,5 +22,10 @@ class InboundMessage
         public ?string $accessToken = null,
         public ?string $profilePic = null,
         public array $attachments = [],
+        // Graph host this channel's token is valid against. Null means the
+        // default (graph.facebook.com); Instagram accounts onboarded via
+        // Instagram Login carry graph.instagram.com, whose tokens the
+        // Facebook host rejects.
+        public ?string $graphBase = null,
     ) {}
 }
