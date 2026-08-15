@@ -310,6 +310,10 @@ Route::middleware(['auth', 'active.client'])
         Route::get   ('/telephony',                        [App\Http\Controllers\Admin\TelephonyWebController::class, 'index'])->name('telephony.index');
         Route::post  ('/telephony/numbers',                [App\Http\Controllers\Admin\TelephonyWebController::class, 'saveNumber'])->name('telephony.save-number');
         Route::post  ('/telephony/numbers/delete',         [App\Http\Controllers\Admin\TelephonyWebController::class, 'deleteNumber'])->name('telephony.delete-number');
+        // Each project brings its own Twilio account; .env is the demo only.
+        Route::post  ('/telephony/credentials',            [App\Http\Controllers\Admin\TelephonyWebController::class, 'saveCredentials'])->name('telephony.save-credentials');
+        Route::post  ('/telephony/credentials/delete',     [App\Http\Controllers\Admin\TelephonyWebController::class, 'deleteCredentials'])->name('telephony.delete-credentials');
+        // "Bring your own Twilio" setup wizard.
 
         // Brain & compute settings (LLM provider + CPU/GPU)
         Route::get   ('/brain-settings',                   [App\Http\Controllers\Admin\BrainSettingsController::class, 'index'])->name('brain-settings.index');

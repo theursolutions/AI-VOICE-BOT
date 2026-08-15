@@ -20,6 +20,8 @@ use Illuminate\View\View;
  */
 class WidgetSettingsController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     /** Defaults applied when a project hasn't customised yet. */
     public const DEFAULTS = [
         'primary_color'   => '#1a365d',
@@ -169,7 +171,14 @@ class WidgetSettingsController extends Controller
             'show_expand_button' => (bool) ($data['show_expand_button'] ?? false),
             'show_visitor_modes' => (bool) ($data['show_visitor_modes'] ?? false),
             'show_history_tab'   => (bool) ($data['show_history_tab']   ?? false),
-            'show_powered_by'    => (bool) ($data['show_powered_by']    ?? false),
+            // Removing the "Powered by" badge is a paid feature
+            // (`remove_branding`, Growth+). Forced back ON for plans without
+            // it, rather than refusing the whole save — every other setting on
+            // this form is legitimately theirs to change, and rejecting the
+            // submit over one checkbox would lose all of it.
+            'show_powered_by'    => $this->planAllows($client, 'remove_branding')
+                                        ? (bool) ($data['show_powered_by'] ?? false)
+                                        : true,
             'avatar_emoji'       => $data['avatar_emoji']   ?? self::DEFAULTS['avatar_emoji'],
             'opening_hours'      => $data['opening_hours']  ?? self::DEFAULTS['opening_hours'],
             'placeholder'        => $data['placeholder']    ?? self::DEFAULTS['placeholder'],

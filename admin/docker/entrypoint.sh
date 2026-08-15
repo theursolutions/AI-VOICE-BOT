@@ -96,12 +96,21 @@ fi
 # chown itself is allowed to fail (some volume drivers reject it while the
 # mount is already world-writable) — what must hold is that www-data can
 # actually WRITE. That is the condition we check, and it is fatal.
-if ! chown -R www-data:www-data storage bootstrap/cache; then
-  echo "[entrypoint] WARNING: chown of storage/ + bootstrap/cache failed;" >&2
+# The write check below is FATAL, so make sure the directory exists before
+# we test it — an empty volume mount is a directory, but a missing one would
+# stop the container booting over a logo folder.
+mkdir -p public/uploads
+
+# public/uploads is included because it is a NAMED VOLUME: Docker creates it
+# root-owned on first use, and nothing else ever chowns it. php-fpm then
+# cannot create the per-project folders it writes into, so the first widget
+# logo upload fails with a 500 on a brand-new deploy and nowhere else.
+if ! chown -R www-data:www-data storage bootstrap/cache public/uploads; then
+  echo "[entrypoint] WARNING: chown of storage/ + bootstrap/cache + public/uploads failed;" >&2
   echo "                      verifying www-data can write anyway ..." >&2
 fi
 
-for d in storage storage/app storage/framework storage/logs bootstrap/cache; do
+for d in storage storage/app storage/framework storage/logs bootstrap/cache public/uploads; do
   if ! su -s /bin/sh www-data -c "test -w '$d'"; then
     echo "FATAL: www-data cannot write to $d." >&2
     echo "       php-fpm runs as www-data — booting now means uploads (voice" >&2

@@ -44,6 +44,8 @@ use Illuminate\View\View;
  */
 class FlowWebController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     public function __construct(private TenantManager $tenants) {}
 
     public function index(Request $request, Client $client): View
@@ -69,6 +71,12 @@ class FlowWebController extends Controller
 
     public function store(Request $request, Client $client): RedirectResponse
     {
+        if ($refusal = $this->refuseUnlessWithinQuota(
+            $client, 'flow_builder', \App\Models\Flow::whereIn('project_id',
+                \App\Models\Project::where('client_id', $client->id)->pluck('id'))->count(), 'flow')) {
+            return $refusal;
+        }
+
         $data = $request->validate([
             'project_id' => 'required|integer',
             'name'       => 'required|string|max:160',

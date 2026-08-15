@@ -22,6 +22,8 @@ use Illuminate\View\View;
  */
 class MemberWebController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     public function index(Request $request, Client $client): View
     {
         $this->guardOwner($request, $client);
@@ -99,6 +101,11 @@ class MemberWebController extends Controller
      */
     public function store(Request $request, Client $client): RedirectResponse
     {
+        if ($refusal = $this->refuseUnlessWithinQuota(
+            $client, 'seats', $client->users()->count(), 'team seat')) {
+            return $refusal;
+        }
+
         $this->guardOwner($request, $client);
 
         $data = $request->validate([

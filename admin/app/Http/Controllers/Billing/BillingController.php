@@ -61,6 +61,8 @@ class BillingController extends Controller
             'invoices'      => $this->billing->invoices($client),
             'paymentMethod' => $this->billing->paymentMethod($client),
             'cards'         => app(\App\Services\Billing\PaymentMethodService::class)->all($client),
+            'addons'        => app(\App\Services\Billing\AddonService::class)->available($client),
+            'addonTotal'    => app(\App\Services\Billing\AddonService::class)->monthlyTotalCents($client),
 
             // Upgrade/downgrade options, priced for this visitor.
             'pricing'       => $this->presenter->build($request, $price?->interval),
@@ -91,6 +93,14 @@ class BillingController extends Controller
             // marketing site can never disagree.
             'pricing'        => $this->presenter->build($request, $current?->interval),
             'checkoutOpen'   => (bool) config('billing.checkout.enabled', false),
+
+            // Extra seats / AI agents are bought here too, not only from the
+            // billing overview: this is the page someone lands on when they
+            // hit a limit, and "upgrade the whole plan" is the wrong answer
+            // when all they need is one more seat.
+            'addons'         => app(\App\Services\Billing\AddonService::class)->available($client),
+            'canBuyAddons'   => (bool) $subscription?->stripe_subscription_ref
+                                && (bool) $subscription?->grantsAccess(),
         ]);
     }
 

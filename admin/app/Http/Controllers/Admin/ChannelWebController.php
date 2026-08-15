@@ -20,6 +20,8 @@ use Illuminate\View\View;
  */
 class ChannelWebController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     public function index(Request $request, Client $client): View
     {
         $projects = Project::where('client_id', $client->id)
@@ -55,6 +57,12 @@ class ChannelWebController extends Controller
 
     public function store(Request $request, Client $client): RedirectResponse
     {
+        if ($refusal = $this->refuseUnlessWithinQuota(
+            $client, 'channels_meta', ChannelConnection::whereIn('project_id',
+                Project::where('client_id', $client->id)->pluck('id'))->count(), 'channel')) {
+            return $refusal;
+        }
+
         $data = $request->validate([
             'project_id'   => 'required|integer',
             'provider'     => 'required|in:' . implode(',', array_keys(ChannelConnection::PROVIDERS)),

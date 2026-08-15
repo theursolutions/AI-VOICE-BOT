@@ -296,7 +296,8 @@ class SubscriptionService
 
         $client ??= $subscription->client;
 
-        $priceData = $data['items']['data'][0]['price'] ?? [];
+        $planItem  = $this->planItem($data);
+        $priceData = $planItem['price'] ?? [];
         $priceRef  = $priceData['id'] ?? ($data['plan']['id'] ?? null);
         $planPrice = $priceRef
             ? PlanPrice::query()->where('stripe_price_ref', $priceRef)->first()
@@ -313,13 +314,13 @@ class SubscriptionService
             'stripe_price_ref'        => $priceRef,
             'stripe_status'           => $stripeStatus,
             'status'                  => $this->normaliseStatus($stripeStatus),
-            'quantity'                => $data['items']['data'][0]['quantity'] ?? 1,
+            'quantity'                => $planItem['quantity'] ?? 1,
             'interval'                => $planPrice?->interval ?? $subscription->interval,
             'unit_amount'             => $planPrice?->unit_amount ?? ($priceData['unit_amount'] ?? null),
             'currency'                => $priceData['currency'] ?? 'usd',
             'trial_ends_at'           => $this->ts($data['trial_end'] ?? null),
-            'current_period_start'    => $this->ts($data['current_period_start'] ?? null),
-            'current_period_end'      => $this->ts($data['current_period_end'] ?? null),
+            'current_period_start'    => $this->period($data, 'current_period_start'),
+            'current_period_end'      => $this->period($data, 'current_period_end'),
             'cancel_at_period_end'    => (bool) ($data['cancel_at_period_end'] ?? false),
             'canceled_at'             => $this->ts($data['canceled_at'] ?? null),
             'ends_at'                 => $this->resolveEndsAt($data),
@@ -465,8 +466,8 @@ class SubscriptionService
             return $this->ts($data['ended_at']);
         }
 
-        if (! empty($data['cancel_at_period_end']) && ! empty($data['current_period_end'])) {
-            return $this->ts($data['current_period_end']);
+        if (! empty($data['cancel_at_period_end']) && ($end = $this->period($data, 'current_period_end'))) {
+            return $end;
         }
 
         if (! empty($data['cancel_at'])) {
@@ -474,6 +475,65 @@ class SubscriptionService
         }
 
         return null;
+    }
+
+    /**
+     * The subscription item that represents the PLAN, not an add-on.
+     *
+     * `items.data[0]` was safe while a subscription only ever had one line.
+     * Add-ons are extra subscription items on the SAME subscription, and Stripe
+     * makes no promise about their order — so blindly reading item zero can
+     * hand us the "Extra team seat" price and rewrite the workspace's plan to
+     * an add-on. Match on our own catalogue instead and skip anything typed as
+     * an add-on; fall back to the first item so an unrecognised price (a
+     * price created directly in the Dashboard, say) still resolves.
+     */
+    private function planItem(array $data): array
+    {
+        $items = $data['items']['data'] ?? [];
+
+        if (count($items) <= 1) {
+            return $items[0] ?? [];
+        }
+
+        foreach ($items as $item) {
+            $ref = $item['price']['id'] ?? null;
+
+            if (! $ref) {
+                continue;
+            }
+
+            $price = PlanPrice::query()->with('plan')->where('stripe_price_ref', $ref)->first();
+
+            if ($price && ! $price->plan?->isAddon()) {
+                return $item;
+            }
+        }
+
+        return $items[0] ?? [];
+    }
+
+    /**
+     * A period boundary, wherever this API version keeps it.
+     *
+     * Stripe moved `current_period_start` / `current_period_end` off the
+     * subscription and onto each subscription ITEM in API version
+     * 2025-03-31.basil. Reading only the old location silently writes NULL on
+     * a modern account — which would break renewal quota resets, the usage
+     * window and `ends_at` all at once, with no error anywhere. Read both, so
+     * the same code is correct before and after the account is upgraded.
+     */
+    private function period(array $data, string $key): ?Carbon
+    {
+        if (! empty($data[$key])) {
+            return $this->ts($data[$key]);
+        }
+
+        // The plan item carries the real subscription period; add-on items
+        // added mid-cycle share it, but the plan is the authoritative one.
+        $item = $this->planItem($data);
+
+        return $this->ts($item[$key] ?? null);
     }
 
     private function ts(?int $timestamp): ?Carbon

@@ -107,6 +107,36 @@ class Plan extends Model
         return $this->type === 'enterprise';
     }
 
+    /**
+     * An add-on bought on top of a plan (extra seats, extra AI agents).
+     *
+     * scopePublic() already filters to free/standard/custom, so add-ons never
+     * appear on the pricing page as a plan — they're sold from the billing
+     * screen against an existing subscription.
+     */
+    public function isAddon(): bool
+    {
+        return $this->type === 'addon';
+    }
+
+    public function scopeAddons($q)
+    {
+        return $q->where('type', 'addon')->where('is_active', true)->orderBy('sort_order');
+    }
+
+    /**
+     * The feature one unit of this add-on tops up, e.g. `seats`.
+     * Derived from its own plan_features rather than a second column, so the
+     * matrix stays the single source of truth.
+     */
+    public function addonFeatureKey(): ?string
+    {
+        $row = $this->planFeatures()->with('feature')->get()
+            ->first(fn ($pf) => $pf->feature && (int) $pf->value > 0);
+
+        return $row?->feature?->key;
+    }
+
     /** Enterprise plans are a CTA, not something you can check out. */
     public function isPurchasable(): bool
     {

@@ -23,7 +23,14 @@ return [
     'channels'     => ['label' => 'Channels',        'routes' => ['channels']],
     'data_sources' => ['label' => 'Data Sources',    'routes' => ['data-sources']],
     'flows'        => ['label' => 'Flow Builder',    'routes' => ['flows']],
-    'bot_strategy' => ['label' => 'Bot Strategy',    'routes' => ['bot-strategy', 'brain-settings']],
+    // Split deliberately. These were one module, gated by `byo_llm` (Scale
+    // only) — which locked Starter and Growth out of the knowledge-tier
+    // toggles as well, purely as a side effect of sharing a key. They are two
+    // different products at two different tiers:
+    //   bot_strategy   — which sources the bot may draw on   (paid plans)
+    //   brain_settings — LLM provider + CPU/GPU, i.e. BYO model (top tier)
+    'bot_strategy'  => ['label' => 'Bot Strategy',   'routes' => ['bot-strategy']],
+    'brain_settings'=> ['label' => 'Brain Settings', 'routes' => ['brain-settings']],
     'skills'       => ['label' => 'Skills',          'routes' => ['skills']],
     'telephony'    => ['label' => 'Telephony',       'routes' => ['telephony']],
     'voices'       => ['label' => 'Voices',          'routes' => ['voices', 'agent-voices']],

@@ -236,6 +236,25 @@ class InternalTurnController extends Controller
         $session->save();
 
         if ($data['role'] === 'assistant') {
+            // Meter the turn. This is the WEBSOCKET path — the voice engine
+            // calls back here once a streamed reply is complete. Tool messages
+            // are excluded: they're internal steps, not a reply to a customer.
+            //
+            // The user message on this path may have been written just above
+            // (WS) or by TurnController (HTTP), so it's fetched rather than
+            // assumed — that's what tells us whether the customer spoke.
+            //
+            // The LATEST user message, not the latest one with audio: scoping
+            // it to `whereNotNull('audio_url')` would find an earlier spoken
+            // turn and bill a voice message for a reply the customer typed.
+            $lastUserMessage = Message::where('session_id', $session->id)
+                ->where('role', 'user')
+                ->orderByDesc('id')
+                ->first();
+
+            app(\App\Services\Billing\UsageRecorder::class)
+                ->assistantReplied($session, $lastUserMessage);
+
             ExtractLeadFromTurn::dispatch($session->project_id, $session->id, $message->id);
         }
 

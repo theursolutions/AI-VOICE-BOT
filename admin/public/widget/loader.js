@@ -111,13 +111,32 @@
         return null;
     }
 
-    // loader.js is served from {host}/AI-CRM-AGENT/admin/public/widget/loader.js
-    // webchat lives at        {host}/AI-CRM-AGENT/widget/webchat-app.php
-    // and the API is at        {host}/AI-CRM-AGENT/admin/public/api/v1/widget/config
+    // The API always sits where loader.js does, minus the /widget/ segment —
+    // true in both layouts described below. The webchat's location is not,
+    // which is what the block after this works out.
     var srcUrl   = new URL(thisScript.src, window.location.href);
     var origin   = srcUrl.origin;
     var apiBase  = origin + srcUrl.pathname.replace(/\/widget\/loader\.js.*$/, '');
-    var webchatUrl = origin + srcUrl.pathname.replace(/\/admin\/public\/widget\/loader\.js.*$/, '/widget/webchat-app.php');
+
+    // Two layouts, and the difference is where loader.js sits relative to the
+    // webchat app:
+    //
+    //   development  admin/public/widget/loader.js  +  widget/webchat-app.php
+    //                → siblings of admin/, one directory apart
+    //   deployed     both served from /widget/ (nginx aliases it to
+    //                /var/www/widget, and the image copies loader.js there)
+    //                → same directory
+    //
+    // The original only handled the first and produced a URL pointing back at
+    // loader.js itself on a real deploy, so the iframe loaded the loader as a
+    // document. `data-webchat-url` overrides both for anyone hosting the two
+    // halves somewhere else entirely.
+    var webchatUrl = thisScript.getAttribute('data-webchat-url');
+    if (!webchatUrl) {
+        webchatUrl = /\/admin\/public\/widget\/loader\.js/.test(srcUrl.pathname)
+            ? origin + srcUrl.pathname.replace(/\/admin\/public\/widget\/loader\.js.*$/, '/widget/webchat-app.php')
+            : origin + srcUrl.pathname.replace(/loader\.js.*$/, 'webchat-app.php');
+    }
 
     // --- avoid double-init -------------------------------------------
     if (window.__tvaibwcLoaded) return;

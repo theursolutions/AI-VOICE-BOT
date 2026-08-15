@@ -352,6 +352,68 @@
 
     {{-- ── Right column ──────────────────────────────────────────── --}}
     <div>
+        {{-- Add-ons: extra seats / AI agents on top of the plan --}}
+        @if ($isOwner && ! empty($addons) && $subscription?->stripe_subscription_ref && $subscription->grantsAccess())
+            <div class="bl-card intro-y">
+                <div class="bl-card__head">
+                    <i data-lucide="plus-circle" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="bl-card__title">Add-ons</div>
+                    @if ($addonTotal > 0)
+                        <div class="bl-card__action" style="font-size:12px;color:#64748b">
+                            +${{ number_format($addonTotal / 100, 2) }}/{{ $subscription->interval === 'annually' ? 'yr' : 'mo' }}
+                        </div>
+                    @endif
+                </div>
+
+                <p style="font-size:12.5px;color:#64748b;line-height:1.6;margin:0 0 16px">
+                    Need more than your plan includes? Buy extra capacity without upgrading.
+                    Charged on your existing invoice and prorated from today.
+                </p>
+
+                @foreach ($addons as $item)
+                    @php
+                        $addonPlan = $item['plan'];
+                        $unitLabel = $item['per_unit'] > 1 ? $item['per_unit'] . ' per unit' : null;
+                    @endphp
+                    <div class="bl-pm" style="align-items:flex-start;flex-wrap:wrap;gap:12px">
+                        <div style="flex:1;min-width:170px">
+                            <div class="bl-pm__num">{{ $addonPlan->name }}</div>
+                            <div class="bl-pm__exp">
+                                {{ $item['price']->formatted() }}
+                                per {{ $item['price']->months() > 1 ? 'year' : 'month' }} each
+                                @if ($unitLabel) · {{ $unitLabel }} @endif
+                                @if ($item['owned'] > 0)
+                                    <span class="bl-badge bl-badge--blue" style="margin-left:6px">
+                                        {{ $item['owned'] }} active · {{ $item['line_total'] }}
+                                    </span>
+                                @endif
+                            </div>
+                        </div>
+
+                        {{-- Only a slug and a quantity are submitted; the price
+                             is resolved server-side for the subscription's own
+                             billing interval. --}}
+                        <form method="POST" action="{{ route('billing.addons.update', ['client' => $client->slug]) }}"
+                              style="display:flex;gap:8px;align-items:center">
+                            @csrf
+                            <input type="hidden" name="addon" value="{{ $addonPlan->slug }}">
+                            <input type="number" name="quantity" min="0" max="999"
+                                   value="{{ $item['owned'] }}"
+                                   style="width:74px;text-align:center;border:1px solid #e2e8f0;border-radius:9px;padding:8px 6px;font-size:13px">
+                            <button type="submit" class="bl-btn bl-btn--ghost bl-btn--sm">
+                                {{ $item['owned'] > 0 ? 'Update' : 'Add' }}
+                            </button>
+                        </form>
+                    </div>
+                @endforeach
+
+                <p class="bl-note">
+                    Set a quantity to 0 to remove an add-on — your next invoice is credited for the
+                    unused part. Add-ons follow your plan's billing interval.
+                </p>
+            </div>
+        @endif
+
         {{-- Saved cards --}}
         @if ($isOwner && ($cards || $canBuy))
             <div class="bl-card intro-y">

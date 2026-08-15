@@ -120,6 +120,12 @@ class ConversationManager
         $session->update_at = $now;
         $session->save();
 
+        // Meter the turn. This is the HTTP/sync path for every text channel —
+        // web widget, WhatsApp, Instagram, Facebook. It counts the session once
+        // (on its first AI reply) and counts a widget voice message when the
+        // customer spoke. Cannot throw: see UsageRecorder.
+        app(\App\Services\Billing\UsageRecorder::class)->assistantReplied($session, $userMessage);
+
         ExtractLeadFromTurn::dispatch($session->project_id, $session->id, $assistant->id);
 
         return $assistant;

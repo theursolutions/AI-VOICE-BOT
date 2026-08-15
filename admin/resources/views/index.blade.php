@@ -243,6 +243,16 @@
                 padding: 13px 4px; border-bottom: 1px solid var(--line); color: var(--text);
             }
             .nav__links a:last-child { border-bottom: none; }
+            /* The theme switch is a <button>, so none of the rules above reach
+               it: in the drawer it sat flush against the last link with no
+               divider and no breathing room, reading as part of that row
+               rather than as its own control. It is a preference, not
+               navigation, so it gets a rule of its own and a gap above. */
+            .nav__links .nav__theme {
+                align-self: flex-start;
+                margin: 12px 0 4px;
+                width: 38px; height: 38px;
+            }
             .nav.is-open .nav__links { max-height: 70vh; overflow-y: auto; visibility: visible; }
             /* The bar is translucent by design, but an open drawer over the
                hero left the menu text competing with the headline behind it. */
@@ -1033,8 +1043,33 @@
         html:not(.dark) .fx-depth-tint,
         html:not(.dark) .fx-scanlines,
         html:not(.dark) .fx-sweep,
-        html:not(.dark) #stars,
-        html:not(.dark) .hud { display: none !important; }
+        html:not(.dark) #stars { display: none !important; }
+
+        /* The scroll HUD stays in light mode. It was switched off during the
+           first light pass along with the scanlines and the vignette, but it
+           is not decoration in the way those are — it reports depth through
+           the page and which layer you are on, and losing it made the light
+           theme feel like a different, thinner product than the dark one.
+
+           What it needed was its own palette rather than removal: the dark
+           values are a neon-on-black readout, and on paper the same colours
+           are a pale smudge. */
+        html:not(.dark) .hud__status { color: #1d4ed8; }
+        html:not(.dark) .hud__status .dot {
+            background: #16a34a; box-shadow: 0 0 8px rgba(22,163,74,.55);
+        }
+        html:not(.dark) .hud__depth { color: #0b1b33; }
+        html:not(.dark) .hud__depth small { color: #6b7c93; }
+        html:not(.dark) .hud__sub { color: #6b7c93; }
+        html:not(.dark) .hud__rail { background: rgba(16,32,56,.12); }
+        html:not(.dark) .hud__fill {
+            background: linear-gradient(#60a5fa, #1d4ed8);
+            box-shadow: 0 0 10px rgba(29,78,216,.35);
+        }
+        html:not(.dark) .hud__marker {
+            background: #1d4ed8; box-shadow: 0 0 12px rgba(29,78,216,.5);
+        }
+        html:not(.dark) .hud__marker::after { border-color: #1d4ed8; }
 
         /* ── Page ──────────────────────────────────────────────────────── */
         html:not(.dark), html:not(.dark) body { background: #ffffff; }
@@ -1053,6 +1088,30 @@
             border-bottom: 1px solid rgba(16,32,56,.07);
         }
         html:not(.dark) .hero::after { display: none; }
+
+        /* Phones never get the WebGL orb — WANTS_WEBGL gates it off below
+           720px to save battery — so what they see is the CSS fallback. Its
+           colours are tuned to glow on near-black: three washes of blue at 2%
+           to 35% alpha plus a bloom shadow. On white that is barely a smudge,
+           which is why the object looked missing on a phone while the desktop
+           canvas looked right. Same shape, opaque enough to read on paper. */
+        html:not(.dark) .scene-fallback {
+            background:
+                radial-gradient(circle at 32% 28%, rgba(37,99,235,.34), transparent 62%),
+                conic-gradient(from 0deg, rgba(29,78,216,.22), rgba(96,165,250,.08), rgba(29,78,216,.22));
+            box-shadow:
+                0 18px 44px -18px rgba(29,78,216,.45),
+                inset 0 0 42px rgba(37,99,235,.14);
+            border: 1px solid rgba(29,78,216,.20);
+        }
+        html:not(.dark) .scene-fallback::after {
+            border-color: rgba(29,78,216,.42);
+            box-shadow: 0 0 26px rgba(37,99,235,.22);
+        }
+        /* The halo behind it is tuned the same way. */
+        html:not(.dark) .hero__scene::before {
+            background: radial-gradient(circle at 50% 50%, rgba(37,99,235,.16), transparent 62%);
+        }
 
         /* Type on paper reads heavier and harder-edged than the same type on a
            near-black page — dark-on-light thickens the strokes where
@@ -1515,7 +1574,7 @@
                 ['🎙️', 'Voice cloning', 'Clone your own voice from a 10-second sample, or choose from 30+ studio voices across 13 languages. Every agent can sound different.'],
                 ['🧠', 'Knows your business', 'Point it at your website, upload your price list or brochures, or connect your system. It answers real questions from your actual information.'],
                 ['📥', 'Omnichannel inbox', 'Every WhatsApp, Instagram, Facebook and web conversation in one shared inbox. Jump in live, hand back to the bot, never lose context.'],
-                ['🧭', 'Visual flow builder', 'Design guided conversations with a drag-and-drop canvas — qualify, route, book, and collect — then test it live before going public.'],
+                ['🧭', 'Visual &amp; AI flow builder', 'Describe the conversation you want and the AI drafts the flow — or build it yourself on a drag-and-drop canvas. Qualify, route, book, and collect, then test it live before going public.'],
                 ['🎭', 'Multi-agent & skills', 'Spin up sales, support and billing personas. Route by phone number or skill. Each agent gets its own voice, tools and knowledge.'],
                 ['🎯', 'Automatic lead capture', 'The agent extracts names, intent and contact details mid-conversation and drops a qualified lead straight into your CRM — scored and ready.'],
                 ['🔒', 'Per-table access control', 'Decide exactly which tables and columns the AI may read. Sensitive data stays invisible to the model. Privacy by design.'],

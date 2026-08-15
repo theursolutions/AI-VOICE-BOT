@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\CheckoutController;
+use App\Http\Controllers\Billing\AddonController;
 use App\Http\Controllers\Billing\PaymentMethodController;
 use App\Http\Controllers\PricingController;
 use App\Support\Hashid;
@@ -63,6 +64,10 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/billing/cards',         [PaymentMethodController::class, 'store'])->name('billing.cards.store');
         Route::post  ('/billing/cards/default', [PaymentMethodController::class, 'makeDefault'])->name('billing.cards.default');
         Route::delete('/billing/cards',         [PaymentMethodController::class, 'destroy'])->name('billing.cards.destroy');
+
+        // Add-ons (extra seats / AI agents). Field is `addon`, not `addon_id` —
+        // DecodeHashids rewrites `*_id` keys.
+        Route::post('/billing/addons', [AddonController::class, 'update'])->name('billing.addons.update');
 
         // Branded invoice. `invoice` is deliberately not an *_id param name.
         Route::get('/billing/invoices/{invoice}', [BillingController::class, 'invoice'])

@@ -75,6 +75,88 @@
     }
     .tva-routing-tab.is-selected { background:#fff; color:#3730a3; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
 
+    /* ── Setup guide ── */
+    .tva-guide {
+        background:#fff; border:1px solid #e2e8f0; border-radius:14px;
+        margin-bottom:18px; overflow:hidden;
+    }
+    .tva-guide__summary {
+        display:flex; align-items:center; gap:14px; padding:18px 22px;
+        cursor:pointer; list-style:none;
+    }
+    .tva-guide__summary::-webkit-details-marker { display:none; }
+    .tva-guide__icon { font-size:22px; }
+    .tva-guide__title { display:block; font-size:15px; font-weight:700; color:#0f172a; }
+    .tva-guide__sub { display:block; font-size:12.5px; color:#64748b; margin-top:2px; }
+    .tva-guide__chev { color:#94a3b8; font-size:14px; transition:transform .2s; }
+    .tva-guide[open] .tva-guide__chev { transform:rotate(180deg); }
+
+    .tva-steps { list-style:none; margin:0; padding:0 22px 20px; }
+    .tva-step { display:flex; gap:14px; padding:16px 0; border-top:1px solid #eef0f3; }
+    .tva-step__n {
+        flex:0 0 28px; height:28px; border-radius:50%;
+        background:var(--tva-gradient,#3b82f6); color:#fff;
+        display:flex; align-items:center; justify-content:center;
+        font-size:13px; font-weight:700;
+    }
+    .tva-step__body { flex:1; min-width:0; }
+    .tva-step__title { font-size:14px; font-weight:700; color:#0f172a; margin-bottom:5px; }
+    .tva-step__body p { font-size:13px; color:#475569; line-height:1.6; margin:0 0 10px; }
+    .tva-step__note { font-size:12px; color:#64748b; margin-top:9px !important; }
+    .tva-step__note--warn {
+        background:#fffaeb; border:1px solid #fedf89; color:#92400e;
+        border-radius:8px; padding:9px 12px;
+    }
+    .tva-step__map { list-style:none; margin:0 0 10px; padding:0; }
+    .tva-step__map li {
+        font-size:12.5px; color:#475569; padding:5px 0;
+        border-bottom:1px dashed #eef0f3;
+    }
+    .tva-step__map li:last-child { border-bottom:none; }
+    .tva-step__map span {
+        display:inline-block; min-width:150px; font-weight:600; color:#0f172a;
+    }
+    .tva-step code {
+        background:#f1f5f9; padding:1px 6px; border-radius:5px;
+        font-size:11.5px; color:#0f172a;
+    }
+
+    /* ── Per-project Twilio credentials ── */
+    .tva-creds {
+        background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+        padding:12px 14px; margin-bottom:12px;
+    }
+    .tva-creds.is-connected { background:#f0fdf4; border-color:#bbf7d0; }
+    .tva-creds__row { display:flex; align-items:center; gap:12px; }
+    .tva-creds__dot {
+        width:9px; height:9px; border-radius:50%; background:#16a34a; flex-shrink:0;
+        box-shadow:0 0 0 3px rgba(22,163,74,.15);
+    }
+    .tva-creds__dot.is-off { background:#94a3b8; box-shadow:0 0 0 3px rgba(148,163,184,.15); }
+    .tva-creds__title { font-size:13px; font-weight:700; color:#0f172a; }
+    .tva-creds__meta { font-size:11.5px; color:#64748b; margin-top:2px; }
+    .tva-creds__meta code { background:rgba(15,23,42,.06); padding:1px 5px; border-radius:4px; font-size:11px; }
+    .tva-creds__warn {
+        margin-top:10px; font-size:12px; background:#fffaeb; border:1px solid #fedf89;
+        color:#92400e; border-radius:8px; padding:9px 12px;
+    }
+
+    html.dark .tva-creds { background:#0f172a; border-color:#334155; }
+    html.dark .tva-creds.is-connected { background:#052e16; border-color:#166534; }
+    html.dark .tva-creds__title { color:#f1f5f9; }
+    html.dark .tva-creds__meta { color:#94a3b8; }
+    html.dark .tva-creds__meta code { background:rgba(255,255,255,.08); }
+    html.dark .tva-creds__warn { background:#3b2503; border-color:#92400e; color:#fde68a; }
+
+    html.dark .tva-guide { background:#1e293b; border-color:#334155; }
+    html.dark .tva-guide__title, html.dark .tva-step__title { color:#f1f5f9; }
+    html.dark .tva-step { border-top-color:#334155; }
+    html.dark .tva-step__body p, html.dark .tva-step__map li { color:#cbd5e1; }
+    html.dark .tva-step__map span { color:#f1f5f9; }
+    html.dark .tva-step__map li { border-bottom-color:#334155; }
+    html.dark .tva-step code { background:#0f172a; color:#f1f5f9; }
+    html.dark .tva-step__note--warn { background:#3b2503; border-color:#92400e; color:#fde68a; }
+
     html.dark .tva-tel-card { background:#1e293b; border-color:#334155; }
     html.dark .tva-tel-card__head { border-bottom-color:#334155; }
     html.dark .tva-tel-card__title { color:#f1f5f9; }
@@ -140,6 +222,111 @@
         </div>
     @endif
 
+    {{-- ── Setup guide ──────────────────────────────────────────────────
+         Everything a customer has to do, in the order they have to do it,
+         with a link straight to the right Twilio screen at each step.
+         Collapsed once they have a number so it stops taking up the page. --}}
+    @php
+        $tvaHasNumber = collect($projects)->contains(
+            fn ($p) => count((array) data_get($p->json_data, 'telephony.numbers', [])) > 0
+        );
+    @endphp
+    <details class="tva-guide" {{ $tvaHasNumber ? '' : 'open' }}>
+        <summary class="tva-guide__summary">
+            <span class="tva-guide__icon">🚀</span>
+            <span class="flex-1">
+                <span class="tva-guide__title">How to get a phone number</span>
+                <span class="tva-guide__sub">Five steps, about ten minutes. You'll need a card for Twilio.</span>
+            </span>
+            <span class="tva-guide__chev">▾</span>
+        </summary>
+
+        <ol class="tva-steps">
+            <li class="tva-step">
+                <span class="tva-step__n">1</span>
+                <div class="tva-step__body">
+                    <div class="tva-step__title">Create a Twilio account</div>
+                    <p>Twilio is the phone network behind your calls. The number is bought and billed there,
+                       in your own name — we never see your card.</p>
+                    <a href="https://www.twilio.com/try-twilio" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">
+                        Sign up at Twilio ↗
+                    </a>
+                    <p class="tva-step__note">Already have one? <a href="https://console.twilio.com/" target="_blank" rel="noopener">Log in</a> and skip to step 2.</p>
+                </div>
+            </li>
+
+            <li class="tva-step">
+                <span class="tva-step__n">2</span>
+                <div class="tva-step__body">
+                    <div class="tva-step__title">Buy a phone number</div>
+                    <p>Choose your country, tick <b>Voice</b> under Capabilities, and buy. A local number is
+                       typically about $1–2 per month.</p>
+                    <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/search"
+                       target="_blank" rel="noopener" class="btn btn-primary btn-sm">
+                        <i data-lucide="shopping-cart" class="w-3.5 h-3.5 inline -mt-0.5 mr-1"></i> Buy a number on Twilio ↗
+                    </a>
+                    <p class="tva-step__note">
+                        <b>Trial accounts can only call numbers you've verified</b> with Twilio. Upgrade before
+                        going live, or your agent will only reach your own phone.
+                    </p>
+                </div>
+            </li>
+
+            <li class="tva-step">
+                <span class="tva-step__n">3</span>
+                <div class="tva-step__body">
+                    <div class="tva-step__title">Point the number at us</div>
+                    <p>In Twilio, open the number you just bought and scroll to <b>Voice Configuration</b>.
+                       Copy the two URLs below into these fields — both set to <b>HTTP POST</b>:</p>
+                    <ul class="tva-step__map">
+                        <li><span>A call comes in</span> → the <b>voice</b> URL below</li>
+                        <li><span>Call status changes</span> → the <b>status</b> URL below</li>
+                    </ul>
+                    <a href="https://console.twilio.com/us1/develop/phone-numbers/manage/incoming"
+                       target="_blank" rel="noopener" class="btn btn-secondary btn-sm">
+                        Open my Twilio numbers ↗
+                    </a>
+                    <p class="tva-step__note">Save at the bottom of the Twilio page, or the change won't stick.</p>
+                </div>
+            </li>
+
+            <li class="tva-step">
+                <span class="tva-step__n">4</span>
+                <div class="tva-step__body">
+                    <div class="tva-step__title">Send us your Twilio keys</div>
+                    <p>On the Twilio console home page, find <b>Account Info</b> at the bottom. You need two values:</p>
+                    <ul class="tva-step__map">
+                        <li><span>Account SID</span> → starts with <code>AC</code>, 34 characters</li>
+                        <li><span>Auth Token</span> → hidden until you press <b>Show</b></li>
+                    </ul>
+                    <a href="https://console.twilio.com/" target="_blank" rel="noopener" class="btn btn-secondary btn-sm">
+                        Open Twilio Account Info ↗
+                    </a>
+                    <p class="tva-step__note">
+                        Paste both into the <b>Twilio account</b> box on your project below. We check them with
+                        Twilio straight away, so you'll know immediately if something was mistyped.
+                    </p>
+                    <p class="tva-step__note tva-step__note--warn">
+                        Your Auth Token can spend money and read your call recordings — treat it like a password.
+                        We encrypt it before storing, never show it again, and never put it in a log.
+                        Don't paste it into email or chat.
+                    </p>
+                </div>
+            </li>
+
+            <li class="tva-step">
+                <span class="tva-step__n">5</span>
+                <div class="tva-step__body">
+                    <div class="tva-step__title">Add the number here</div>
+                    <p>Press <b>Add number</b> on your project below, paste the number in
+                       <code>+</code>country-code format (e.g. <code>+14155551234</code>), and choose which
+                       agent, skill or flow answers it.</p>
+                    <p class="tva-step__note">Call the number to test. If it rings and then hangs up, re-check step 3.</p>
+                </div>
+            </li>
+        </ol>
+    </details>
+
     {{-- Webhook URLs --}}
     <div class="tva-tel-card">
         <div class="tva-tel-card__head">
@@ -148,7 +335,7 @@
             </div>
             <div>
                 <div class="tva-tel-card__title">Webhook URLs for Twilio Console</div>
-                <div class="tva-tel-card__subtitle">Paste into the "A CALL COMES IN" and "CALL STATUS CHANGES" fields for each Twilio number. Same URLs for all numbers — routing is by phone number.</div>
+                <div class="tva-tel-card__subtitle">Step 3 above. Paste into the "A CALL COMES IN" and "CALL STATUS CHANGES" fields for each Twilio number. Same URLs for all numbers — routing is by phone number.</div>
             </div>
         </div>
         @if ($webhookUrls['voice'])
@@ -189,6 +376,56 @@
                 <button type="button" class="btn btn-primary btn-sm" data-tva-modal-open="num-create-{{ $project->id }}">
                     <i data-lucide="plus" class="w-3 h-3 mr-1 inline"></i> Add number
                 </button>
+            </div>
+
+            {{-- Twilio account for THIS project. Each customer brings their
+                 own — the credentials in .env belong to the Serve AI demo. --}}
+            @php $tw = $twilio[$project->id] ?? null; @endphp
+            <div class="tva-creds {{ $tw ? 'is-connected' : '' }}">
+                @if ($tw)
+                    <div class="tva-creds__row">
+                        <span class="tva-creds__dot"></span>
+                        <div class="flex-1 min-w-0">
+                            <div class="tva-creds__title">
+                                Twilio account connected{{ $tw['friendly_name'] ? ' — ' . $tw['friendly_name'] : '' }}
+                            </div>
+                            <div class="tva-creds__meta">
+                                <code>{{ $tw['account_sid'] }}</code>
+                                · token ends <code>…{{ $tw['token_hint'] }}</code>
+                                @if ($tw['verified_at']) · checked {{ $tw['verified_at'] }} @endif
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" data-tva-modal-open="creds-{{ $project->id }}">
+                            Replace
+                        </button>
+                        <form method="POST" action="{{ route('telephony.delete-credentials', ['client' => $client->slug]) }}"
+                              class="inline" data-confirm="Remove the Twilio credentials for {{ $project->name }}? Calls to its numbers will stop working until you add them again.">
+                            @csrf
+                            <input type="hidden" name="project_id" value="{{ $project->id }}">
+                            <button type="submit" class="btn btn-secondary btn-sm">Remove</button>
+                        </form>
+                    </div>
+                    @if ($tw['is_trial'])
+                        <div class="tva-creds__warn">
+                            <b>This is a Twilio Trial account.</b> It can only call numbers you've verified in the
+                            Twilio console. Upgrade it before going live, or your agent will only reach your own phone.
+                        </div>
+                    @endif
+                @else
+                    <div class="tva-creds__row">
+                        <span class="tva-creds__dot is-off"></span>
+                        <div class="flex-1">
+                            <div class="tva-creds__title">No Twilio account connected</div>
+                            <div class="tva-creds__meta">
+                                Calls to this project's numbers can't be accepted until you add its
+                                Account SID and Auth Token — see step 4 in the guide above.
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary btn-sm" data-tva-modal-open="creds-{{ $project->id }}">
+                            <i data-lucide="key" class="w-3 h-3 mr-1 inline"></i> Add Twilio keys
+                        </button>
+                    </div>
+                @endif
             </div>
 
             @forelse ($numbers as $idx => $n)
@@ -263,6 +500,55 @@
                 'skills'      => $skills,
                 'flows'       => $flows,
             ])
+
+            {{-- Twilio credentials modal --}}
+            <div id="creds-{{ $project->id }}" class="tva-modal" hidden>
+                <div class="tva-modal__backdrop" data-tva-modal-close></div>
+                <form method="POST" action="{{ route('telephony.save-credentials', ['client' => $client->slug]) }}"
+                      class="tva-modal__panel" style="max-width:560px;" autocomplete="off">
+                    @csrf
+                    <input type="hidden" name="project_id" value="{{ $project->id }}">
+                    <div class="tva-modal__head">
+                        <i data-lucide="key" class="w-4 h-4 mr-2 inline" style="color:#6366f1;"></i>
+                        Twilio account for {{ $project->name }}
+                        <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>
+                    <div class="tva-modal__body">
+                        <p class="text-sm text-slate-500 mb-3">
+                            From the Twilio console home page, under <b>Account Info</b>.
+                            <a href="https://console.twilio.com/" target="_blank" rel="noopener">Open it ↗</a>
+                        </p>
+                        <div class="mb-3">
+                            <label class="form-label">Account SID <span class="text-danger">*</span></label>
+                            <input type="text" name="account_sid" class="form-control" required
+                                   maxlength="64" spellcheck="false" autocomplete="off"
+                                   placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                                   value="{{ old('account_sid', $twilio[$project->id]['account_sid'] ?? '') }}">
+                            <small class="text-slate-500 text-xs">Starts with <code>AC</code>, 34 characters.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Auth Token <span class="text-danger">*</span></label>
+                            {{-- type=password so it isn't shoulder-surfed or
+                                 captured by a screen recording, and never
+                                 pre-filled: we can't show a stored token back. --}}
+                            <input type="password" name="auth_token" class="form-control" required
+                                   maxlength="64" spellcheck="false" autocomplete="new-password"
+                                   placeholder="{{ isset($twilio[$project->id]) ? 'Enter again to replace' : '32 characters' }}">
+                            <small class="text-slate-500 text-xs">
+                                Hidden in Twilio until you press <b>Show</b>. We encrypt it before storing and never display it again.
+                            </small>
+                        </div>
+                        <div class="text-xs" style="background:#fffaeb;border:1px solid #fedf89;color:#92400e;border-radius:8px;padding:9px 12px;">
+                            We'll check these with Twilio when you save, so a mistyped value is caught now
+                            rather than on your first real call.
+                        </div>
+                    </div>
+                    <div class="tva-modal__foot">
+                        <button type="button" class="btn btn-secondary" data-tva-modal-close>Cancel</button>
+                        <button type="submit" class="btn btn-primary">Save &amp; verify</button>
+                    </div>
+                </form>
+            </div>
         </div>
     @empty
         <div class="text-center py-8 text-slate-400">No projects yet.</div>

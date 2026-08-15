@@ -271,8 +271,14 @@ class PricingPresenter
         return $out;
     }
 
-    /** Bullets on the card: features flagged `is_headline`, in order. */
-    private function highlights(Plan $plan): array
+    /**
+     * Bullets on the card: features flagged `is_headline`, in order.
+     *
+     * Public because the receipt email lists the same entitlements. Keeping
+     * one implementation means the "what you're paying for" summary can't
+     * drift between the pricing page and the invoice a customer files.
+     */
+    public function highlights(Plan $plan): array
     {
         $resolved = $this->features->forPlan($plan);
         $out      = [];

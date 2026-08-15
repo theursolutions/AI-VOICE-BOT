@@ -185,6 +185,108 @@ class OnSiteCheckoutTest extends BillingTestCase
         $this->assertSame('on_subscription', $captured['payment_settings']['save_default_payment_method']);
     }
 
+    public function test_a_freshly_tokenised_card_is_attached_before_subscribing(): void
+    {
+        // THE FIRST-CHECKOUT BUG. A card tokenised by Elements belongs to
+        // nobody yet. Passing it straight to subscriptions->create() as
+        // default_payment_method makes Stripe answer "The customer does not
+        // have a payment method with the ID pm_…", so the very first purchase
+        // any customer ever attempts fails. It must be attached first.
+        [$client, $user] = $this->makeWorkspace();
+        app(SubscriptionService::class)->startFreeWindow($client);
+
+        $attached = [];
+
+        $card = [
+            'id' => 'pm_fresh_1', 'object' => 'payment_method', 'type' => 'card',
+            'customer' => null,                      // ← straight from Elements
+            'card' => ['brand' => 'visa', 'last4' => '4242', 'exp_month' => 12,
+                       'exp_year' => (int) now()->addYears(3)->format('Y')],
+        ];
+
+        $paymentMethods = \Mockery::mock();
+        $paymentMethods->shouldReceive('retrieve')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject($card, [])
+        );
+        $paymentMethods->shouldReceive('attach')->andReturnUsing(
+            function ($id, $params) use (&$attached, $card) {
+                $attached[] = [$id, $params['customer'] ?? null];
+
+                return \Stripe\Util\Util::convertToStripeObject($card, []);
+            }
+        );
+        $paymentMethods->shouldReceive('all')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['object' => 'list', 'data' => [$card]], [])
+        );
+
+        $this->fakeStripe([
+            'customers'      => $this->customerServiceReturning('cus_test_1'),
+            'paymentMethods' => $paymentMethods,
+            'subscriptions'  => $this->subscriptionsDoubleFor($client),
+        ]);
+
+        $this->actingAs($user)
+             ->postJson(route('billing.subscribe', ['client' => $client->slug]), [
+                 'plan' => 'growth', 'interval' => 'monthly', 'payment_method' => 'pm_fresh_1',
+             ])
+             ->assertOk()
+             ->assertJsonPath('status', 'succeeded');
+
+        $this->assertSame([['pm_fresh_1', 'cus_test_1']], $attached);
+    }
+
+    public function test_an_already_attached_card_is_not_re_attached(): void
+    {
+        // The saved-card path. Re-attaching would be a wasted call and, on a
+        // PM already attached elsewhere, an error.
+        [$client, $user] = $this->makeWorkspace();
+        app(SubscriptionService::class)->startFreeWindow($client);
+
+        $services = $this->savedCardServices();          // retrieve() → cus_test_1
+        $services['paymentMethods']->shouldReceive('attach')->never();
+
+        $this->fakeStripe($services + ['subscriptions' => $this->subscriptionsDoubleFor($client)]);
+
+        $this->actingAs($user)
+             ->postJson(route('billing.subscribe', ['client' => $client->slug]), [
+                 'plan' => 'growth', 'interval' => 'monthly', 'payment_method' => 'pm_test_1',
+             ])
+             ->assertOk();
+    }
+
+    public function test_another_workspaces_card_cannot_be_used_at_checkout(): void
+    {
+        // `pm_…` comes from the browser. Stripe's "already been attached"
+        // message covers both "to you" and "to someone else", so deciding from
+        // the error text would have accepted a foreign customer's card here.
+        [$client, $user] = $this->makeWorkspace();
+        app(SubscriptionService::class)->startFreeWindow($client);
+
+        $foreign = \Mockery::mock();
+        $foreign->shouldReceive('retrieve')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject([
+                'id' => 'pm_theirs', 'object' => 'payment_method', 'type' => 'card',
+                'customer' => 'cus_someone_else',
+                'card' => ['brand' => 'visa', 'last4' => '1111', 'exp_month' => 1, 'exp_year' => 2031],
+            ], [])
+        );
+        $foreign->shouldReceive('attach')->never();
+
+        $this->fakeStripe([
+            'customers'      => $this->customerServiceReturning('cus_test_1'),
+            'paymentMethods' => $foreign,
+            'subscriptions'  => $this->subscriptionsDoubleFor($client),
+        ]);
+
+        $this->actingAs($user)
+             ->postJson(route('billing.subscribe', ['client' => $client->slug]), [
+                 'plan' => 'growth', 'interval' => 'monthly', 'payment_method' => 'pm_theirs',
+             ])
+             ->assertStatus(422);
+
+        $this->assertSame(0, Subscription::whereNotNull('stripe_subscription_ref')->count());
+    }
+
     public function test_a_card_needing_3ds_asks_the_browser_to_confirm(): void
     {
         [$client, $user] = $this->makeWorkspace();

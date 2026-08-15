@@ -19,6 +19,8 @@ use Illuminate\View\View;
  */
 class DataSourceWebController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     public function __construct(
         private PythonClient $python,
     ) {}
@@ -197,6 +199,15 @@ class DataSourceWebController extends Controller
      */
     public function storeDatabase(Request $request, Client $client): RedirectResponse
     {
+        // Connecting a live database is a paid feature (`database_connector`,
+        // Growth+). It was sold on the pricing page and enforced nowhere, so a
+        // free workspace could point the AI at a production database.
+        // Redirect-back rather than the full-page upsell: the form carries
+        // host/user/password the customer just typed.
+        if ($refusal = $this->refuseUnlessPlanFeature($client, 'database_connector', 'The live database connector')) {
+            return $refusal;
+        }
+
         $data = $request->validate([
             'project_id' => 'required|integer',
             'name'       => 'required|string|max:255',

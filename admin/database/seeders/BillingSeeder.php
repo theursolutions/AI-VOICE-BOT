@@ -32,6 +32,7 @@ class BillingSeeder extends Seeder
         DB::transaction(function () {
             $features = $this->seedFeatures();
             $this->seedPlans($features);
+            $this->seedAddonGrants($features);
         });
 
         $this->command?->info('Billing catalogue seeded.');
@@ -98,7 +99,7 @@ class BillingSeeder extends Seeder
              'type' => 'numeric', 'unit' => 'days', 'headline' => false, 'sort' => 100],
 
             // ── Always included (Bucket 1) ───────────────────────────
-            ['key' => 'voice_cloning', 'name' => 'Voice cloning + 30 stock voices', 'group' => 'Included on every plan',
+            ['key' => 'voice_cloning', 'name' => 'Voices — 30 stock voices + voice cloning', 'group' => 'Included on every plan',
              'type' => 'boolean', 'module' => 'voices', 'headline' => true, 'sort' => 200,
              'desc' => 'Clone a voice from a 10-second sample. Competitors do not sell this at any price.'],
 
@@ -156,13 +157,29 @@ class BillingSeeder extends Seeder
              'type' => 'boolean', 'headline' => false, 'sort' => 380,
              'desc' => 'Gate #8a. Scale only.'],
 
-            ['key' => 'byo_llm', 'name' => 'Bring your own AI keys / local model', 'group' => 'Channels & power features',
-             'type' => 'boolean', 'module' => 'bot_strategy', 'headline' => false, 'sort' => 390,
+            ['key' => 'byo_llm', 'name' => 'Brain Settings — bring your own AI keys / local model', 'group' => 'Channels & power features',
+             'type' => 'boolean', 'module' => 'brain_settings', 'headline' => false, 'sort' => 390,
              'desc' => 'Gate #8b. Scale only — it also keeps the customers most likely to want expensive models on the top tier.'],
 
             ['key' => 'audit_export', 'name' => 'Audit log export', 'group' => 'Channels & power features',
              'type' => 'boolean', 'headline' => false, 'sort' => 400,
              'desc' => 'Gate #8c. Scale only.'],
+
+            ['key' => 'bot_strategy', 'name' => 'Bot knowledge strategy', 'group' => 'Channels & power features',
+             'type' => 'boolean', 'module' => 'bot_strategy', 'headline' => false, 'sort' => 335,
+             'desc' => 'Choose which data tiers the bot may draw on when answering.'],
+
+            ['key' => 'skills', 'name' => 'Skills & multi-agent routing', 'group' => 'Channels & power features',
+             'type' => 'boolean', 'module' => 'skills', 'headline' => false, 'sort' => 336,
+             'desc' => 'Route conversations to the right agent by skill, with a library of prebuilt actions.'],
+
+            ['key' => 'assistant_access', 'name' => 'Team Assistant (in-app AI)', 'group' => 'Channels & power features',
+             'type' => 'boolean', 'module' => 'assistant', 'headline' => false, 'sort' => 345,
+             'desc' => 'Ask-AI inside the admin. Every question costs LLM tokens, so it is not on the free plan.'],
+
+            ['key' => 'crm_connectors', 'name' => 'CRM connectors (HubSpot, Salesforce, Pipedrive, Zoho)', 'group' => 'Channels & power features',
+             'type' => 'boolean', 'headline' => true, 'sort' => 365,
+             'desc' => 'Two-way sync with an existing CRM. Enforced when starting a crm_oauth connection.'],
 
             // ── Support / commercial ─────────────────────────────────
             ['key' => 'support', 'name' => 'Support', 'group' => 'Support',
@@ -217,12 +234,13 @@ class BillingSeeder extends Seeder
                     'projects' => '1', 'seats' => '2', 'agents' => '1',
                     'phone_numbers' => null, 'data_sources' => '1', 'indexed_pages' => '50',
                     'history_days' => '7',
-                    'voice_cloning' => '0', 'multi_language' => '1', 'lead_capture' => '1',
+                    'voice_cloning' => null, 'multi_language' => '1', 'lead_capture' => '1',
                     'web_widget' => '1', 'knowledge_base' => '1', 'transcripts' => '1',
                     'telephony' => null, 'channels_meta' => null, 'shared_inbox' => null,
                     'flow_builder' => null, 'team_roles' => null, 'api_access' => null,
                     'database_connector' => null, 'remove_branding' => null,
                     'white_label' => null, 'byo_llm' => null, 'audit_export' => null,
+                    'bot_strategy' => null, 'assistant_access' => null, 'crm_connectors' => null, 'skills' => null,
                     'support' => 'Community', 'overage_voice' => null, 'sso' => null,
                 ],
             ],
@@ -244,6 +262,7 @@ class BillingSeeder extends Seeder
                     'flow_builder' => '1', 'team_roles' => null, 'api_access' => null,
                     'database_connector' => null, 'remove_branding' => null,
                     'white_label' => null, 'byo_llm' => null, 'audit_export' => null,
+                    'bot_strategy' => '1', 'assistant_access' => '1', 'crm_connectors' => null, 'skills' => '1',
                     'support' => 'Email', 'overage_voice' => '$0.35/min', 'sso' => null,
                 ],
             ],
@@ -265,6 +284,7 @@ class BillingSeeder extends Seeder
                     'flow_builder' => '-1', 'team_roles' => '1', 'api_access' => '1',
                     'database_connector' => '1', 'remove_branding' => '1',
                     'white_label' => null, 'byo_llm' => null, 'audit_export' => null,
+                    'bot_strategy' => '1', 'assistant_access' => '1', 'crm_connectors' => '1', 'skills' => '1',
                     'support' => 'Priority email', 'overage_voice' => '$0.30/min', 'sso' => null,
                 ],
             ],
@@ -285,6 +305,7 @@ class BillingSeeder extends Seeder
                     'flow_builder' => '-1', 'team_roles' => '1', 'api_access' => '1',
                     'database_connector' => '1', 'remove_branding' => '1',
                     'white_label' => '1', 'byo_llm' => '1', 'audit_export' => '1',
+                    'bot_strategy' => '1', 'assistant_access' => '1', 'crm_connectors' => '1', 'skills' => '1',
                     'support' => 'Priority + onboarding', 'overage_voice' => '$0.25/min', 'sso' => null,
                 ],
             ],
@@ -305,6 +326,7 @@ class BillingSeeder extends Seeder
                     'flow_builder' => '-1', 'team_roles' => '1', 'api_access' => '1',
                     'database_connector' => '1', 'remove_branding' => '1',
                     'white_label' => '1', 'byo_llm' => '1', 'audit_export' => '1',
+                    'bot_strategy' => '1', 'assistant_access' => '1', 'crm_connectors' => '1', 'skills' => '1',
                     'support' => 'Dedicated CSM + SLA', 'overage_voice' => 'Contract rate', 'sso' => '1',
                 ],
             ],
@@ -378,6 +400,51 @@ class BillingSeeder extends Seeder
                     'value'      => (string) $value,
                     'sort_order' => $features[$key]->sort_order,
                 ]);
+            }
+        }
+    }
+
+    // ── Add-ons ──────────────────────────────────────────────────────
+
+    /**
+     * What ONE unit of each add-on grants.
+     *
+     * The add-on PLANS and their prices are created by migration
+     * 2026_08_16_110010, but the `features` table is populated HERE — so on a
+     * fresh install (`migrate` then `db:seed`) that migration runs against an
+     * empty feature catalogue, finds no `seats` row, and writes no grant. The
+     * add-on would then be perfectly billable and grant nothing: the customer
+     * pays $5/mo for a seat that never appears. This closes that window, and
+     * is where the mapping belongs anyway — the seeder owns features.
+     *
+     * Idempotent, and never overwrites an existing value: an operator who
+     * changes "extra seat" to grant 2 keeps their decision through a re-seed.
+     *
+     * @param array<string,Feature> $features
+     */
+    private function seedAddonGrants(array $features): void
+    {
+        $grants = [
+            'addon-seat'  => ['seats' => 1],
+            'addon-agent' => ['agents' => 1],
+        ];
+
+        foreach ($grants as $slug => $values) {
+            $plan = Plan::query()->where('slug', $slug)->first();
+
+            if (! $plan) {
+                continue;   // migration hasn't run / add-on was retired
+            }
+
+            foreach ($values as $key => $value) {
+                if (! isset($features[$key])) {
+                    continue;
+                }
+
+                PlanFeature::firstOrCreate(
+                    ['plan_id' => $plan->id, 'feature_id' => $features[$key]->id],
+                    ['value' => (string) $value, 'sort_order' => 0],
+                );
             }
         }
     }

@@ -206,6 +206,14 @@ class BillingService
         $customerRef = $this->ensureCustomer($client);
         $stripe      = $this->factory->make();
 
+        // A card tokenised by Elements is NOT yet attached to the customer —
+        // it's a bare `pm_…` belonging to nobody. Stripe refuses it as a
+        // subscription's default_payment_method with "The customer does not
+        // have a payment method with the ID pm_…", which is the correct
+        // behaviour and exactly what a first-time checkout hits. A saved card
+        // is already attached, so this is a no-op on that path.
+        $this->attachPaymentMethod($client, $paymentMethodRef);
+
         $payload = [
             'customer' => $customerRef,
             'items'    => [['price' => $price->stripe_price_ref]],
@@ -257,6 +265,38 @@ class BillingService
             'client_secret'    => $intent->client_secret ?? null,
             'subscription_ref' => $subscription->id,
         ];
+    }
+
+    /**
+     * Attach a browser-supplied PaymentMethod to this workspace's customer.
+     *
+     * Decides from the PM's CURRENT owner rather than from the text of a
+     * Stripe error:
+     *   - unowned  → freshly tokenised by Elements, attach it
+     *   - ours     → already attached, nothing to do (so this is idempotent)
+     *   - someone else's → refuse
+     *
+     * That last branch matters. The `pm_…` id arrives from the browser, and
+     * Stripe's "already been attached" message covers BOTH "to you" and "to
+     * another customer" — so matching on the message would quietly accept
+     * another workspace's card here.
+     */
+    public function attachPaymentMethod(Client $client, string $paymentMethodRef): void
+    {
+        $customerRef = $this->ensureCustomer($client);
+        $stripe      = $this->factory->make();
+
+        $owner = $stripe->paymentMethods->retrieve($paymentMethodRef, [])->customer ?? null;
+
+        if ($owner === null) {
+            $stripe->paymentMethods->attach($paymentMethodRef, ['customer' => $customerRef]);
+
+            return;
+        }
+
+        if ($owner !== $customerRef) {
+            throw new \RuntimeException('That payment method does not belong to this workspace.');
+        }
     }
 
     /** Re-read a subscription (after a browser-side 3-D Secure confirmation). */
@@ -473,13 +513,18 @@ class BillingService
                 ];
             }
 
+            $tax = $this->taxBreakdown($invoice);
+
             return [
                 'id'          => $invoice->id,
                 'number'      => $invoice->number,
                 'status'      => $invoice->status,
                 'currency'    => strtoupper((string) $invoice->currency),
                 'subtotal'    => (int) ($invoice->subtotal ?? 0),
-                'tax'         => (int) ($invoice->tax ?? 0),
+                'tax'         => $tax['total'],
+                'tax_lines'   => $tax['lines'],
+                'tax_ids'     => $tax['ids'],
+                'tax_note'    => $tax['note'],
                 'total'       => (int) ($invoice->total ?? 0),
                 'amount_paid' => (int) ($invoice->amount_paid ?? 0),
                 'created'     => $invoice->created ? \Illuminate\Support\Carbon::createFromTimestamp($invoice->created) : null,
@@ -503,6 +548,107 @@ class BillingService
 
             return null;
         }
+    }
+
+    /**
+     * Tax on an invoice: the total, a per-rate breakdown, and the buyer's tax
+     * ids — everything a receipt has to state rather than imply.
+     *
+     * `Invoice::$tax` WAS REMOVED from the Stripe API. Modern versions carry
+     * `total_taxes[]`, each entry holding the amount, whether the rate was
+     * inclusive or exclusive, and why it was (or wasn't) charged. Reading the
+     * old field returns null, so `$invoice->tax ?? 0` reported zero tax on
+     * every invoice forever — silently, because zero is a plausible answer.
+     * Both shapes are read here so the receipt is right either way.
+     *
+     * Rate LABELS come from `default_tax_rates`, which Stripe returns as full
+     * TaxRate objects; `total_taxes` only references a rate by id. When a rate
+     * can't be resolved, the percentage is derived from amount ÷ taxable
+     * amount rather than left blank.
+     *
+     * @return array{total:int, lines:array<int,array>, ids:array<int,string>, note:?string}
+     */
+    private function taxBreakdown(\Stripe\Invoice $invoice): array
+    {
+        // id => TaxRate, for turning a bare reference into "GST 17%".
+        $rates = [];
+        foreach ($invoice->default_tax_rates ?? [] as $rate) {
+            if (! empty($rate->id)) {
+                $rates[$rate->id] = $rate;
+            }
+        }
+
+        $lines = [];
+        $total = 0;
+
+        // `total_taxes` (current) or `total_tax_amounts` (pre-2025).
+        $entries = $invoice->total_taxes ?? $invoice->total_tax_amounts ?? [];
+
+        foreach ($entries as $entry) {
+            $amount = (int) ($entry->amount ?? 0);
+            $total += $amount;
+
+            $rateId = $entry->tax_rate_details->tax_rate       // current shape
+                   ?? (is_string($entry->tax_rate ?? null) ? $entry->tax_rate : null)
+                   ?? ($entry->tax_rate->id ?? null);          // expanded object
+
+            $rate = $rateId ? ($rates[$rateId] ?? null) : null;
+
+            // Percentage: from the rate when we have it, otherwise derived.
+            $percentage = $rate->percentage ?? $rate->effective_percentage ?? null;
+            $taxable    = (int) ($entry->taxable_amount ?? 0);
+
+            if ($percentage === null && $taxable > 0) {
+                $percentage = round($amount / $taxable * 100, 2);
+            }
+
+            $inclusive = $rate->inclusive
+                ?? (($entry->tax_behavior ?? null) === 'inclusive');
+
+            $label = $rate->display_name
+                ?? ucwords(str_replace('_', ' ', (string) ($rate->tax_type ?? 'Tax')));
+
+            $lines[] = [
+                'label'        => $label,
+                'percentage'   => $percentage !== null ? (float) $percentage : null,
+                'jurisdiction' => $rate->jurisdiction ?? $rate->country ?? null,
+                'inclusive'    => (bool) $inclusive,
+                'amount'       => $amount,
+                'reason'       => $entry->taxability_reason ?? null,
+            ];
+        }
+
+        // Pre-2025 fallback: a flat total with no breakdown available.
+        if ($lines === [] && isset($invoice->tax) && $invoice->tax !== null) {
+            $total = (int) $invoice->tax;
+        }
+
+        // The buyer's own registration number (NTN / VAT / GST), which a
+        // business customer needs on the document to reclaim anything.
+        $ids = [];
+        foreach ($invoice->customer_tax_ids ?? [] as $taxId) {
+            if (! empty($taxId->value)) {
+                $ids[] = trim(strtoupper(str_replace('_', ' ', (string) ($taxId->type ?? ''))) . ' ' . $taxId->value);
+            }
+        }
+
+        // Say WHY there's no tax rather than showing a bare zero.
+        $note = null;
+
+        if ($total === 0) {
+            $status = $invoice->automatic_tax->status ?? null;
+            $exempt = $invoice->customer_tax_exempt ?? null;
+
+            $note = match (true) {
+                $exempt === 'reverse'        => 'Reverse charge — tax accounted for by the recipient.',
+                $exempt === 'exempt'         => 'Tax exempt.',
+                $status === 'failed'         => 'Tax could not be calculated for this invoice.',
+                $status === 'requires_location_inputs' => 'No tax applied — billing address incomplete.',
+                default                      => 'No tax applied.',
+            };
+        }
+
+        return ['total' => $total, 'lines' => $lines, 'ids' => $ids, 'note' => $note];
     }
 
     /** Default payment method summary, or null. Never throws. */
