@@ -22,6 +22,18 @@
        active item and therefore the only page where they collide. */
     html:not(.dark) .side-nav .side-menu--active::before { display: none; }
 
+    /* Dropping that wedge also drops the curve it was putting on the pill's
+       own top edge, which left the tab ending in a hard square corner. The
+       curve is given back to the pill directly instead — on the pill and on
+       the block that carries it across to the content, since the two together
+       form the tab's silhouette and rounding only one leaves a step. Nothing
+       here reaches into the content's corner, so the collision does not come
+       back. */
+    html:not(.dark) .side-nav .side-menu--active,
+    html:not(.dark) .side-nav .side-menu--active .side-menu__icon::before {
+        border-top-right-radius: 16px;
+    }
+
     /* ── KPI cards ─────────────────────────────────────────────────── */
     .tva-dash-hero {
         background: var(--tva-gradient);
