@@ -110,10 +110,35 @@
        inside the layout's one. A bare `.content` selector paints the band
        again at the top of the page body — a phantom navy strip that reads as
        an over-tall header — and repaints the vendor's rounded panel, which
-       surfaces as a stray white card behind the page's own hero. */
+       surfaces as a stray white card behind the page's own hero.
+
+       The work area's top corners are rounded by the two radial layers, not by
+       a border-radius: the paper starts 68px down, in the MIDDLE of the panel,
+       and a radius only ever rounds a box's own edge. Each layer is a 30px
+       square holding a quarter-circle of navy — page colour inside the curve,
+       navy outside it — parked at the corner where the band ends.
+
+       They are corner squares rather than a deeper band on purpose. Running
+       the band 30px further down is the obvious way to get the same shape, and
+       it puts navy underneath the sidebar's active item, whose corner wedges
+       are painted a hardcoded light colour to match the content: on navy they
+       turn into a light slab with a notch. The squares stop at 30px wide, so
+       they touch only the corner the sidebar's own wedge already occupies —
+       same radius, same place, so where both are present they coincide.
+
+       This is also why the Dashboard looked right while every other page
+       looked square: Dashboard is the FIRST menu item, so its active wedge
+       lands on that corner by accident of position. */
     html:not(.dark) body > .flex > .content {
         background-color: var(--tva-bg);
-        background-image: linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
+        background-image:
+            /* top-left: curve centred on the square's bottom-right */
+            radial-gradient(circle 30px at 100% 100%, rgba(27,57,98,0) 0 29px, #1b3962 30px),
+            /* top-right: centred on its bottom-left */
+            radial-gradient(circle 30px at 0 100%,    rgba(27,57,98,0) 0 29px, #1b3962 30px),
+            linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
+        background-size: 30px 30px, 30px 30px, auto;
+        background-position: 0 68px, 100% 68px, 0 0;
         background-repeat: no-repeat;
     }
     /* Those nested wrappers inherit the page instead of painting their own
