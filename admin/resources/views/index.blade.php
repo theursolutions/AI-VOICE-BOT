@@ -916,15 +916,6 @@
             .float-y, .float-y-2, .float-y-3, .float-tilt { animation: none; }
         }
 
-        /* Mini Three.js mounts in sections */
-        .mini-3d {
-            position: absolute; pointer-events: none;
-            opacity: .85;
-        }
-        .mini-3d canvas { display: block; }
-        /* These float outside the content box on purpose (one sits at left:-60px).
-           There's no room for that on a phone — it just widened the page. */
-        @media (max-width: 980px) { .mini-3d { display: none; } }
 
         /* ════════ Cinematic descent system ════════════════════════════ */
 
@@ -1052,17 +1043,6 @@
                 radial-gradient(760px 420px at 88% 30%, rgba(37,99,235,.06), transparent 62%),
                 linear-gradient(180deg, #f4f8fd 0%, #ffffff 72%);
             border-bottom: 1px solid rgba(16,32,56,.07);
-        }
-        /* Texture. A 40px grid at 3% is invisible as a pattern and stops the
-           band reading as an empty rectangle. */
-        html:not(.dark) .hero::before {
-            content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
-            background-image:
-                linear-gradient(rgba(16,32,56,.030) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(16,32,56,.030) 1px, transparent 1px);
-            background-size: 40px 40px;
-            mask-image: radial-gradient(ellipse at 50% 30%, #000 35%, transparent 78%);
-            -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 35%, transparent 78%);
         }
         html:not(.dark) .hero::after { display: none; }
 
@@ -1371,7 +1351,6 @@
 
 <!-- ── MISSION CONSOLE strip ──────────────────────────────────────── -->
 <section class="section" id="how" style="position: relative;">
-    <div class="mini-3d" id="mini3dConsole" style="top:5%; right:-40px; width:240px; height:240px;"></div>
     <div class="wrap">
         <div class="section__eyebrow reveal">{{ tva_setting('content.how_eyebrow', 'Mission Console') }}</div>
         <h2 class="reveal">{{ tva_setting('content.how_title', 'Every call. Every chat. Every lead — in real time.') }}</h2>
@@ -1504,8 +1483,6 @@
 
 <!-- ── PLATFORM FEATURES ──────────────────────────────────────────── -->
 <section class="section" id="platform" style="position: relative;">
-    <div class="mini-3d" id="mini3dCaps" style="top:8%; left:-60px; width:220px; height:220px;"></div>
-    <div class="mini-3d" id="mini3dCaps2" style="bottom:8%; right:-40px; width:180px; height:180px;"></div>
     <div class="wrap">
         <div class="section__eyebrow reveal">{{ tva_setting('content.platform_eyebrow', 'The whole platform') }}</div>
         <h2 class="reveal">{{ tva_setting('content.platform_title', 'Everything you need to turn conversations into customers.') }}</h2>
@@ -2330,89 +2307,6 @@ WEBGL_INITS.push(function () {
     });
 })();
 
-/* ─────────────────── Extra 3D mini-scenes (Three.js) ───────────── */
-WEBGL_INITS.push(function () {
-    // Tiny helper — build a transparent scene that fits an element.
-    function spawnScene(mountId, builder) {
-        var mount = document.getElementById(mountId);
-        if (!mount) return;
-        var w = mount.clientWidth, h = mount.clientHeight;
-        var scene = new THREE.Scene();
-        var camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
-        camera.position.z = 4;
-        var renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        renderer.setSize(w, h);
-        mount.appendChild(renderer.domElement);
-        var ctx = builder(scene, camera);
-        function loop() {
-            requestAnimationFrame(loop);
-            if (ctx && ctx.update) ctx.update();
-            renderer.render(scene, camera);
-        }
-        loop();
-        window.addEventListener('resize', function () {
-            var nw = mount.clientWidth, nh = mount.clientHeight;
-            camera.aspect = nw / nh; camera.updateProjectionMatrix();
-            renderer.setSize(nw, nh);
-        });
-    }
-
-    // Mission Console — a glowing wireframe satellite (torus knot)
-    spawnScene('mini3dConsole', function (scene) {
-        var knot = new THREE.Mesh(
-            new THREE.TorusKnotGeometry(0.9, 0.28, 100, 16),
-            new THREE.MeshBasicMaterial({ color: 0x3b82f6, wireframe: true, transparent: true, opacity: 0.7 })
-        );
-        scene.add(knot);
-        return { update: function () { knot.rotation.x += 0.005; knot.rotation.y += 0.008; } };
-    });
-
-    // Capabilities — floating cube (data block)
-    spawnScene('mini3dCaps', function (scene) {
-        var cube = new THREE.Mesh(
-            new THREE.BoxGeometry(1.3, 1.3, 1.3),
-            new THREE.MeshBasicMaterial({ color: 0x60a5fa, wireframe: true, transparent: true, opacity: 0.55 })
-        );
-        scene.add(cube);
-        var edges = new THREE.LineSegments(
-            new THREE.EdgesGeometry(cube.geometry),
-            new THREE.LineBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.9 })
-        );
-        cube.add(edges);
-        return { update: function () { cube.rotation.x += 0.004; cube.rotation.y += 0.006; } };
-    });
-
-    // Capabilities — bottom-right octahedron crystal
-    spawnScene('mini3dCaps2', function (scene) {
-        var crys = new THREE.Mesh(
-            new THREE.OctahedronGeometry(1.0, 0),
-            new THREE.MeshBasicMaterial({ color: 0xff5e87, wireframe: true, transparent: true, opacity: 0.5 })
-        );
-        scene.add(crys);
-        return { update: function () { crys.rotation.x += 0.007; crys.rotation.z += 0.004; } };
-    });
-});
-
-/* ───────────────────── Scroll parallax for sections ────────────── */
-(function () {
-    if (typeof gsap === 'undefined') return;
-    // Mini 3D objects drift up as you scroll past them.
-    gsap.utils.toArray('.mini-3d').forEach(function (el) {
-        gsap.to(el, {
-            y: -120, opacity: 1,
-            ease: 'none',
-            scrollTrigger: {
-                trigger: el.closest('.section'),
-                start: 'top bottom', end: 'bottom top',
-                scrub: true,
-            },
-        });
-    });
-
-    // (Step + capability card animations now handled by the dedicated
-    //  "card assembly" system in the cinematic-descent block below.)
-})();
 
 /* ───────────────────── Floating widget toggle ──────────────────── */
 (function () {
