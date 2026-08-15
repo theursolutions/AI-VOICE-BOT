@@ -76,29 +76,58 @@ class ChannelOnboardingPayload extends Model
      * Deliberately does NOT count `auth_code`: it is single-use and dies in
      * about ten minutes, so a retry built on it would fail confusingly.
      */
+    /**
+     * A short-lived token is worth retrying from for about an hour.
+     *
+     * Deliberately under Meta's stated 1–2 hours: a retry that fails because
+     * the credential died three minutes ago is worse than not offering one.
+     */
+    private const SHORT_LIVED_RETRY_SECONDS = 3000;   // 50 minutes
+
     public function isRetryable(): bool
     {
         if ($this->status === self::STATUS_IMPORTED) {
             return false;                       // nothing left to do
         }
-        if (! $this->long_lived_token) {
-            return false;                       // never got an anchor
-        }
-        if ($this->expires_at && $this->expires_at->isPast()) {
-            return false;                       // anchor has lapsed
+        if ($this->long_lived_token) {
+            // The anchor case: retryable until the credential itself lapses.
+            return ! ($this->expires_at && $this->expires_at->isPast());
         }
 
-        return true;
+        // Falling at the long-lived exchange used to be terminal — the
+        // customer had to go back through consent because only a long-lived
+        // token counted. But a SHORT-lived token is a perfectly good basis for
+        // a retry inside its own lifetime, and that exchange is exactly the
+        // step most likely to fail transiently. Not offering a retry there
+        // sent people back to Meta for a problem that was ours.
+        return $this->short_lived_token && $this->shortLivedStillFresh();
     }
 
     /** Human-readable reason a retry is not on offer. */
     public function retryBlockedReason(): ?string
     {
-        if ($this->status === self::STATUS_IMPORTED)  return 'Already imported.';
-        if (! $this->long_lived_token)                return 'No stored credentials — the connection has to be started again from Meta.';
-        if ($this->expires_at && $this->expires_at->isPast()) return 'Stored credentials expired — reconnect from Meta.';
+        if ($this->status === self::STATUS_IMPORTED) {
+            return 'Already imported.';
+        }
+        if ($this->long_lived_token) {
+            return ($this->expires_at && $this->expires_at->isPast())
+                ? 'Stored credentials expired — reconnect from Meta.'
+                : null;
+        }
+        if ($this->short_lived_token) {
+            return $this->shortLivedStillFresh()
+                ? null
+                : 'The short-lived Meta token has expired — reconnect from Meta.';
+        }
 
-        return null;
+        return 'No stored credentials — the connection has to be started again from Meta.';
+    }
+
+    private function shortLivedStillFresh(): bool
+    {
+        $issued = $this->created_at?->getTimestamp() ?? 0;
+
+        return $issued > 0 && (time() - $issued) < self::SHORT_LIVED_RETRY_SECONDS;
     }
 
     /** Record a failure without losing what we already collected. */

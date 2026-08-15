@@ -512,6 +512,13 @@ class ChatController extends Controller
         $data = $this->validateStatus($request);
         $project = $this->guard($client, (int) $data['project_id']);
 
+        // Without this the insert hits a missing table and returns a 500 HTML
+        // error page, which the browser reports only as "not ok" — the most
+        // likely reason adding a status appears to do nothing at all.
+        if ($error = $this->statusesUnavailable()) {
+            return $error;
+        }
+
         $status = ConversationStatus::create([
             'project_id' => $project->id,
             'name'       => $data['name'],
@@ -534,6 +541,10 @@ class ChatController extends Controller
     {
         $data = $this->validateStatus($request);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($error = $this->statusesUnavailable()) {
+            return $error;
+        }
 
         $status = ConversationStatus::where('project_id', $project->id)->where('id', $id)->firstOrFail();
         $status->fill([
@@ -564,12 +575,36 @@ class ChatController extends Controller
     {
         $project = $this->guard($client, (int) $request->input('project_id'));
 
+        if ($error = $this->statusesUnavailable()) {
+            return $error;
+        }
+
         $status = ConversationStatus::where('project_id', $project->id)->where('id', $id)->firstOrFail();
         $status->status = ConversationStatus::STATUS_ARCHIVED;
         $status->update_at = time();
         $status->save();
 
         return response()->json(['ok' => true, 'statuses' => $this->statusList($project)]);
+    }
+
+    /**
+     * A ready-made 422 when this tenant DB has not been migrated yet.
+     *
+     * Returned rather than thrown so each caller stays a plain early return,
+     * and the message names the exact command — an operator seeing this needs
+     * to run something, not to read about a schema.
+     */
+    private function statusesUnavailable(): ?JsonResponse
+    {
+        if (ConversationStatus::available()) {
+            return null;
+        }
+
+        return response()->json([
+            'ok'      => false,
+            'message' => 'Conversation statuses are not set up on this workspace yet. '
+                       . 'Run: php artisan tenant:migrate',
+        ], 422);
     }
 
     private function validateStatus(Request $request): array
