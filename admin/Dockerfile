@@ -39,7 +39,7 @@ COPY admin/ .
 RUN npm run build
 
 ###############################################################################
-# Stage 4 — Runtime: PHP-FPM + nginx + supervisor
+# Stage 3 — Runtime: PHP-FPM + nginx + supervisor
 ###############################################################################
 FROM php:8.2-fpm-bookworm AS app
 
@@ -60,21 +60,23 @@ COPY --from=vendor /app/vendor ./vendor
 COPY --from=assets /app/public/build ./public/build
 
 # The webchat widget, deliberately OUTSIDE the docroot (/var/www/html/public).
-# nginx maps /widget/ here by alias. Keeping it out of the docroot is the whole
-# point: widget/app/config/ holds bootstrap and credentials, and under public/
-# they would be fetchable over HTTP.
+# nginx serves it with `root /var/www/wroot`, so the extra widget/ directory in
+# the path is REQUIRED: the URI /widget/x.php appends to that root.
+#
+# Out of the docroot on purpose: widget/app/config/ holds bootstrap and
+# credentials, and under public/ they would be fetchable over HTTP.
 #
 # No composer stage for it: its dependencies are vendored INTO the repo at
 # widget/app/vendor (235 tracked files, autoload.php included), which is what
 # bootstrap.php loads via ../vendor/autoload.php. Its composer.json lives at
 # widget/app/, not widget/, so a stage rooted here would have failed anyway.
-COPY widget/ /var/www/widget/
+COPY widget/ /var/www/wroot/widget/
 
 # loader.js is part of the Laravel app but must resolve under the same /widget/
-# alias as the app it loads, so the iframe URL is a plain sibling lookup in
+# prefix as the app it loads, so the iframe URL is a plain sibling lookup in
 # every environment. Copied rather than moved so local development — where the
 # two live in different directories — keeps working unchanged.
-COPY admin/public/widget/loader.js /var/www/widget/loader.js
+COPY admin/public/widget/loader.js /var/www/wroot/widget/loader.js
 
 # Container configuration.
 COPY admin/docker/php.ini          /usr/local/etc/php/conf.d/zz-app.ini
@@ -87,7 +89,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
  && chmod +x /usr/local/bin/entrypoint.sh \
  # Pre-build the package manifest (self-heals at runtime if this is skipped).
  && php artisan package:discover --ansi || true \
- && chown -R www-data:www-data storage bootstrap/cache /var/www/widget
+ && chown -R www-data:www-data storage bootstrap/cache /var/www/wroot
 
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
