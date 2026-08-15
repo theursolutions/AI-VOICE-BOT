@@ -53,8 +53,11 @@ x-admin-env: &admin-env
 x-admin-base: &admin-base
   image: aicrm/admin:latest
   build:
-    context: ./admin
-    dockerfile: Dockerfile
+    # Repo root, not ./admin: the image also serves the standalone webchat
+    # widget at widget/, which a context of ./admin cannot reach. See the
+    # note at the top of admin/Dockerfile.
+    context: .
+    dockerfile: admin/Dockerfile
   restart: unless-stopped
   env_file: [.env]
   # A compromised PHP process must not be able to gain privileges via setuid
