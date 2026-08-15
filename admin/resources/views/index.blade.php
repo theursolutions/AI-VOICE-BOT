@@ -468,7 +468,10 @@
             background: radial-gradient(circle at 30% 30%, var(--neon), #1e3a8a);
             position: relative;
             animation: ring 1.4s infinite ease-out;
+            display: flex; align-items: center; justify-content: center;
+            color: rgba(255,255,255,.92);
         }
+        .mock-call__avatar svg { width: 26px; height: 26px; }
         .mock-call__avatar::after {
             content:''; position:absolute; inset:-8px; border-radius:50%;
             border: 2px solid var(--neon); opacity:.4;
@@ -1232,6 +1235,100 @@
         }
         html:not(.dark) .nav__links a { color: #c5d7ee; }
         html:not(.dark) .nav__links a:hover { color: #ffffff; }
+
+        /* ── Live transcript, light mode ────────────────────────────────
+           Every layer here was built to be seen on black:
+             the panel   rgba(0,0,0,.3)      → a grey wash on paper
+             the bubble  rgba(255,255,255,.04) → invisible on white
+             bot text    #dbeafe             → near-white on near-white
+           The last one is why the messages could not be read at all. */
+        html:not(.dark) .mock-trans {
+            background: #f7fafd;
+            border-color: rgba(27,57,98,.12);
+        }
+        html:not(.dark) .mock-trans__bubble {
+            background: #ffffff;
+            border: 1px solid rgba(27,57,98,.10);
+            color: #1b3962;
+        }
+        html:not(.dark) .mock-trans__bubble.is-bot {
+            background: #eaf1fb;
+            border-color: rgba(27,57,98,.18);
+            color: #16304f;
+        }
+        html:not(.dark) .mock-trans__who    { color: #6f88a8; }
+        html:not(.dark) .mock-trans__who.is-bot { color: #1b3962; }
+        html:not(.dark) .mock-trans__cursor { background: #1b3962; }
+
+        /* The lead card and call panel share the same problem. */
+        html:not(.dark) .mock-lead__row     { border-bottom-color: rgba(27,57,98,.08); }
+        html:not(.dark) .mock-call__num     { color: #16304f; }
+        html:not(.dark) .mock-call__label   { color: #6f88a8; }
+        html:not(.dark) .console__head      { color: #5b7ba3; }
+
+        /* ── Hero, light mode: craft pass ───────────────────────────────
+           The band was correct but flat. Four things were actually wrong,
+           and none of them was the colour:
+
+             1. The call bar — the single most important control on the
+                page — used --panel-2, which in light resolves to a pale
+                surface. On navy it vanished. It now sits on white and
+                reads as the object you are meant to use.
+             2. The headline sat at the same weight as everything else.
+                Tighter tracking and a heavier cut give the band a subject.
+             3. The accent was a mid blue on navy: 2.4:1, effectively
+                unreadable. Raised to a light blue that carries.
+             4. The meta ticks were dim text; they are proof points and
+                should read like them. */
+
+        html:not(.dark) .hero h1 {
+            letter-spacing: -.03em;
+            font-weight: 800;
+            color: #ffffff;
+            text-wrap: balance;
+        }
+        html:not(.dark) .hero h1 .accent { color: #8fbcff; }
+        html:not(.dark) .hero p.sub {
+            color: #c2d5ea; font-size: 17.5px; max-width: 560px; line-height: 1.62;
+        }
+
+        /* The call bar: white, lifted, with a real shadow. It is the
+           conversion point — on a navy band it has to be the brightest
+           thing present, not a tinted panel that blends in. */
+        html:not(.dark) .callbar {
+            background: #ffffff;
+            border: 1px solid rgba(255,255,255,.65);
+            box-shadow: 0 18px 40px -18px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.16);
+        }
+        html:not(.dark) .callbar__icon { background: rgba(27,57,98,.09); color: #1b3962; }
+        html:not(.dark) .callbar input { color: #16304f; }
+        html:not(.dark) .callbar input::placeholder { color: #7a8fab; }
+        html:not(.dark) .callbar button {
+            background: #1b3962; color: #fff;
+            box-shadow: 0 6px 16px -8px rgba(0,0,0,.6);
+        }
+        html:not(.dark) .callbar button:hover { background: #16304f; }
+        html:not(.dark) .callbar__msg { color: #a8c0dc; }
+
+        /* Proof points, not footnotes: a tinted tick in a disc reads as a
+           checked item at a glance, where dim grey text does not. */
+        html:not(.dark) .hero__meta-item {
+            color: #dbe7f6; font-weight: 500;
+        }
+        html:not(.dark) .hero__meta-item svg {
+            color: #8fbcff;
+        }
+
+        /* Eyebrow: a live dot on a glass chip. The pulse earns its place
+           here because the claim is literally that it is live. */
+        html:not(.dark) .hero__eyebrow {
+            background: rgba(255,255,255,.12);
+            border-color: rgba(255,255,255,.24);
+            color: #e2edfb;
+        }
+        html:not(.dark) .hero__eyebrow::before {
+            background: #7ee2a8; box-shadow: 0 0 10px rgba(126,226,168,.9);
+        }
 </style>
 </head>
 <body>
@@ -1369,7 +1466,15 @@
             <div class="console reveal tilt float-y" data-cursor="answer">
                 <div class="console__head"><span class="console__dot"></span> Inbound · Twilio</div>
                 <div class="mock-call">
-                    <div class="mock-call__avatar"></div>
+                    {{-- The disc was empty — a coloured blob reads as a
+                         missing image, not as a caller. A silhouette says
+                         "someone is calling" without inventing a face. --}}
+                    <div class="mock-call__avatar">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <circle cx="12" cy="8.2" r="3.9"/>
+                            <path d="M4.4 20.4a7.8 7.8 0 0 1 15.2 0 1 1 0 0 1-1 1.2H5.4a1 1 0 0 1-1-1.2z"/>
+                        </svg>
+                    </div>
                     <div class="mock-call__num">+1 (415) 555&hairsp;0192</div>
                     <div class="mock-call__label">Incoming call</div>
                     <div class="mock-call__btns">
