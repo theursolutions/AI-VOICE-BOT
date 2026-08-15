@@ -148,6 +148,15 @@ case "$cmd" in
     build_app=0; build_voice=0; recreate=""; reconcile=0
 
     has '^admin/'                        && build_app=1
+    # The webchat widget is BAKED INTO the app image (admin/Dockerfile copies
+    # widget/ to /var/www/widget, which nginx serves at /widget). It is not a
+    # service of its own, so nothing else here would notice it changing — and
+    # a widget edit that never triggers a build is invisible: the deploy
+    # reports success and production keeps serving the previous version.
+    has '^widget/'                       && build_app=1
+    # Likewise the ignore file: it decides what reaches the build context, so
+    # editing it changes the image without touching a single copied path.
+    has '^\.dockerignore$'               && build_app=1
     has '^voice-engine/'                 && build_voice=1
     has '^deploy/production/haproxy/'    && recreate="$recreate haproxy"
     has '^deploy/(production/)?Caddyfile' && recreate="$recreate caddy"

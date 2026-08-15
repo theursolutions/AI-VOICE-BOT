@@ -1,0 +1,76 @@
+# Build context for the admin image.
+#
+# The context is the REPO ROOT rather than admin/, because the image serves two
+# applications: the Laravel admin (docroot) and the standalone webchat widget,
+# which lives at widget/ and is required by loader.js. A context of ./admin
+# cannot reach a sibling directory, which is why the widget was never deployed.
+#
+# Docker reads the .dockerignore next to the CONTEXT, so this file — not
+# admin/.dockerignore — is what applies to the build.
+#
+# This is a DENY-LIST on purpose. The obvious `*` + `!admin` + `!widget`
+# whitelist does not work: BuildKit re-includes the directory entry but not its
+# contents, so the context arrives empty and every COPY fails with
+# "not found". Everything the image must not carry is therefore named here.
+
+# ── Sibling services and docs — not part of this image ─────────────────────
+/voice-engine
+/voice-engine;W
+/query-agent
+/deploy
+/docs
+/scripts
+/content
+*.md
+
+# ── Version control / editors / CI ─────────────────────────────────────────
+.git
+.gitignore
+.github
+.idea
+.vscode
+.fleet
+
+# ── admin: deps are installed inside the image ─────────────────────────────
+admin/vendor
+admin/node_modules
+
+# Local secrets & runtime state — supplied via container env / volumes.
+admin/.env
+admin/.env.*
+!admin/.env.example
+
+# Stale compiled caches from the dev machine — would otherwise be baked in and
+# shadow the container's env (a dev config.php points at the dev DB; a dev
+# packages.php references dev-only providers). Regenerated fresh in the image
+# build + at container start.
+admin/bootstrap/cache/*.php
+
+admin/storage/app/*
+admin/storage/framework/cache/data/*
+admin/storage/framework/sessions/*
+admin/storage/framework/views/*
+admin/storage/logs/*
+admin/public/build
+admin/public/hot
+admin/public/storage
+admin/tests
+admin/.phpunit.cache
+admin/.phpunit.result.cache
+
+# ── widget ─────────────────────────────────────────────────────────────────
+# NOTE: widget/app/vendor is deliberately NOT excluded. Unlike the admin's,
+# the widget's dependencies are vendored into the repo and there is no build
+# stage that reinstalls them — bootstrap.php loads ../vendor/autoload.php
+# directly, so excluding them would ship a widget that fatals on first request.
+widget/node_modules
+widget/.env
+widget/.env.*
+
+# ── General cruft ──────────────────────────────────────────────────────────
+**/*.log
+**/auth.json
+**/npm-debug.log
+**/yarn-error.log
+**/Homestead.json
+**/Homestead.yaml
