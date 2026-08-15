@@ -72,7 +72,7 @@
     .tva-channel-chip.is-voice { background:#fef3c7; color:#92400e; }
     .tva-channel-chip.is-phone { background:#dcfce7; color:#15803d; }
     .tva-channel-chip.is-sms   { background:#ede9fe; color:#7c3aed; }
-    .tva-channel-chip.is-internal { background:#1e293b; color:#a5b4fc; }
+    .tva-channel-chip.is-internal { background:#e0e7ff; color:#4338ca; }
     .tva-internal-tag {
         display:inline-flex; align-items:center; gap:4px; margin-left:6px;
         padding:2px 8px; border-radius:999px; font-size:10px; font-weight:700;

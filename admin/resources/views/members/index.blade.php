@@ -19,7 +19,7 @@
     .mbr-pagehead { display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin-top:2rem; }
     .mbr-pagehead__titles { margin-right:auto; }
     .mbr-pagehead h2 { font-size:18px; font-weight:600; line-height:1.2; }
-    .mbr-pagehead p { font-size:12px; color:#94a3b8; margin-top:2px; }
+    .mbr-pagehead p { font-size:12px; color:var(--tva-text-2); margin-top:2px; }
     .mbr-btn-ico svg { width:16px; height:16px; margin-right:6px; vertical-align:-3px; }
 
     /* Owner spotlight */
@@ -66,13 +66,13 @@
     }
     .mbr-card__icon svg { width:21px; height:21px; }
     .mbr-card__title { font-size:15px; font-weight:600; line-height:1.2; }
-    .mbr-card__desc { font-size:12px; color:#94a3b8; margin-top:2px; }
+    .mbr-card__desc { font-size:12px; color:var(--tva-text-2); margin-top:2px; }
     .mbr-card__body { padding:20px; flex:1; display:flex; flex-direction:column; }
 
     .mbr-row2 { display:grid; grid-template-columns:1fr; gap:12px; }
     @media (min-width:560px) { .mbr-row2 { grid-template-columns:1fr 1fr; } }
-    .mbr-label { display:block; font-size:11px; font-weight:600; color:#94a3b8; margin-bottom:5px; }
-    .mbr-label span { font-weight:400; color:#64748b; }
+    .mbr-label { display:block; font-size:11px; font-weight:600; color:var(--tva-text-2); margin-bottom:5px; }
+    .mbr-label span { font-weight:400; color:var(--tva-text-3); }
     .mbr-field { margin-top:14px; }
     .mbr-foot { margin-top:auto; padding-top:16px; }
     .mbr-actions { display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
@@ -90,37 +90,37 @@
     .mbr-proj span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
     /* Hint / spec box */
-    .mbr-hint { border-radius:10px; background:rgba(148,163,184,.10); padding:13px 14px; font-size:12px; color:#94a3b8; }
-    .mbr-hint__title { font-weight:600; color:#cbd5e1; margin-bottom:7px; }
+    .mbr-hint { border-radius:10px; background:rgba(148,163,184,.10); padding:13px 14px; font-size:12px; color:var(--tva-text-2); }
+    .mbr-hint__title { font-weight:600; color:var(--tva-text); margin-bottom:7px; }
     .mbr-chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:9px; }
-    .mbr-chips code { background:rgba(255,255,255,.06); border:1px solid rgba(148,163,184,.28); padding:2px 7px; border-radius:6px; font-size:11.5px; }
+    .mbr-chips code { background:var(--tva-surface-3); border:1px solid rgba(148,163,184,.28); padding:2px 7px; border-radius:6px; font-size:11.5px; }
     .mbr-hint ul { list-style:disc; padding-left:18px; margin:0; display:flex; flex-direction:column; gap:3px; }
 
     /* Member list */
     .mbr-list-head { display:flex; align-items:center; margin:32px 0 12px; }
     .mbr-list-head h3 { font-size:15px; font-weight:600; }
-    .mbr-list-head .cnt { color:#94a3b8; font-weight:400; font-size:13px; }
+    .mbr-list-head .cnt { color:var(--tva-text-2); font-weight:400; font-size:13px; }
     .mbr-member { border:1px solid rgba(148,163,184,.2); border-radius:12px; padding:16px; margin-bottom:14px; }
     .mbr-member:last-child { margin-bottom:0; }
     .mbr-member__top { display:flex; align-items:center; margin-bottom:13px; }
     .mbr-avatar {
         width:38px; height:38px; flex:0 0 auto; margin-right:12px; border-radius:9999px;
-        background:rgba(148,163,184,.16); color:#cbd5e1; font-size:13px; font-weight:600;
+        background:rgba(148,163,184,.16); color:var(--tva-text); font-size:13px; font-weight:600;
         display:flex; align-items:center; justify-content:center;
     }
     .mbr-member__id { min-width:0; }
     .mbr-member__name { font-weight:600; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .mbr-member__email { font-size:12px; color:#94a3b8; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .mbr-member__email { font-size:12px; color:var(--tva-text-2); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .mbr-badge { margin-left:auto; padding-left:12px; }
-    .mbr-badge span { font-size:12px; padding:3px 11px; border-radius:9999px; background:rgba(148,163,184,.16); color:#cbd5e1; }
+    .mbr-badge span { font-size:12px; padding:3px 11px; border-radius:9999px; background:rgba(148,163,184,.16); color:var(--tva-text); }
     .mbr-badge span.is-warn { background:rgba(245,158,11,.18); color:#f59e0b; }
-    .mbr-empty { text-align:center; color:#94a3b8; font-size:14px; padding:26px 0; }
+    .mbr-empty { text-align:center; color:var(--tva-text-2); font-size:14px; padding:26px 0; }
 
     /* Import results */
     .mbr-results__wrap { overflow-x:auto; border:1px solid rgba(148,163,184,.2); border-radius:10px; }
     .mbr-results__table { width:100%; border-collapse:collapse; font-size:13px; }
     .mbr-results__table th {
-        text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8;
+        text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--tva-text-2);
         padding:9px 12px; background:rgba(148,163,184,.09);
     }
     .mbr-results__table td { padding:9px 12px; border-top:1px solid rgba(148,163,184,.15); }
@@ -128,7 +128,7 @@
     .mbr-result-warn { font-size:12px; color:#f59e0b; margin-top:8px; }
     .mbr-block { margin-bottom:16px; }
     .mbr-block:last-child { margin-bottom:0; }
-    .mbr-block__title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:#94a3b8; margin-bottom:7px; }
+    .mbr-block__title { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.04em; color:var(--tva-text-2); margin-bottom:7px; }
     .mbr-skip { list-style:disc; padding-left:20px; color:#f59e0b; font-size:13px; }
 </style>
 
@@ -203,7 +203,7 @@
                                         @if (!empty($c['temp_password']))
                                             <code>{{ $c['temp_password'] }}</code>
                                         @else
-                                            <span style="color:#94a3b8;">(as supplied)</span>
+                                            <span style="color:var(--tva-text-2);">(as supplied)</span>
                                         @endif
                                     </td>
                                 </tr>
@@ -218,7 +218,7 @@
             @if (!empty($result['updated']))
                 <div class="mbr-block">
                     <div class="mbr-block__title">Updated access</div>
-                    <div style="font-size:13px;color:#cbd5e1;">{{ collect($result['updated'])->pluck('email')->implode(', ') }}</div>
+                    <div style="font-size:13px;color:var(--tva-text);">{{ collect($result['updated'])->pluck('email')->implode(', ') }}</div>
                 </div>
             @endif
 

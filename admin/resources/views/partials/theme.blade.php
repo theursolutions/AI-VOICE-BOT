@@ -91,9 +91,25 @@
     html:not(.dark) {
         background: #1b3962;
     }
+    /* The top bar is NOT a sibling of `.content` — it lives inside it. So the
+       navy above cannot simply show through: the content's own background
+       paints straight over the bar, which left a light header carrying
+       controls styled white-on-navy, i.e. invisible ones.
+
+       The band is painted onto `.content` rather than onto `.top-bar` so it
+       runs full-bleed. The bar sits inside the content's 22px side padding,
+       so giving the BAR a background leaves a pale gutter down both edges,
+       and cancelling that with negative margins risks horizontal overflow on
+       small screens. A background-image on the parent has neither problem.
+
+       68px = the bar's fixed 67px plus the 1px `.content::before` spacer,
+       which would otherwise read as a hairline of paper above the navy. */
     html:not(.dark) .content {
-        background: var(--tva-bg);
+        background-color: var(--tva-bg);
+        background-image: linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
+        background-repeat: no-repeat;
     }
+    html:not(.dark) .top-bar { border-bottom-color: rgba(255,255,255,.10); }
 
     /* The chrome is dark in BOTH themes, so its contents must not follow the
        light text tokens — white-on-navy is correct in light mode too. */
@@ -114,6 +130,41 @@
         color: #eaf0f8;
     }
     html:not(.dark) .tva-theme:hover { background: rgba(255,255,255,.16); color:#fff; }
+
+    /* The magnifier and the bell are vendor icons coloured for a pale bar. */
+    html:not(.dark) .top-bar .search__icon { color: rgba(234,240,248,.60); }
+    html:not(.dark) .top-bar .notification__icon { color: rgba(234,240,248,.78); }
+    html:not(.dark) .top-bar .notification:hover .notification__icon { color: #fff; }
+
+    /* The two name pills — the project brand and the workspace switcher.
+       Both were a wash of near-black on 5% black: correct on paper, a grey
+       smudge on navy. Outlined in the brand's own blue instead of another
+       neutral, so the workspace you are in is legible at a glance and the
+       bar keeps some colour in it. */
+    html:not(.dark) .tva-tb-brand__name,
+    html:not(.dark) .tva-ws-pill {
+        color: #eaf2ff;
+        background: rgba(96,165,250,.14);
+        border-color: rgba(147,197,253,.45);
+    }
+    html:not(.dark) .tva-tb-brand:hover .tva-tb-brand__name,
+    html:not(.dark) button.tva-ws-pill:hover {
+        background: rgba(96,165,250,.24);
+        border-color: rgba(147,197,253,.70);
+        color: #ffffff;
+    }
+    html:not(.dark) .tva-ws-pill svg { opacity: .8; }
+    html:not(.dark) .tva-tb-brand:hover { background: rgba(255,255,255,.07); }
+    html:not(.dark) .tva-tb-brand__sub { color: rgba(234,240,248,.60); }
+
+    /* The account avatar is a blue gradient disc — nearly camouflaged against
+       navy. A hairline ring separates it from the bar without recolouring it. */
+    html:not(.dark) .top-bar .dropdown-toggle.rounded-full {
+        box-shadow: 0 0 0 2px rgba(255,255,255,.32), 0 2px 8px rgba(0,0,0,.28);
+    }
+    html:not(.dark) .tva-tb-logo {
+        box-shadow: 0 0 0 1px rgba(255,255,255,.22), 0 2px 8px rgba(0,0,0,.25);
+    }
 
     /* ── Light-mode safety net ─────────────────────────────────────────
        Every rule below fixes a real gap found by auditing all 596 `.dark`

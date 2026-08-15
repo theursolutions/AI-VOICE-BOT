@@ -15,6 +15,7 @@
         --accent:#1d4ed8; --accent2:#2563eb;
         --overlay:rgba(255,255,255,.72);
         --danger-bg:#fef3f2; --danger-line:#fecdca;
+        --avatar-1:#bfdbfe;
     }
     /* The original palette, kept intact — only its trigger changed. */
     html.dark .jv {
@@ -23,6 +24,7 @@
         --accent:#3b82f6; --accent2:#60a5fa;
         --overlay:rgba(2,6,16,.72);
         --danger-bg:#1b1014; --danger-line:#7f1d1d;
+        --avatar-1:#1e3a8a;
     }
     html.dark .jv {
         background:radial-gradient(1200px 600px at 50% -10%, rgba(59,130,246,.10), transparent 60%), var(--bg);
@@ -106,11 +108,11 @@
     .jv-transcript input { width:100%; text-align:center; background:var(--panel-2); border:1px solid var(--line);
         border-radius:12px; padding:12px 16px; color:var(--txt); font-size:15px; outline:none; }
     .jv-transcript input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15); }
-    .jv-hint { font-size:11px; color:#64748b; text-align:center; max-width:520px; }
+    .jv-hint { font-size:11px; color:var(--muted); text-align:center; max-width:520px; }
 
     /* Right response panel */
     .jv-right__head { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); flex-shrink:0; }
-    .jv-right__title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; color:#cbd5e1; }
+    .jv-right__title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; color:var(--txt); }
     .jv-right__head .jv-iconbtn { margin-left:auto; width:34px; height:34px; }
     .jv-right__body { flex:1; min-height:0; overflow-y:auto; padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
     .jv-answer__text { background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:14px 16px; font-size:14.5px; line-height:1.65; }
@@ -139,15 +141,15 @@
     .jv-rrow.user { flex-direction:row-reverse; }
     .jv-rav { width:30px; height:30px; flex-shrink:0; border-radius:9px; display:flex; align-items:center; justify-content:center; }
     .jv-rav.bot { background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; }
-    .jv-rav.user { background:var(--line); color:#cbd5e1; border:1px solid var(--line); }
+    .jv-rav.user { background:var(--line); color:var(--txt); border:1px solid var(--line); }
     .jv-rcol { display:flex; flex-direction:column; gap:6px; min-width:0; max-width:88%; }
     .jv-rrow.user .jv-rcol { align-items:flex-end; }
     .jv-rbubble { padding:11px 14px; border-radius:13px; font-size:14px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
-    .jv-rrow.bot .jv-rbubble { background:var(--panel-2); border:1px solid var(--line); color:#e2e8f0; border-top-left-radius:4px; }
+    .jv-rrow.bot .jv-rbubble { background:var(--panel-2); border:1px solid var(--line); color:var(--txt); border-top-left-radius:4px; }
     .jv-rrow.user .jv-rbubble { background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; border-top-right-radius:4px; }
-    .jv-rmeta, .jv-tmeta { font-size:10.5px; color:#64748b; padding:0 4px; }
+    .jv-rmeta, .jv-tmeta { font-size:10.5px; color:var(--muted); padding:0 4px; }
     .jv-rrow.user .jv-rmeta { text-align:right; }
-    .jv-rsrc { font-size:10px; color:#94a3b8; margin-top:6px; font-family:ui-monospace,monospace; opacity:.85; }
+    .jv-rsrc { font-size:10px; color:var(--muted); margin-top:6px; font-family:ui-monospace,monospace; opacity:.85; }
 
     /* ───────── Text mode ───────── */
     .jv-text { position:absolute; inset:0; display:none; flex-direction:column; }
@@ -156,7 +158,7 @@
     .jv-stream { max-width:880px; margin:0 auto; padding:0 24px; display:flex; flex-direction:column; gap:18px; }
     .jv-row { display:flex; gap:12px; align-items:flex-start; } .jv-row.user { flex-direction:row-reverse; }
     .jv-av { width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center; }
-    .jv-av.bot{ background:radial-gradient(circle at 30% 25%,#1e3a8a,var(--panel)); border:1px solid var(--line-2); color:var(--accent2); }
+    .jv-av.bot{ background:radial-gradient(circle at 30% 25%,var(--avatar-1),var(--panel)); border:1px solid var(--line-2); color:var(--accent2); }
     .jv-av.user{ background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; }
     .jv-col { max-width:88%; display:flex; flex-direction:column; gap:10px; } .jv-row.user .jv-col{ align-items:flex-end; }
     .jv-bubble { padding:12px 15px; border-radius:14px; font-size:13.6px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word; }
@@ -203,15 +205,15 @@
     /* Data widget */
     .jv-widget { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; overflow:hidden; }
     .jv-widget__bar { display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); background:var(--panel-2); position:sticky; top:0; z-index:3; }
-    .jv-widget__title { font-size:12px; font-weight:600; color:#cbd5e1; }
+    .jv-widget__title { font-size:12px; font-weight:600; color:var(--txt); }
     .jv-widget__count { font-size:10.5px; color:var(--muted); font-family:ui-monospace,monospace; }
     .jv-widget__acts { margin-left:auto; display:flex; gap:6px; }
-    .jv-wbtn { background:var(--panel-3); color:#cbd5e1; border:1px solid var(--line-2); border-radius:7px; padding:5px 10px; font-size:11.5px; cursor:pointer; display:flex; align-items:center; gap:5px; }
-    .jv-wbtn:hover { background:var(--panel-3); border-color:var(--accent); color:#fff; }
+    .jv-wbtn { background:var(--panel-3); color:var(--txt); border:1px solid var(--line-2); border-radius:7px; padding:5px 10px; font-size:11.5px; cursor:pointer; display:flex; align-items:center; gap:5px; }
+    .jv-wbtn:hover { background:var(--panel-3); border-color:var(--accent); color:var(--txt); }
     .jv-tblwrap { max-height:240px; overflow:auto; }
     .jv-tbl { width:100%; border-collapse:collapse; font-size:12.3px; }
     .jv-tbl th,.jv-tbl td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
-    .jv-tbl th { position:sticky; top:0; background:var(--panel-2); color:#93a4bf; font-weight:600; font-family:ui-monospace,monospace; font-size:11px; }
+    .jv-tbl th { position:sticky; top:0; background:var(--panel-2); color:var(--muted); font-weight:600; font-family:ui-monospace,monospace; font-size:11px; }
     .jv-tbl tbody tr:hover { background:var(--panel-2); }
 
     /* History drawer (hidden by default) */
@@ -224,10 +226,10 @@
     .jv-newchat { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:linear-gradient(135deg,var(--accent),#2563eb);
         color:#fff; border:none; border-radius:10px; padding:10px; font-size:13px; font-weight:600; cursor:pointer; }
     .jv-threads { flex:1; overflow-y:auto; padding:8px; }
-    .jv-thread { display:flex; align-items:center; gap:8px; padding:9px 10px; margin-bottom:4px; border-radius:9px; cursor:pointer; color:#cbd5e1; font-size:13px; border:1px solid transparent; }
+    .jv-thread { display:flex; align-items:center; gap:8px; padding:9px 10px; margin-bottom:4px; border-radius:9px; cursor:pointer; color:var(--txt); font-size:13px; border:1px solid transparent; }
     .jv-thread:hover { background:var(--panel-2); } .jv-thread.is-active { background:var(--panel-3); border-color:var(--line-2); }
     .jv-thread__title { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .jv-thread__del { opacity:0; color:#64748b; font-size:14px; padding:2px; } .jv-thread:hover .jv-thread__del { opacity:1; } .jv-thread__del:hover{ color:#f87171; }
+    .jv-thread__del { opacity:0; color:var(--muted); font-size:14px; padding:2px; } .jv-thread:hover .jv-thread__del { opacity:1; } .jv-thread__del:hover{ color:#f87171; }
     .jv-drawer__foot { padding:12px 14px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
     .jv-typing span { display:inline-block; width:6px;height:6px;margin-right:3px;border-radius:50%;background:var(--accent2); animation:jvp 1.2s infinite ease-in-out; }
     .jv-typing span:nth-child(2){animation-delay:.2s} .jv-typing span:nth-child(3){animation-delay:.4s}
