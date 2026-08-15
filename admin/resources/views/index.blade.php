@@ -1319,7 +1319,12 @@
                 <div class="callbar__icon">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.86 19.86 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.86 19.86 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
                 </div>
+                {{-- `type=tel` only hints the on-screen keyboard; it does not
+                     restrict what can be typed. inputmode picks the numeric pad
+                     on mobile, and the script below is what actually keeps
+                     letters out. --}}
                 <input type="tel" name="phone" placeholder="Enter your phone number" required
+                       inputmode="tel" maxlength="20" autocomplete="tel"
                        aria-label="Your phone number" data-cursor="call">
                 <button type="submit" data-cursor="call">{{ tva_setting('content.hero_cta_label', 'Reach out →') }}</button>
             </form>
@@ -2170,12 +2175,55 @@ WEBGL_INITS.push(function () {
         })
         .catch(function () { /* status is an optimisation — never block the form on it */ });
 
+    /* Keep the field to things that can appear in a phone number: digits, and
+       the punctuation people naturally type — a leading +, spaces, hyphens,
+       parentheses. A + is only meaningful as a country prefix, so it survives
+       only in first position.
+
+       Done on `input` rather than with a `pattern`, because a pattern lets you
+       type a full sentence and only objects at submit time. Rejecting the
+       keystroke is the clearer signal. */
+    function sanitise(raw) {
+        var lead = raw.charAt(0) === '+' ? '+' : '';
+        // Also drop leading spaces and hyphens, so typing a word does not
+        // leave its spaces behind as a field of blanks. An opening bracket is
+        // left alone — "(021) …" is a real way to write a number.
+        return lead + raw.replace(/[^0-9 ()-]/g, '').replace(/^[\s-]+/, '');
+    }
+
+    input.addEventListener('input', function () {
+        var before = input.value;
+        var clean  = sanitise(before);
+        if (clean === before) return;
+
+        // Preserve the caret: without this it jumps to the end on every
+        // rejected keystroke, which makes correcting a typo mid-number
+        // impossible.
+        var caret = input.selectionStart - (before.length - clean.length);
+        input.value = clean;
+        try { input.setSelectionRange(caret, caret); } catch (e) {}
+    });
+
+    // Pasting bypasses per-key filtering, so the same clean-up runs on paste.
+    input.addEventListener('paste', function () {
+        setTimeout(function () { input.value = sanitise(input.value); }, 0);
+    });
+
     f.addEventListener('submit', function (e) {
         e.preventDefault();
         if (busy || button.disabled) return;
 
         var phone = input.value.trim();
         if (!phone) return;
+
+        // Seven is the shortest real subscriber number, and the same floor the
+        // server's contact matching uses — anything less cannot be called back.
+        if ((phone.match(/[0-9]/g) || []).length < 7) {
+            msg.textContent = 'That does not look like a complete phone number.';
+            msg.className   = 'callbar__msg is-err';
+            input.focus();
+            return;
+        }
 
         busy = true;
         button.disabled = true;
