@@ -437,9 +437,15 @@ class OnboardingService
                 $this->instagram->subscribe($ch['external_id'], (string) $ch['access_token']);
                 $log->step('subscribe_instagram', true, $ch['name']);
             } catch (\Throwable $e) {
-                $log->step('subscribe_instagram', false, $e->getMessage()
-                    . ' — the account will not receive messages until this succeeds. Run: php artisan meta:subscribe --fix');
-                Log::warning('Meta: Instagram webhook subscription failed', [
+                // The step detail is shown to the CUSTOMER in the onboarding
+                // log modal, so it says what they can do. The command and the
+                // raw Graph error go to the application log, for whoever can
+                // actually act on them.
+                $log->step('subscribe_instagram', false,
+                    'Connected, but Instagram has not confirmed message delivery yet. '
+                    . 'Press Retry — if it keeps failing, reconnect the account.');
+
+                Log::warning('Meta: Instagram webhook subscription failed — run: php artisan meta:subscribe --fix', [
                     'ig_id' => $ch['external_id'],
                     'error' => $e->getMessage(),
                 ]);
@@ -462,9 +468,11 @@ class OnboardingService
             $this->oauth->subscribeAppToPage($pageId, $ch['access_token']);
             $log->step('subscribe_page', true, $ch['name'] . ' (page ' . $pageId . ')');
         } catch (\Throwable $e) {
-            $log->step('subscribe_page', false, $e->getMessage()
-                . ' — the channel will not receive messages until this succeeds. Run: php artisan meta:subscribe');
-            Log::warning('Meta: page webhook subscription failed', [
+            $log->step('subscribe_page', false,
+                'Connected, but Meta has not confirmed message delivery yet. '
+                . 'Press Retry — if it keeps failing, reconnect the channel.');
+
+            Log::warning('Meta: page webhook subscription failed — run: php artisan meta:subscribe --fix', [
                 'page'  => $pageId,
                 'error' => $e->getMessage(),
             ]);

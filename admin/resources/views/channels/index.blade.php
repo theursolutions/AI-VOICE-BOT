@@ -219,9 +219,11 @@
                             <i data-lucide="phone" class="w-3.5 h-3.5 inline -mt-0.5 mr-1" style="color:#25d366;"></i>{{ $waNumber }}
                         </div>
                     @elseif ($conn->provider === 'whatsapp')
+                        {{-- "run the channel repair command" told the customer
+                             about a command they have no way to run. Reconnecting
+                             is the thing they CAN do, and it fixes this. --}}
                         <div class="text-[11px] text-slate-400">
-                            Number not recorded —
-                            <span title="Run: php artisan meta:subscribe --fix">run the channel repair command</span>
+                            Number not available yet — reconnect this channel to refresh it
                         </div>
                     @endif
 

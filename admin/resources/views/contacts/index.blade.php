@@ -79,17 +79,20 @@
     </div>
 
     @if (!$available)
-        {{-- Tenant migrations run per project and can lag a deploy, so this
-             says what to run rather than showing an empty table that looks
-             like nobody has ever contacted the business. --}}
-        <div class="intro-y box p-6 mt-5 text-center">
-            <i data-lucide="database" class="w-8 h-8 mx-auto text-slate-400"></i>
-            <div class="mt-3 font-semibold">Contacts aren’t set up on this workspace yet</div>
-            <div class="text-xs text-slate-500 mt-2">
-                Run <code>php artisan tenant:migrate</code>, then
-                <code>php artisan contacts:backfill</code> to build contacts from
-                the conversations you already have.
+        {{-- The operator's instructions used to be printed here. They are a
+             deployment step, not something a customer can act on — and
+             seeing "php artisan" in your CRM reads as a broken product. The
+             command now goes to the log for whoever can actually run it;
+             this says only what is true from the customer's side. --}}
+        <div class="tva-ct-panel" style="padding:44px 20px;text-align:center">
+            <i data-lucide="users" class="w-8 h-8 mx-auto text-slate-300"></i>
+            <div class="mt-3 font-semibold">No contacts yet</div>
+            <div class="text-xs text-slate-500 mt-2" style="line-height:1.7">
+                Contacts are created automatically the first time someone messages you.<br>
+                Connect a channel to start collecting them.
             </div>
+            <a href="{{ route('channels.index', ['client' => $client->slug, 'project_id' => hashid($projectId)]) }}"
+               class="btn btn-sm btn-primary mt-4">Connect a channel</a>
         </div>
     @else
         {{-- Stat tiles. Explicit padding and a fixed icon column rather than
@@ -181,8 +184,7 @@
                                 Nothing matches “{{ request('q') }}”.
                             @else
                                 No contacts yet.<br>
-                                They’re created automatically when someone messages you — or run
-                                <code>php artisan contacts:backfill</code> to build them from past conversations.
+                                They’re created automatically the first time someone messages you.
                             @endif
                         </div>
                     </td></tr>
