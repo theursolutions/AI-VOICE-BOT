@@ -57,6 +57,10 @@
         try { localStorage.setItem('tva_theme', next); } catch (e) {}
         // Shared with the admin, so a visitor who signs in keeps their choice.
         document.cookie = 'tva_theme=' + next + ';path=/;max-age=31536000;SameSite=Lax';
+        // Canvas-drawn things cannot be restyled by CSS, so they listen for
+        // this instead of being left on the previous theme until a reload.
+        // Same event name the admin toggle emits.
+        window.dispatchEvent(new CustomEvent('tva:theme', { detail: { theme: next } }));
     };
 
     // The server writes the class from the cookie, so this only corrects a

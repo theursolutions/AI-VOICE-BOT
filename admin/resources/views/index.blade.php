@@ -258,7 +258,11 @@
         @media (max-width: 540px) { .wrap { padding: 0 18px; } }
 
         /* ─── Hero ───────────────────────────────────────────────────── */
-        .hero { position: relative; padding: 130px 0 80px; min-height: 100vh; display: flex; align-items: center; }
+        /* Padding is deliberately close to symmetric. The old 130/80 split
+           biased the centred content downward by half the difference, which
+           on a laptop viewport pushed the last line of the sub-headline and
+           the call bar under the fold. */
+        .hero { position: relative; padding: 104px 0 68px; min-height: 100vh; display: flex; align-items: center; }
         .hero__grid {
             display: grid; grid-template-columns: 1.05fr .95fr; gap: 60px; align-items: center; width: 100%;
         }
@@ -360,10 +364,14 @@
         .hero__meta-item svg { width: 14px; height: 14px; color: var(--neon); }
 
         /* ─── 3D scene canvas ─────────────────────────────────────────── */
+        /* The scene is a SQUARE sized by its grid column, so on a wide screen
+           it was ~540px tall and became the tallest thing in the row — the
+           hero's height was set by decoration rather than by the copy. Capping
+           it hands the row back to the text column. */
         .hero__scene {
             position: relative; aspect-ratio: 1 / 1;
             display: flex; align-items: center; justify-content: center;
-            min-height: 360px;
+            min-height: 360px; max-width: 470px; margin-inline: auto;
         }
         .hero__scene canvas { display: block; width: 100% !important; height: 100% !important; }
         .hero__scene::before {
@@ -1967,10 +1975,23 @@ WEBGL_INITS.push(function () {
     var orb     = new THREE.Mesh(orbGeom, orbMat);
     scene.add(orb);
 
-    // Inner solid core for depth
+    // Inner solid core for depth.
+    //
+    // It earns that depth against a near-black page: a navy shell dimly lit
+    // behind the wireframe. On white the same mesh is a grey faceted lump
+    // showing through the mesh — you can read every flat face of it, which is
+    // the one thing the orb should not look like. Hidden in light, and kept
+    // in sync so switching themes does not need a reload.
     var coreGeom = new THREE.IcosahedronGeometry(1.0, 1);
     var coreMat  = new THREE.MeshBasicMaterial({ color: 0x1e3a8a, transparent: true, opacity: 0.25 });
-    scene.add(new THREE.Mesh(coreGeom, coreMat));
+    var core     = new THREE.Mesh(coreGeom, coreMat);
+    scene.add(core);
+
+    function syncCore() {
+        core.visible = document.documentElement.classList.contains('dark');
+    }
+    syncCore();
+    window.addEventListener('tva:theme', syncCore);
 
     // Outer faint ring shell
     var ringGeom = new THREE.RingGeometry(1.75, 1.78, 64);
