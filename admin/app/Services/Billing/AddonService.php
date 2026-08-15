@@ -184,6 +184,102 @@ class AddonService
         return $record;
     }
 
+    /**
+     * What changing an add-on's quantity would cost, BEFORE committing to it.
+     *
+     * The prorated "due today" figure is asked of Stripe (`invoices
+     * ->createPreview`) rather than computed here. Proration depends on the
+     * exact second of the billing period, unused-time credits from earlier
+     * changes, discounts and tax — arithmetic we would get subtly wrong, and
+     * a receipt that disagrees with the card statement is worse than no
+     * estimate at all.
+     *
+     * `due_today` is null when the preview can't be fetched. The page then
+     * says "prorated on your next invoice" instead of showing a number it
+     * can't stand behind — it never blocks the purchase.
+     *
+     * @return array{quantity:int,current:int,unit_amount:int,recurring:int,due_today:?int,next_total:?int,interval:string,currency:string}
+     */
+    public function preview(Client $client, string $addonSlug, int $quantity): array
+    {
+        $subscription = $client->currentSubscription();
+
+        if (! $subscription?->stripe_subscription_ref) {
+            throw new \RuntimeException('Add-ons need an active subscription. Choose a plan first.');
+        }
+
+        $addon = Plan::query()->addons()->where('slug', $addonSlug)->first();
+
+        if (! $addon) {
+            throw new \RuntimeException('That add-on isn’t available.');
+        }
+
+        $quantity = max(0, min($quantity, 999));
+        $interval = $subscription->interval ?: 'monthly';
+        $price    = $addon->priceFor($interval);
+
+        if (! $price || ! $price->stripe_price_ref) {
+            throw new \RuntimeException('This add-on has no ' . $interval . ' price yet.');
+        }
+
+        $existing = SubscriptionAddon::where('subscription_id', $subscription->id)
+            ->where('plan_id', $addon->id)
+            ->active()
+            ->first();
+
+        $out = [
+            'quantity'    => $quantity,
+            'current'     => (int) ($existing->quantity ?? 0),
+            'unit_amount' => (int) $price->unit_amount,
+            'recurring'   => (int) $price->unit_amount * $quantity,
+            'due_today'   => null,
+            'next_total'  => null,
+            'interval'    => $interval,
+            'currency'    => 'usd',
+        ];
+
+        try {
+            $item = $existing?->stripe_item_ref
+                ? ['id' => $existing->stripe_item_ref, 'quantity' => $quantity]
+                : ['price' => $price->stripe_price_ref, 'quantity' => $quantity];
+
+            // Removing a line is expressed as deleted, not quantity 0.
+            if ($quantity === 0 && $existing?->stripe_item_ref) {
+                $item = ['id' => $existing->stripe_item_ref, 'deleted' => true];
+            }
+
+            $invoice = $this->factory->make()->invoices->createPreview([
+                'customer'     => $subscription->stripe_customer_ref ?: $client->stripe_customer_ref,
+                'subscription' => $subscription->stripe_subscription_ref,
+                'subscription_details' => [
+                    'items'              => [$item],
+                    'proration_behavior' => (string) config('billing.checkout.proration_behavior', 'create_prorations'),
+                ],
+            ]);
+
+            $out['next_total'] = (int) ($invoice->total ?? 0);
+
+            // Only the proration lines are charged now; the rest of the
+            // preview is the next renewal.
+            $now = 0;
+            foreach ($invoice->lines->data ?? [] as $line) {
+                if (! empty($line->proration)) {
+                    $now += (int) ($line->amount ?? 0);
+                }
+            }
+
+            $out['due_today'] = $now;
+        } catch (\Throwable $e) {
+            Log::warning('billing.addon.preview_failed', [
+                'client_id' => $client->getKey(),
+                'addon'     => $addonSlug,
+                'error'     => $e->getMessage(),
+            ]);
+        }
+
+        return $out;
+    }
+
     /** Recurring cost of all add-ons, in USD cents per the plan's interval. */
     public function monthlyTotalCents(Client $client): int
     {

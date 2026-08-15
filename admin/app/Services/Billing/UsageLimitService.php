@@ -214,7 +214,38 @@ class UsageLimitService
             return null;   // metric isn't capped by any feature
         }
 
-        return $this->features->planLimit($plan, $featureKey);
+        // clientLimit(), not planLimit(): purchased add-ons raise the ceiling.
+        // Structural quotas (seats, agents) already read through clientLimit,
+        // so using the plan-only figure here meant a metered add-on — "+1,000
+        // conversations", which Super Admin can create today — would bill the
+        // customer and grant them nothing.
+        return $this->features->clientLimit($client, $featureKey);
+    }
+
+    /**
+     * The same allowance, split into what the PLAN includes and what was
+     * bought on top.
+     *
+     * Kept separate for display: "8,000 of 10,000" hides the fact that 5,000
+     * of that ceiling is being paid for month after month as an add-on. A
+     * customer should be able to see what they'd lose by removing it.
+     *
+     * @return array{included:?int, addon:int}
+     */
+    public function allowanceBreakdown(Client $client, string $metric): array
+    {
+        $plan = $client->currentPlan();
+
+        $featureKey = Feature::query()->where('metric_key', $metric)->value('key');
+
+        if (! $plan || ! $featureKey) {
+            return ['included' => null, 'addon' => 0];
+        }
+
+        return [
+            'included' => $this->features->planLimit($plan, $featureKey),
+            'addon'    => $this->features->addonContribution($client, $featureKey),
+        ];
     }
 
     public function usedFor(Client $client, string $metric): int
@@ -248,6 +279,8 @@ class UsageLimitService
                 continue;
             }
 
+            $breakdown = $this->allowanceBreakdown($client, $metric);
+
             $out[$metric] = [
                 'label'     => $meta['label'] ?? $metric,
                 'unit'      => $meta['unit'] ?? '',
@@ -257,6 +290,11 @@ class UsageLimitService
                 'unlimited' => $allowance === null,
                 'percent'   => $counter->percentOf($allowance),
                 'resets_at' => $counter->period_end,
+
+                // Shown separately so purchased capacity never reads as though
+                // the plan included it.
+                'included'  => $breakdown['included'],
+                'addon'     => $breakdown['addon'],
             ];
         }
 

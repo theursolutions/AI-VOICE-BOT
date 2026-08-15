@@ -321,7 +321,7 @@ class AddonTest extends BillingTestCase
              ->get(route('billing.plans', ['client' => $client->slug]))
              ->assertOk()
              ->assertSee('Extra team seat', false)
-             ->assertSee('name="addon"', false);
+             ->assertSee(route('billing.addons', ['client' => $client->slug]), false);
     }
 
     public function test_the_plans_page_does_not_offer_addons_without_a_plan(): void
@@ -334,7 +334,188 @@ class AddonTest extends BillingTestCase
              ->get(route('billing.plans', ['client' => $client->slug]))
              ->assertOk()
              ->assertSee('Choose a plan first', false)
-             ->assertDontSee('name="addon"', false);
+             ->assertDontSee(route('billing.addons', ['client' => $client->slug]), false);
+    }
+
+    // ── The dedicated add-ons page ───────────────────────────────────
+
+    public function test_an_existing_subscriber_goes_straight_to_the_addons_page(): void
+    {
+        // Someone who already pays for a plan and needs one more seat must not
+        // be walked back through the plan ladder — "upgrade a tier" is the
+        // wrong answer to "I need one more person".
+        [$client, $user] = $this->subscribed('growth');
+        $this->fakeItems();
+
+        $this->actingAs($user)
+             ->get(route('billing.addons', ['client' => $client->slug]))
+             ->assertOk()
+             ->assertSee('Add extra capacity', false)
+             ->assertSee('Extra team seat', false)
+             ->assertSee('name="quantity"', false)
+             // No plan ladder on this page.
+             ->assertDontSee('Everything in Starter, plus:', false);
+    }
+
+    public function test_the_addons_page_sends_you_to_choose_a_plan_first(): void
+    {
+        [$client, $user] = $this->makeWorkspace();
+        app(SubscriptionService::class)->startFreeWindow($client);
+
+        $this->actingAs($user)
+             ->get(route('billing.addons', ['client' => $client->slug]))
+             ->assertRedirect(route('billing.plans', ['client' => $client->slug]))
+             ->assertSessionHas('info');
+    }
+
+    public function test_the_addons_page_is_owner_only(): void
+    {
+        [$client] = $this->subscribed('growth');
+
+        $member = \App\Models\User::create([
+            'name' => 'Agent', 'email' => 'nope@acme.test',
+            'password' => bcrypt('x'), 'email_verified_at' => now(),
+        ]);
+        $role = \App\Models\Role::create([
+            'client_id' => $client->id, 'name' => 'Agent', 'modules' => ['dashboard'],
+            'is_owner' => false, 'created_at' => time(), 'updated_at' => time(),
+        ]);
+        $member->attachMembership($client->id, null, $member->id, $role->id);
+        $member->forceFill(['active_client_id' => $client->id])->save();
+
+        $this->actingAs($member)
+             ->get(route('billing.addons', ['client' => $client->slug]))
+             ->assertForbidden();
+    }
+
+    public function test_the_preview_quotes_the_prorated_amount_from_stripe(): void
+    {
+        // The "due today" figure must come from Stripe. Proration depends on
+        // the second of the period, earlier credits, discounts and tax — all
+        // things local arithmetic would get subtly wrong.
+        [$client, $user] = $this->subscribed('growth');
+
+        $invoices = \Mockery::mock();
+        $invoices->shouldReceive('createPreview')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject([
+                'object' => 'invoice',
+                'total'  => 7400,
+                'lines'  => ['data' => [
+                    ['amount' => 5900, 'proration' => false],
+                    ['amount' => 812,  'proration' => true],    // ← charged now
+                ]],
+            ], [])
+        );
+        $invoices->shouldReceive('all')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['object' => 'list', 'data' => []], [])
+        );
+
+        $this->fakeStripe($this->savedCardServices() + ['invoices' => $invoices]);
+
+        $this->actingAs($user)
+             ->postJson(route('billing.addons.preview', ['client' => $client->slug]), [
+                 'addon' => 'addon-seat', 'quantity' => 2,
+             ])
+             ->assertOk()
+             ->assertJsonPath('due_today', 812)
+             ->assertJsonPath('recurring', 1000)      // 2 × $5, our own price
+             ->assertJsonPath('next_total', 7400);
+    }
+
+    public function test_the_preview_degrades_rather_than_inventing_a_number(): void
+    {
+        // If Stripe can't be asked, the page says "on your next invoice"
+        // instead of showing a figure it can't stand behind.
+        [$client, $user] = $this->subscribed('growth');
+
+        $invoices = \Mockery::mock();
+        $invoices->shouldReceive('createPreview')->andThrow(new \RuntimeException('Stripe down'));
+        $invoices->shouldReceive('all')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['object' => 'list', 'data' => []], [])
+        );
+
+        $this->fakeStripe($this->savedCardServices() + ['invoices' => $invoices]);
+
+        $this->actingAs($user)
+             ->postJson(route('billing.addons.preview', ['client' => $client->slug]), [
+                 'addon' => 'addon-seat', 'quantity' => 2,
+             ])
+             ->assertOk()
+             ->assertJsonPath('due_today', null)
+             ->assertJsonPath('recurring', 1000);
+    }
+
+    public function test_the_preview_changes_nothing(): void
+    {
+        [$client, $user] = $this->subscribed('growth');
+
+        $invoices = \Mockery::mock();
+        $invoices->shouldReceive('createPreview')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['object' => 'invoice', 'total' => 0, 'lines' => ['data' => []]], [])
+        );
+        $invoices->shouldReceive('all')->andReturn(
+            \Stripe\Util\Util::convertToStripeObject(['object' => 'list', 'data' => []], [])
+        );
+
+        // subscriptionItems is deliberately absent: touching it would fail.
+        $this->fakeStripe($this->savedCardServices() + ['invoices' => $invoices]);
+
+        $this->actingAs($user)
+             ->postJson(route('billing.addons.preview', ['client' => $client->slug]), [
+                 'addon' => 'addon-seat', 'quantity' => 9,
+             ])
+             ->assertOk();
+
+        $this->assertSame(0, SubscriptionAddon::where('client_id', $client->id)->count());
+    }
+
+    // ── Add-on capacity is shown separately from the plan's ──────────
+
+    public function test_purchased_capacity_is_not_folded_into_the_plan_allowance(): void
+    {
+        [$client] = $this->subscribed('growth');
+
+        $usage = app(\App\Services\Billing\UsageLimitService::class);
+
+        $before = $usage->summaryFor($client)['conversations'] ?? null;
+        $this->assertNotNull($before);
+        $this->assertSame(0, $before['addon'], 'Nothing bought yet.');
+        $this->assertSame($before['included'], $before['allowance']);
+    }
+
+    public function test_a_metered_addon_raises_the_meter_allowance(): void
+    {
+        // Super Admin can create an add-on against any numeric feature. The
+        // meter has to honour it — otherwise the customer pays for capacity
+        // the quota refuses to give them.
+        [$client] = $this->subscribed('growth');
+
+        $pack = Plan::create([
+            'name' => 'Extra conversations', 'slug' => 'addon-convos', 'type' => 'addon',
+            'is_active' => true, 'is_public' => false, 'sort_order' => 95, 'trial_days' => 0,
+        ]);
+        $pack->prices()->create([
+            'interval' => 'monthly', 'currency' => 'usd', 'unit_amount' => 1000,
+            'is_active' => true, 'stripe_price_ref' => 'price_convos_monthly', 'stripe_livemode' => false,
+        ]);
+        app(PlanFeatureService::class)->setFeature(
+            $pack,
+            \App\Models\Billing\Feature::where('key', 'conversations')->firstOrFail(),
+            '1000'
+        );
+
+        $usage    = app(\App\Services\Billing\UsageLimitService::class);
+        $included = $usage->summaryFor($client)['conversations']['allowance'];
+
+        $this->fakeItems();
+        app(AddonService::class)->setQuantity($client, 'addon-convos', 2);
+        $client->forgetSubscription();
+
+        $row = $usage->summaryFor($client->fresh())['conversations'];
+
+        $this->assertSame($included + 2000, $row['allowance']);
+        $this->assertSame(2000, $row['addon']);
+        $this->assertSame($included, $row['included'], 'The plan figure must stay visible on its own.');
     }
 
     public function test_the_billing_page_offers_the_addons(): void
@@ -348,6 +529,8 @@ class AddonTest extends BillingTestCase
              ->assertSee('Add-ons', false)
              ->assertSee('Extra team seat', false)
              ->assertSee('Extra AI agent', false)
-             ->assertSee('name="addon"', false);
+             // Overview only — buying happens on the add-ons page, which can
+             // quote the prorated cost first.
+             ->assertSee(route('billing.addons', ['client' => $client->slug]), false);
     }
 }
