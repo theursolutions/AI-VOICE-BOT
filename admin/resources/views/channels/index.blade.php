@@ -474,19 +474,46 @@
             config_id: WA_CONFIG_ID,
             response_type: 'code',
             override_default_response_type: true,
-            extras: { setup: {} }
+            extras: {
+                setup: {},
+                /* Session logging. Without this Meta does not post the
+                   WA_EMBEDDED_SIGNUP event at all, so the WABA and phone
+                   number the customer picked never reach us and discovery
+                   falls back to crawling every business the token can see.
+                   It is also a hard requirement for coexistence. */
+                sessionInfoVersion: '3',
+            },
         });
     }
 
     /* Meta posts the chosen WABA + number to the opener via postMessage —
        it is NOT in the FB.login response, so it has to be captured here and
-       read back above. */
+       read back above.
+
+       CANCEL is handled too: a customer who backs out mid-flow used to get
+       silence, because FB.login's callback also returns nothing on a closed
+       popup. Knowing WHICH step they abandoned is the difference between
+       "they changed their mind" and "our flow broke at number verification". */
     window.addEventListener('message', function (event) {
-        if (!/facebook\.com$/.test(new URL(event.origin).hostname)) return;
+        var host;
+        try { host = new URL(event.origin).hostname; } catch (_) { return; }
+        if (!/facebook\.com$/.test(host)) return;
+
         try {
             var data = JSON.parse(event.data);
-            if (data.type === 'WA_EMBEDDED_SIGNUP' && data.event === 'FINISH') {
+            if (data.type !== 'WA_EMBEDDED_SIGNUP') return;
+
+            if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
                 window.__waSignup = data.data || {};
+            } else if (data.event === 'CANCEL') {
+                window.__waSignup = null;
+                alert('WhatsApp setup was cancelled at: '
+                    + ((data.data && data.data.current_step) || 'an early step')
+                    + '. Nothing was connected — you can start again.');
+            } else if (data.event === 'ERROR') {
+                window.__waSignup = null;
+                alert('Meta reported an error during WhatsApp setup: '
+                    + ((data.data && data.data.error_message) || 'no detail given'));
             }
         } catch (_) { /* Meta also posts non-JSON chatter; ignore it */ }
     });
