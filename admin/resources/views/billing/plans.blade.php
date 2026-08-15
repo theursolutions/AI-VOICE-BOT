@@ -325,19 +325,13 @@
                     </div>
 
                     @if ($canBuyAddons && $checkoutOpen)
-                        {{-- Slug + quantity only; the amount is resolved
-                             server-side for the subscription's interval. --}}
-                        <form method="POST"
-                              action="{{ route('billing.addons.update', ['client' => $client->slug]) }}"
-                              class="pk-addon__form">
-                            @csrf
-                            <input type="hidden" name="addon" value="{{ $addonPlan->slug }}">
-                            <input type="number" name="quantity" min="0" max="999"
-                                   value="{{ $item['owned'] }}" aria-label="Quantity">
-                            <button type="submit" class="bl-btn bl-btn--ghost bl-btn--sm">
-                                {{ $item['owned'] > 0 ? 'Update' : 'Add' }}
-                            </button>
-                        </form>
+                        {{-- Links out rather than buying here. Quantity and
+                             prorated cost belong on the add-ons page; this
+                             page's job is choosing a PLAN. --}}
+                        <a href="{{ route('billing.addons', ['client' => $client->slug]) }}"
+                           class="bl-btn bl-btn--ghost bl-btn--sm">
+                            {{ $item['owned'] > 0 ? 'Manage' : 'Add' }}
+                        </a>
                     @else
                         <span class="pk-addon__hint">
                             {{ $canBuyAddons ? 'Available soon' : 'Choose a plan first' }}

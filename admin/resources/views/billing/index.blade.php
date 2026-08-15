@@ -31,14 +31,7 @@
 </div>
 
 {{-- ── Status alerts ─────────────────────────────────────────────── --}}
-@foreach ([['success','ok','check-circle'], ['error','err','alert-octagon'], ['info','info','info'], ['billing_warning','warn','alert-triangle']] as [$key, $kind, $icon])
-    @if (session($key))
-        <div class="bl-alert bl-alert--{{ $kind }}">
-            <i data-lucide="{{ $icon }}" class="w-5 h-5" style="flex:none"></i>
-            <div>{{ session($key) }}</div>
-        </div>
-    @endif
-@endforeach
+@include('billing._flash')
 
 @if (! $stripeReady && auth()->user()?->isSuperAdmin())
     <div class="bl-alert bl-alert--err">
@@ -245,6 +238,17 @@
                                     {{ number_format($row['used']) }}
                                     @if ($row['unlimited']) used @else / {{ number_format($row['allowance']) }} @endif
                                     {{ $row['unit'] ? Str::plural($row['unit'], $row['used']) : '' }}
+
+                                    {{-- Purchased capacity is named, not folded
+                                         into the plan's number: a customer
+                                         should see what they'd lose by
+                                         removing an add-on they pay for. --}}
+                                    @if (! empty($row['addon']) && ! $row['unlimited'])
+                                        <span class="bl-badge bl-badge--blue" style="margin-left:6px">
+                                            {{ number_format($row['included']) }} included
+                                            + {{ number_format($row['addon']) }} added
+                                        </span>
+                                    @endif
                                 </span>
 
                                 {{-- State in words + an icon, never colour alone. --}}
@@ -424,18 +428,18 @@
                     Charged on your existing invoice and prorated from today.
                 </p>
 
+                {{-- Overview only. Choosing quantities happens on the add-ons
+                     page, which can show the prorated cost before committing —
+                     a bare number box here charged the card with no idea of
+                     what it would cost. --}}
                 @foreach ($addons as $item)
-                    @php
-                        $addonPlan = $item['plan'];
-                        $unitLabel = $item['per_unit'] > 1 ? $item['per_unit'] . ' per unit' : null;
-                    @endphp
+                    @php $addonPlan = $item['plan']; @endphp
                     <div class="bl-pm" style="align-items:flex-start;flex-wrap:wrap;gap:12px">
                         <div style="flex:1;min-width:170px">
                             <div class="bl-pm__num">{{ $addonPlan->name }}</div>
                             <div class="bl-pm__exp">
                                 {{ $item['price']->formatted() }}
                                 per {{ $item['price']->months() > 1 ? 'year' : 'month' }} each
-                                @if ($unitLabel) · {{ $unitLabel }} @endif
                                 @if ($item['owned'] > 0)
                                     <span class="bl-badge bl-badge--blue" style="margin-left:6px">
                                         {{ $item['owned'] }} active · {{ $item['line_total'] }}
@@ -443,27 +447,18 @@
                                 @endif
                             </div>
                         </div>
-
-                        {{-- Only a slug and a quantity are submitted; the price
-                             is resolved server-side for the subscription's own
-                             billing interval. --}}
-                        <form method="POST" action="{{ route('billing.addons.update', ['client' => $client->slug]) }}"
-                              style="display:flex;gap:8px;align-items:center">
-                            @csrf
-                            <input type="hidden" name="addon" value="{{ $addonPlan->slug }}">
-                            <input type="number" name="quantity" min="0" max="999"
-                                   value="{{ $item['owned'] }}"
-                                   style="width:74px;text-align:center;border:1px solid #e2e8f0;border-radius:9px;padding:8px 6px;font-size:13px">
-                            <button type="submit" class="bl-btn bl-btn--ghost bl-btn--sm">
-                                {{ $item['owned'] > 0 ? 'Update' : 'Add' }}
-                            </button>
-                        </form>
                     </div>
                 @endforeach
 
+                <a href="{{ route('billing.addons', ['client' => $client->slug]) }}"
+                   class="bl-btn bl-btn--primary bl-btn--sm" style="width:100%;margin-top:14px;justify-content:center">
+                    <i data-lucide="plus" class="w-3.5 h-3.5"></i>
+                    {{ $addonTotal > 0 ? 'Manage add-ons' : 'Add seats or agents' }}
+                </a>
+
                 <p class="bl-note">
-                    Set a quantity to 0 to remove an add-on — your next invoice is credited for the
-                    unused part. Add-ons follow your plan's billing interval.
+                    Extra capacity is billed on your existing invoice and prorated from the day you
+                    add it. Remove any add-on at any time.
                 </p>
             </div>
         @endif
