@@ -45,6 +45,19 @@
     @media (max-width: 640px) {
         .tva-tb-brand__text { display: none; }
     }
+
+    /* Two controls on the bar are desktop-only and were crowding the phone
+       header to the point where the workspace name had nowhere to go. */
+    @media (max-width: 767px) {
+        /* The rail collapse toggle has nothing to collapse here: the sidebar
+           is already hidden below md and navigation comes from the mobile
+           menu. It is injected by layouts/nav-collapse. */
+        #navCollapseBtn { display: none !important; }
+        /* The magnifier standing in for the search field, which is itself
+           hidden below sm. It is the only <a class="notification"> on the bar
+           — the bell is a <div> — so this does not touch notifications. */
+        .top-bar a.notification { display: none !important; }
+    }
 </style>
 
 <div class="top-bar">

@@ -508,16 +508,24 @@
         .tva-chat { height: calc(100dvh - 150px); min-height:0; margin-top:10px; border-radius:12px; }
 
         .tva-chat__list { width:100%; min-width:0; flex:1 1 auto; border-right:none; }
-        .tva-chat__main { display:none; }
+
+        /* These three carry a child combinator purely to out-weigh the base
+           rules further down the sheet. A media query adds no specificity, so
+           `.tva-chat__main { display:flex }` and `.tva-chat__back
+           { display:none }` — both declared AFTER this block — were winning on
+           source order alone. The pane swap and the back arrow were written
+           but had never once run: the thread pane stayed open beside the list
+           on every phone, and the arrow that closes it never appeared. */
+        .tva-chat > .tva-chat__main { display:none; }
 
         /* A conversation is open: swap the panes. */
         .tva-chat.is-thread-open .tva-chat__list { display:none; }
-        .tva-chat.is-thread-open .tva-chat__main { display:flex; flex:1 1 auto; }
+        .tva-chat.is-thread-open > .tva-chat__main { display:flex; flex:1 1 auto; }
 
-        .tva-chat__back { display:inline-flex; }
+        .tva-chat .tva-chat__back { display:inline-flex; }
 
         /* Touch targets and breathing room. 13px on a phone is a squint. */
-        .tva-chat__head { padding:10px 12px; gap:10px; }
+        .tva-chat .tva-chat__head { padding:10px 12px; gap:10px; }
         .tva-chat__thread { padding:12px; }
         .tva-msg { max-width:88%; }
         .tva-chat__composer { padding:9px 10px; }
@@ -532,6 +540,82 @@
            stays because it is the only one with a deadline. */
         .tva-mx__c:not(.tva-mx__c--window) { display:none; }
         .tva-cs__btn span { max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+        /* ── What moves into a menu on a phone ──────────────────────────
+           Both clusters follow the same rule: whatever you reach for on every
+           conversation stays on the surface, the rest goes one tap deeper. The
+           originals are HIDDEN, never removed, because the menu entries drive
+           them — deleting them would take their behaviour with them. */
+
+        /* Composer: emoji and voice move into the "more" menu, which frees
+           roughly a third of the row for the text field. */
+        .tva-composer-row #btnEmoji,
+        .tva-composer-row #btnVoice { display:none; }
+        .tva-cmenu .tva-cmenu__phone { display:flex; }
+
+        /* Header: the bar keeps the reply-window countdown and the status
+           control — the two that tell you what state the conversation is in
+           and change it. Everything else is one tap deeper. */
+        .tva-chat__head #transferBtn,
+        .tva-chat__head #galleryBtn,
+        .tva-chat__head #botToggle,
+        .tva-chat__head #handoffBtn { display:none !important; }
+
+        /* Equal gutters. The head is a flex row whose last child was running
+           into the right edge while the back arrow had a 12px gutter on the
+           left, so the bar looked lopsided. */
+        /* (gutters now set by the sizing block below) */
+        .tva-chat .tva-chat__head > :last-child { margin-right:0; }
+
+        /* Scoped to .tva-chat purely for weight. The base rules for these two
+           are declared further down the sheet, so an unqualified selector here
+           loses on source order however the !important flags fall — which is
+           exactly what happened: BOTH icons on the "more" button ended up
+           hidden and it rendered as an empty square. */
+        .tva-chat .tva-desk-only  { display:none !important; }
+        .tva-chat .tva-phone-only { display:inline-flex !important; }
+
+        /* Belt and braces on the header menu. It sits inside the head's
+           right-hand cluster, which carries its own flex rules, so it gets an
+           explicit rule of its own rather than relying on the shared helper
+           class reaching it. */
+        .tva-chat__head .tva-hdrmore { display:inline-flex !important; }
+
+        /* …and room to actually land in. The head is a single nowrap row, so
+           once the name, the countdown and the status control have taken their
+           natural widths there is nothing left and the menu is pushed past the
+           right edge — present, but off-screen. Everything below either gives
+           the row width back or stops the menu being the thing that yields.
+
+           flex-shrink:0 on the menu is the load-bearing line: without it a
+           flex item with a smaller natural width is the first to be squeezed
+           to nothing. */
+        .tva-chat .tva-chat__head { padding:8px 10px; gap:8px; flex-wrap:nowrap; }
+        .tva-chat .tva-chat__head > .ml-auto { gap:6px !important; min-width:0; }
+        .tva-chat__head .tva-hdrmore,
+        .tva-chat__head .tva-hdrmore > button { flex:0 0 auto; }
+
+        /* The name is the one thing that can afford to lose width — it
+           truncates already — so it absorbs the shortfall instead. */
+        .tva-chat .tva-chat__head > .min-w-0 { flex:1 1 auto; min-width:0; }
+
+        /* The status label is the widest of the remaining controls. Trimming
+           it buys the menu its 34px without dropping the control itself. */
+        .tva-chat .tva-cs__btn span { max-width:48px; }
+        .tva-chat .tva-cs__btn { padding-left:7px; padding-right:7px; }
+
+        /* The profile panel is a full overlay here, not a 320px column glued
+           to the right edge. Forced, because the base rule that sizes it as a
+           column is a plain `.tva-cp` and any later declaration of it would
+           quietly win back the width. */
+        .tva-chat .tva-cp {
+            position:absolute !important; inset:0 !important;
+            width:100% !important; flex-basis:100% !important; z-index:70;
+        }
+
+        /* Keep the menu on screen: anchored under the button, but never wider
+           than the phone and never hanging off the right edge. */
+        .tva-hdrmore .tva-pop { right:0; left:auto; max-width:calc(100vw - 24px); }
     }
 
     /* Back arrow: mobile only, and never rendered on desktop where the list
@@ -671,6 +755,34 @@
     .tva-row--in .tva-row__more { order:2; } .tva-row--out .tva-row__more { order:0; }
 
     /* ── Options menu (per-message + composer) ── */
+    /* Desktop is the default: the phone-only entries and the second icon on
+       the "more" button stay out of the way until the media query invites
+       them in. */
+    /* Split deliberately. `.tva-phone-only` needs !important to beat the
+       vendor's own display rules on the elements carrying it, but the menu
+       entries must NOT have it — an !important here cannot be undone by the
+       media query below, and the two entries would never appear on a phone. */
+    .tva-cmenu__phone { display:none; }
+    .tva-phone-only   { display:none !important; }
+    .tva-desk-only    { display:inline-flex; }
+
+    /* The header menu anchors to its button, and needs to sit above the
+       thread the way the composer's popovers do. */
+    .tva-hdrmore { position:relative; }
+    .tva-hdrmore .tva-pop {
+        position:absolute; top:calc(100% + 6px); right:0; z-index:80;
+        /* `.tva-pop` is written for the composer, where it opens UPWARDS from
+           the bottom-left: it sets bottom:62px and left:12px. Overriding only
+           top and right leaves all four offsets resolved at once, so the box
+           is stretched between them — here that works out to zero height, and
+           the panel paints nothing while its buttons overflow and stay
+           visible. Which reads exactly as a menu with a transparent
+           background. Both have to be released. */
+        bottom:auto; left:auto;
+        display:none;
+    }
+    .tva-hdrmore .tva-pop.is-open { display:block; }
+
     .tva-cmenu { min-width:210px; padding:6px; }
     .tva-cmenu button { display:flex; gap:10px; align-items:center; width:100%; text-align:left; padding:9px 10px; border:none; background:transparent; cursor:pointer; border-radius:8px; font-size:13px; color:inherit; }
     .tva-cmenu button:hover { background:#f1f5f9; } html.dark .tva-cmenu button:hover { background:#334155; }
@@ -900,7 +1012,7 @@
 
         <div class="tva-chat__main">
             <div id="chatEmpty" class="tva-empty">
-                <i data-lucide="messages-square" class="w-10 h-10"></i>
+                <i data-lucide="message-circle" class="w-10 h-10"></i>
                 <div>Select a conversation</div>
             </div>
 
@@ -962,6 +1074,42 @@
                         <button id="botToggle" class="btn btn-sm btn-secondary" title="Pause/resume the AI for this chat">
                             <i data-lucide="bot" class="w-3 h-3 mr-1 inline"></i><span id="botToggleLabel">Bot on</span>
                         </button>
+
+                        {{-- Phone only. The header cannot hold five controls
+                             beside a name, so the two that are occasional —
+                             transfer and shared media — move in here and the
+                             two you reach for constantly (status, bot on/off)
+                             stay on the bar. Same proxy approach as the
+                             composer: these click the real buttons, which are
+                             hidden rather than removed, so nothing here has a
+                             second copy of the logic to drift out of step. --}}
+                        <div class="tva-hdrmore tva-phone-only">
+                            <button type="button" class="btn btn-sm btn-secondary" id="hdrMoreBtn"
+                                    title="More actions" aria-haspopup="true" aria-expanded="false">
+                                <i data-lucide="more-vertical" class="w-3 h-3"></i>
+                            </button>
+                            <div class="tva-pop tva-cmenu" id="hdrMoreMenu">
+                                <button onclick="closePops();document.getElementById('transferBtn').click();">
+                                    <i data-lucide="user-plus" class="w-4 h-4"></i> Transfer conversation
+                                </button>
+                                <button onclick="closePops();document.getElementById('galleryBtn').click();">
+                                    <i data-lucide="image" class="w-4 h-4"></i> Shared media
+                                </button>
+                                <button onclick="closePops();document.getElementById('botToggle').click();">
+                                    <i data-lucide="bot" class="w-4 h-4"></i>
+                                    <span id="hdrMoreBotLabel">Pause the AI</span>
+                                </button>
+                                {{-- Handoff only exists in some states, so this
+                                     entry mirrors the real button's visibility
+                                     when the menu opens rather than offering an
+                                     action that would do nothing. --}}
+                                <button data-proxy="handoff" style="display:none;"
+                                        onclick="closePops();document.getElementById('handoffBtn').click();">
+                                    <i data-lucide="user-check" class="w-4 h-4"></i>
+                                    <span id="hdrMoreHandoffLabel">Handoff</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -978,6 +1126,18 @@
                         <button class="wa-only" onclick="composerAction('flow')"><i data-lucide="clipboard-list" class="w-4 h-4"></i> Send a Flow form</button>
                         <button class="wa-only" onclick="composerAction('catalog')"><i data-lucide="shopping-bag" class="w-4 h-4"></i> Send catalog products</button>
                         <button class="wa-only" onclick="composerAction('template')"><i data-lucide="file-text" class="w-4 h-4"></i> Send template</button>
+                        {{-- Phone only. Emoji and voice leave the composer row
+                             there so the text field gets the width back, and
+                             land here instead. They drive the ORIGINAL buttons
+                             rather than duplicating their logic — those still
+                             exist, just hidden, so recording and the picker
+                             keep their single implementation. --}}
+                        <button class="tva-cmenu__phone" onclick="closePops();document.getElementById('btnEmoji').click();">
+                            <span style="width:16px;text-align:center;">😊</span> Emoji
+                        </button>
+                        <button class="tva-cmenu__phone" onclick="closePops();document.getElementById('btnVoice').click();">
+                            <i data-lucide="mic" class="w-4 h-4"></i> Record voice note
+                        </button>
                     </div>
 
                     {{-- Why the composer is locked (or why a reply still works
@@ -986,7 +1146,13 @@
                     <div id="policyNote" class="tva-policy" hidden></div>
 
                     <div class="tva-composer-row" id="composerRow">
-                        <button class="tva-iconbtn" id="btnMore" title="More options"><i data-lucide="plus" class="w-4 h-4"></i></button>
+                        {{-- One button, two faces: a plus on desktop where it
+                             only adds attachments, three dots on a phone where
+                             it also carries emoji and voice. --}}
+                        <button class="tva-iconbtn" id="btnMore" title="More options">
+                            <i data-lucide="plus" class="w-4 h-4 tva-desk-only"></i>
+                            <i data-lucide="more-vertical" class="w-4 h-4 tva-phone-only"></i>
+                        </button>
                         <button class="tva-iconbtn" id="btnEmoji" title="Emoji">😊</button>
                         <button class="tva-iconbtn" id="btnVoice" title="Record voice note"><i data-lucide="mic" class="w-4 h-4"></i></button>
                         <textarea id="chatInput" rows="1" placeholder="Type a message…"></textarea>
@@ -1788,7 +1954,7 @@ function renderContact(){
 
     const chans = Object.entries(m.by_channel || {});
     parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Messages</div>'
-        + '<div class="tva-cp__row"><i data-lucide="messages-square"></i>Total<b>' + m.total + '</b></div>'
+        + '<div class="tva-cp__row"><i data-lucide="message-circle"></i>Total<b>' + m.total + '</b></div>'
         + '<div class="tva-cp__row"><i data-lucide="arrow-down-left"></i>From customer<b>' + m.inbound + '</b></div>'
         + '<div class="tva-cp__row"><i data-lucide="arrow-up-right"></i>From you<b>' + m.outbound + '</b></div>'
         + chans.map(([ch, n]) => '<div class="tva-cp__row">' + channelIcon(ch) + h(channelLabel(ch)) + '<b>' + n + '</b></div>').join('')
@@ -2421,7 +2587,87 @@ function closePops(){
     const fp=document.getElementById('filterPanel');
     if(fp){ fp.hidden=true; document.getElementById('filterBtn').classList.remove('is-open'); }
     ['statusMenu','transferMenu'].forEach(id=>{ const el=document.getElementById(id); if(el) el.hidden=true; });
+    // The phone header menu is class-driven, so it closes on its own terms.
+    // Its entries call closePops() before clicking through to the real
+    // control, which is exactly what dismisses it.
+    const hm=document.getElementById('hdrMoreMenu');
+    if(hm) hm.classList.remove('is-open');
+    const hb=document.getElementById('hdrMoreBtn');
+    if(hb) hb.setAttribute('aria-expanded','false');
 }
+
+// Phone-only header menu. Opens on tap, and every other popover closing also
+// closes this one, so two menus can never be open at once.
+(function(){
+    const btn=document.getElementById('hdrMoreBtn');
+    const menu=document.getElementById('hdrMoreMenu');
+    if(!btn||!menu) return;
+    btn.addEventListener('click', e=>{
+        e.stopPropagation();
+        const show=!menu.classList.contains('is-open');
+        closePops();
+
+        if(show){
+            // Mirror the real controls, which the menu only proxies: handoff
+            // exists in some states and not others, and the bot toggle's label
+            // flips. Read at open time so the menu can never describe a
+            // different state from the button it will click.
+            const ho=document.getElementById('handoffBtn');
+            const hoEntry=menu.querySelector('[data-proxy="handoff"]');
+            if(hoEntry){
+                const live = ho && ho.style.display!=='none';
+                hoEntry.style.display = live ? 'flex' : 'none';
+                if(live && ho.textContent.trim()) {
+                    document.getElementById('hdrMoreHandoffLabel').textContent = ho.textContent.trim();
+                }
+            }
+            const lbl=document.getElementById('botToggleLabel');
+            const botLbl=document.getElementById('hdrMoreBotLabel');
+            if(lbl && botLbl){
+                botLbl.textContent = /off/i.test(lbl.textContent) ? 'Resume the AI' : 'Pause the AI';
+            }
+        }
+
+        menu.classList.toggle('is-open', show);
+        btn.setAttribute('aria-expanded', show?'true':'false');
+        if(show && window.lucide) try{ lucide.createIcons(); }catch(_){}
+    });
+    // A tap anywhere else dismisses it, matching the composer popovers.
+    document.addEventListener('click', e=>{
+        if(!menu.classList.contains('is-open')) return;
+        if(menu.contains(e.target)||btn.contains(e.target)) return;
+        menu.classList.remove('is-open');
+        btn.setAttribute('aria-expanded','false');
+    });
+})();
+
+// Reaching for the text field means you are done with whatever menu is open.
+// On a phone the composer menu covers most of the thread, so leaving it up
+// while you type hides the conversation you are replying to. Both events are
+// needed: `focus` catches the keyboard and a tap that moves focus, `click`
+// catches a tap on a field that already had it.
+(function(){
+    const input=document.getElementById('chatInput');
+    if(!input) return;
+    ['focus','click'].forEach(ev=> input.addEventListener(ev, ()=>closePops()));
+})();
+
+// The avatar is the natural place to tap for "who is this?", and on a phone
+// it is the only affordance left once the header sheds its buttons. Opens the
+// same profile panel as before, which on this width is a full overlay with its
+// own close button.
+(function(){
+    const av=document.getElementById('hdrAvatar');
+    if(!av) return;
+    av.style.cursor='pointer';
+    av.setAttribute('role','button');
+    av.setAttribute('tabindex','0');
+    av.setAttribute('title','View contact profile');
+    av.addEventListener('click', ()=>openContact());
+    av.addEventListener('keydown', e=>{
+        if(e.key==='Enter'||e.key===' '){ e.preventDefault(); openContact(); }
+    });
+})();
 async function openTemplates(){
     const panel=document.getElementById('tplPanel'); const show=panel.style.display!=='block'; closePops();
     if(!show) return; panel.style.display='block'; tplChosen=null;

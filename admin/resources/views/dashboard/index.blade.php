@@ -2,36 +2,36 @@
 
 @section('content')
 <style>
-    /* ── Top-left corner, dashboard only ───────────────────────────────
-       Dashboard is the first item in the sidebar, so the corner wedge above
-       its active menu item ends up level with the work area's top-left corner
-       — the one place the shared rule in partials/theme also draws a curve.
+    /* ── The rail drops below the work area's corner ────────────────────
+       Dashboard is the FIRST item in the sidebar, and that position is the
+       whole problem. The rail's first menu item begins 113px down — 16px of
+       logo padding, a ~28px lockup, then the divider's 24px margins either
+       side — and the wedge that curves the top of an active item sits 30px
+       above it, spanning 83-113. The work area's rounded corner spans 88-118.
 
-       The two do not sit on top of each other: the sidebar's wedge is at the
-       RAIL's right edge and the shared one at the CONTENT's left edge, about
-       20px apart, so both drawn together read as two curves with a navy
-       splinter caught between them.
+       So on this page, and only this page, both draw a curve in the same band,
+       20px apart and facing opposite ways, and what is caught between them
+       reads as a splinter in the corner.
 
-       The content's corner is the one to keep — it is the corner every other
-       page shows, and dropping it instead leaves this page square. So the
-       sidebar's TOP wedge stands down here. Its bottom wedge (::after) is
-       untouched: that one sits below the pill, well clear of the corner, and
-       still smooths the pill back into the page.
+       Neither is worth giving up: the corner is what every other page shows,
+       and ::before is what gives the tab the same curve on top that ::after
+       gives it underneath. Dropping the rail 40px moves the tab clear of 118
+       with a few pixels to spare, so both keep their shape.
 
-       Scoped to this page, which is the only page where Dashboard is the
-       active item and therefore the only page where they collide. */
-    html:not(.dark) .side-nav .side-menu--active::before { display: none; }
+       Scoped here on purpose — no other page has an active item at that
+       height, so no other rail needs moving. The trade is that the menu sits
+       40px lower on the Dashboard than elsewhere. */
+    html:not(.dark) .side-nav > ul { margin-top: 40px; }
 
-    /* Dropping that wedge also drops the curve it was putting on the pill's
-       own top edge, which left the tab ending in a hard square corner. The
-       curve is given back to the pill directly instead — on the pill and on
-       the block that carries it across to the content, since the two together
-       form the tab's silhouette and rounding only one leaves a step. Nothing
-       here reaches into the content's corner, so the collision does not come
-       back. */
-    html:not(.dark) .side-nav .side-menu--active,
-    html:not(.dark) .side-nav .side-menu--active .side-menu__icon::before {
-        border-top-right-radius: 16px;
+    /* Nudges the top wedge 5px right so its edge meets the tab instead of
+       leaving a sliver. Scaling or rotating it was the wrong lever — the wedge
+       is not the wrong size or angle, it is simply parked 5px short.
+
+       Light mode only: the gap comes from the 40px rail offset above, which is
+       itself light-only, so in dark the wedge is already where the theme put
+       it and moving it would introduce the very gap this closes. */
+    html:not(.dark) .side-nav > ul > li > .side-menu.side-menu--active::before {
+        right: -5px;
     }
 
     /* ── KPI cards ─────────────────────────────────────────────────── */

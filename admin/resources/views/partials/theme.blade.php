@@ -138,13 +138,19 @@
             radial-gradient(circle 30px at 0 100%,    rgba(27,57,98,0) 0 29px, #1b3962 30px),
             linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
         background-size: 30px 30px, 30px 30px, auto;
-        background-position: 0 68px, 100% 68px, 0 0;
+        /* 67px, not 68: the corner layers are pulled up a pixel so they OVERLAP
+           the band rather than butting against it. Meeting exactly at 68 leaves
+           the two edges to antialias against each other, and the hairline of
+           page colour that survives between them reads — right where the arc
+           is — as a thin curved splinter sitting in the corner. */
+        background-position: 0 67px, 100% 67px, 0 0;
         background-repeat: no-repeat;
     }
     /* Those nested wrappers inherit the page instead of painting their own
        slightly-different slate, which otherwise shows as a faint rounded
        panel edge around the content. */
     html:not(.dark) .content .content { background: transparent; }
+
     html:not(.dark) .top-bar { border-bottom-color: rgba(255,255,255,.10); }
 
     /* The chrome is dark in BOTH themes, so its contents must not follow the
