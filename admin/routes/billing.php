@@ -65,9 +65,14 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/billing/cards/default', [PaymentMethodController::class, 'makeDefault'])->name('billing.cards.default');
         Route::delete('/billing/cards',         [PaymentMethodController::class, 'destroy'])->name('billing.cards.destroy');
 
-        // Add-ons (extra seats / AI agents). Field is `addon`, not `addon_id` —
-        // DecodeHashids rewrites `*_id` keys.
-        Route::post('/billing/addons', [AddonController::class, 'update'])->name('billing.addons.update');
+        // Add-ons (extra seats / AI agents). Their own page, NOT a step inside
+        // plan selection: someone who already pays for a plan and needs one
+        // more seat should never be shown the plan ladder again.
+        // Field is `addon`, not `addon_id` — DecodeHashids rewrites `*_id`.
+        Route::get ('/billing/addons',         [AddonController::class, 'index'])->name('billing.addons');
+        Route::post('/billing/addons/preview', [AddonController::class, 'preview'])
+            ->middleware('throttle:60,1')->name('billing.addons.preview');
+        Route::post('/billing/addons',         [AddonController::class, 'update'])->name('billing.addons.update');
 
         // Branded invoice. `invoice` is deliberately not an *_id param name.
         Route::get('/billing/invoices/{invoice}', [BillingController::class, 'invoice'])
