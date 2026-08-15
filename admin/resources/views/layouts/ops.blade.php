@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="{{ tva_theme_class() }}">
     @include('layouts.head')
 
+    @include('partials.theme')
     {{-- Override the customer's neon-green palette with amber so the
          ops console is visually unmistakable. Same UI primitives
          (sidebar, topbar, .tva-* card classes) — different accent. --}}

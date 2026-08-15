@@ -165,3 +165,32 @@ if (! function_exists('tva_seo_all')) {
         return $defaults;
     }
 }
+
+if (! function_exists('tva_theme')) {
+    /**
+     * The visitor's colour scheme: 'light' (default) or 'dark'.
+     *
+     * Resolved SERVER-SIDE from a cookie so the `dark` class can be written
+     * into the initial HTML. Deciding this in JavaScript after paint is what
+     * causes the white flash on every navigation for a dark-mode user — the
+     * page renders light, then repaints. A cookie costs nothing and removes
+     * the flash entirely.
+     *
+     * Light is the default because that is what an unconfigured visitor
+     * should see; dark is a deliberate choice they opt into.
+     */
+    function tva_theme(): string
+    {
+        $theme = request()->cookie('tva_theme');
+
+        return $theme === 'dark' ? 'dark' : 'light';
+    }
+}
+
+if (! function_exists('tva_theme_class')) {
+    /** Class for the <html> element — '' in light, 'dark' in dark. */
+    function tva_theme_class(): string
+    {
+        return tva_theme() === 'dark' ? 'dark' : '';
+    }
+}

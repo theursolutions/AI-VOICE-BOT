@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="{{ tva_theme_class() }}">
     <!-- BEGIN: Head -->
     @include('layouts.head')
+    @include('partials.theme')
     {{-- Per-project widget theme — applied app-wide so all admin pages
          share the same accent colors as the embeddable widget. --}}
     @php $tw = $tvaWidget ?? \App\Http\Controllers\Admin\WidgetSettingsController::DEFAULTS; @endphp

@@ -272,6 +272,25 @@
     <!-- END: Search -->
     <!-- END: Search -->
     
+    <!-- BEGIN: Theme -->
+    {{-- The icon shows what you will GET, not what you are on — the
+         commonest confusion with these controls. --}}
+    <div class="intro-x mr-3 sm:mr-4">
+        <button type="button" class="tva-theme" onclick="tvaToggleTheme()"
+                aria-label="Switch between light and dark" title="Switch theme">
+            <svg class="tva-theme__moon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+            <svg class="tva-theme__sun" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4"/>
+                <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+            </svg>
+        </button>
+    </div>
+    <!-- END: Theme -->
+
     <!-- BEGIN: Notifications -->
     <div class="intro-x dropdown mr-auto sm:mr-6">
         {{-- Bell kept for layout continuity, but WITHOUT the template's demo

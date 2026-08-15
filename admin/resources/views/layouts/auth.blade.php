@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="{{ tva_theme_class() }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,6 +11,7 @@
          been sent to the wrong place. noindex, follow — crawlable so the
          tag is read, and so the links back into the site still count. --}}
     <meta name="robots" content="noindex, follow">
+    @include('partials.theme')
     <meta name="description" content="Sign in to your {{ tva_setting('content.brand_name', 'Serve AI') }} workspace.">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {{-- Same source as layouts/head.blade.php so the tab title is consistent
