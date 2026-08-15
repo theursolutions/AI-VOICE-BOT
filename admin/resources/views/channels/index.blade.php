@@ -152,6 +152,14 @@
                     : 'Signs in with Facebook; your Instagram account must be linked to a Facebook Page' }}">
             <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('instagram', 16) !!}</span> Connect Instagram
         </button>
+        {{-- Instagram gets its own QR handoff for the same reason WhatsApp
+             does, only more so: Instagram blocks logins it cannot tie to a
+             device the account has used before, and the phone running the
+             Instagram app is that device. --}}
+        <button type="button" onclick="openHandoff('instagram')" class="btn btn-secondary"
+                title="Finish on the phone where the Instagram app is signed in">
+            <i data-lucide="qr-code" class="w-4 h-4 mr-1 inline"></i> Instagram on phone
+        </button>
         <button type="button" onclick="connectWhatsApp()" class="btn text-white" style="background:#25d366;">
             <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('whatsapp', 16) !!}</span> Connect WhatsApp
         </button>
@@ -343,12 +351,15 @@
     <div class="tva-modal__backdrop" data-tva-modal-close></div>
     <div class="tva-modal__panel" style="max-width:440px;">
         <div class="tva-modal__head">
-            <i data-lucide="qr-code" class="w-4 h-4 mr-2 inline" style="color:#25d366;"></i>
+            <i data-lucide="qr-code" class="w-4 h-4 mr-2 inline" id="handoffIcon" style="color:#25d366;"></i>
             Finish on your phone
             <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
         </div>
         <div class="tva-modal__body" style="text-align:center;">
-            <p class="text-sm text-slate-500" style="margin:0 0 16px;">
+            {{-- Set per provider by openHandoff(): the reason to move to the
+                 phone is different for each, and "your WhatsApp lives there"
+                 is nonsense on an Instagram handoff. --}}
+            <p class="text-sm text-slate-500" style="margin:0 0 16px;" id="handoffBlurb">
                 Scan with your phone camera. Your WhatsApp lives there, so it's the quickest place to finish.
             </p>
 
@@ -493,6 +504,21 @@
         img.hidden = true; load.hidden = false;
         state.textContent = 'Waiting for you to scan…';
         state.style.color = '#64748b';
+
+        // Why the phone is the right place differs by provider — and for
+        // Instagram it is the whole point: Instagram refuses a login it cannot
+        // tie to a device that account has signed in from before, and the
+        // phone with the Instagram app on it is exactly that device.
+        var BLURB = {
+            whatsapp:  ['Scan with your phone camera. Your WhatsApp lives there, so it’s the quickest place to finish.', '#25d366'],
+            instagram: ['Scan with your phone camera. Finishing where the Instagram app is already signed in avoids Instagram’s “log in on another device” check.', '#dc2743'],
+            facebook:  ['Scan with your phone camera to finish signing in there instead.', '#1877f2'],
+        };
+        var b = BLURB[provider] || BLURB.facebook;
+        document.getElementById('handoffBlurb').textContent = b[0];
+        var ic = document.getElementById('handoffIcon');
+        if (ic) ic.style.color = b[1];
+
         modal.removeAttribute('hidden');
 
         fetch(HANDOFF_URL + '/' + provider + '?project_id={{ $projectId }}', { headers: { 'Accept': 'application/json' } })

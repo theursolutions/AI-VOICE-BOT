@@ -226,7 +226,14 @@ class ChannelOnboardingTest extends TestCase
         );
     }
 
-    public function test_a_payload_with_no_long_lived_token_is_not_offered_as_retryable(): void
+    /**
+     * Failing at the long-lived exchange used to be terminal, which sent the
+     * customer back through Meta's consent screen for a problem that was
+     * ours. The short-lived token we already hold is a perfectly good basis
+     * for a retry inside its own lifetime — and that exchange is the step
+     * most likely to fail transiently.
+     */
+    public function test_a_fresh_short_lived_token_is_enough_to_retry(): void
     {
         $log      = $this->freshLog();
         $pipeline = $this->pipeline(tokenExchangeFails: true);
@@ -235,9 +242,40 @@ class ChannelOnboardingTest extends TestCase
         try { $pipeline->process($payload, $log); } catch (\Throwable $e) {}
 
         $payload->refresh();
-        $this->assertFalse($payload->isRetryable(), 'Without an anchor there is genuinely nothing to replay.');
-        $this->assertNotNull($payload->retryBlockedReason());
+        $this->assertNotNull($payload->short_lived_token, 'The code exchange succeeded, so this must be stored.');
+        $this->assertNull($payload->long_lived_token);
+        $this->assertTrue($payload->isRetryable(), 'A short-lived token minted moments ago is still usable.');
+        $this->assertNull($payload->retryBlockedReason());
         $this->assertSame(OnboardingService::ERR_TOKEN_EXCHANGE, $payload->error_code);
+    }
+
+    /** …but only inside its lifetime. Past that there is nothing to replay. */
+    public function test_a_stale_short_lived_token_is_not_offered_as_retryable(): void
+    {
+        $log      = $this->freshLog();
+        $pipeline = $this->pipeline(tokenExchangeFails: true);
+        $payload  = $pipeline->ingestCode(self::PROJECT_ID, 1, ChannelConnection::PROVIDER_WHATSAPP, 'AUTH-CODE', 'https://example.test/callback', $log);
+
+        try { $pipeline->process($payload, $log); } catch (\Throwable $e) {}
+
+        // Age it past the retry window. Meta gives these 1–2 hours; we stop
+        // offering a retry at 50 minutes.
+        $payload->refresh();
+        $payload->created_at = now()->subHours(2);
+        $payload->save();
+
+        $this->assertFalse($payload->isRetryable(), 'An expired credential cannot be replayed.');
+        $this->assertStringContainsString('expired', strtolower((string) $payload->retryBlockedReason()));
+    }
+
+    /** With nothing stored at all, the customer genuinely must start again. */
+    public function test_a_payload_with_no_token_at_all_is_not_retryable(): void
+    {
+        $log     = $this->freshLog();
+        $payload = $this->pipeline()->ingestCode(self::PROJECT_ID, 1, ChannelConnection::PROVIDER_WHATSAPP, 'AUTH-CODE', 'https://example.test/callback', $log);
+
+        $this->assertFalse($payload->isRetryable());
+        $this->assertStringContainsString('started again', (string) $payload->retryBlockedReason());
     }
 
     public function test_expired_stored_credentials_block_a_retry(): void

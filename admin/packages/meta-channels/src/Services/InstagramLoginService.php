@@ -96,20 +96,29 @@ class InstagramLoginService
             ],
         ]);
 
-        if (empty($data['access_token'])) {
+        // Meta documents this response wrapped — {"data":[{access_token,…}]} —
+        // but is returning it flat in practice. Both shapes are accepted
+        // rather than betting on either: a wrapper appearing (or vanishing)
+        // would otherwise break onboarding with "returned no access_token"
+        // while Meta was in fact returning one.
+        $node = isset($data['data'][0]) && is_array($data['data'][0])
+            ? $data['data'][0]
+            : $data;
+
+        if (empty($node['access_token'])) {
             throw new \RuntimeException('Instagram returned no access_token from the code exchange.');
         }
 
         // `permissions` comes back as an array on newer versions and a
         // comma-joined string on older ones.
-        $perms = $data['permissions'] ?? [];
+        $perms = $node['permissions'] ?? [];
         if (is_string($perms)) {
             $perms = array_values(array_filter(array_map('trim', explode(',', $perms))));
         }
 
         return [
-            'token'       => (string) $data['access_token'],
-            'user_id'     => (string) ($data['user_id'] ?? ''),
+            'token'       => (string) $node['access_token'],
+            'user_id'     => (string) ($node['user_id'] ?? ''),
             'permissions' => (array) $perms,
         ];
     }
@@ -127,12 +136,17 @@ class InstagramLoginService
      */
     public function longLived(string $shortLived): array
     {
-        $data = $this->request('GET', $this->graph('access_token', false), [
-            'query' => [
-                'grant_type'    => 'ig_exchange_token',
-                'client_secret' => $this->cfg['app_secret'],
-                'access_token'  => $shortLived,
-            ],
+        // Meta documents this as an UNVERSIONED GET on graph.instagram.com,
+        // and that is tried first. The versioned path is tried second because
+        // the documented one returns "Unsupported request - method type: get"
+        // on some apps — Meta's router treats an unrecognised root path as a
+        // node lookup, which is why the error talks about the method rather
+        // than the path. Trying both costs one extra request on the failure
+        // path and nothing on the happy one.
+        $data = $this->tokenRequest('access_token', [
+            'grant_type'    => 'ig_exchange_token',
+            'client_secret' => $this->cfg['app_secret'],
+            'access_token'  => $shortLived,
         ]);
 
         if (empty($data['access_token'])) {
@@ -159,11 +173,9 @@ class InstagramLoginService
      */
     public function refresh(string $longLived): array
     {
-        $data = $this->request('GET', $this->graph('refresh_access_token', false), [
-            'query' => [
-                'grant_type'   => 'ig_refresh_token',
-                'access_token' => $longLived,
-            ],
+        $data = $this->tokenRequest('refresh_access_token', [
+            'grant_type'   => 'ig_refresh_token',
+            'access_token' => $longLived,
         ]);
 
         if (empty($data['access_token'])) {
@@ -281,6 +293,38 @@ class InstagramLoginService
 
     // ── internals ────────────────────────────────────────────────────
 
+    /**
+     * A token endpoint call, tried unversioned then versioned.
+     *
+     * Both are GETs to graph.instagram.com and differ only in whether the
+     * path carries an API version. Meta documents the unversioned form, but
+     * returns "Unsupported request - method type: get" for it on some apps —
+     * a message about the METHOD when the actual problem is the PATH, which
+     * is why the first failure here was so hard to place.
+     *
+     * The failure of the second attempt carries both URLs, so the next person
+     * to hit this can see exactly what was tried.
+     */
+    private function tokenRequest(string $path, array $query): array
+    {
+        $unversioned = $this->graph($path, false);
+
+        try {
+            return $this->request('GET', $unversioned, ['query' => $query]);
+        } catch (\Throwable $first) {
+            $versioned = $this->graph($path, true);
+
+            try {
+                return $this->request('GET', $versioned, ['query' => $query]);
+            } catch (\Throwable $second) {
+                throw new \RuntimeException(
+                    $first->getMessage()
+                    . ' [tried ' . $unversioned . ' and ' . $versioned . ']'
+                );
+            }
+        }
+    }
+
     /** Build a graph.instagram.com URL, versioned unless told otherwise. */
     private function graph(string $path, bool $versioned = true): string
     {
@@ -307,7 +351,13 @@ class InstagramLoginService
                 ?? $json['error_message']
                 ?? ('HTTP ' . $resp->getStatusCode());
 
-            throw new \RuntimeException('Instagram: ' . $msg);
+            // The path is part of the diagnosis, not noise. Meta's messages
+            // routinely describe the wrong thing — "Unsupported request -
+            // method type: get" is really "I do not recognise this path" —
+            // and without the URL there is nothing to check it against.
+            throw new \RuntimeException(
+                'Instagram: ' . $msg . ' (' . $method . ' ' . strtok($url, '?') . ')'
+            );
         }
 
         return is_array($json) ? $json : [];

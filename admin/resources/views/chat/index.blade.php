@@ -35,18 +35,34 @@
     .tva-seg__n:empty { display:none; }
 
     /* ── Quick filters ───────────────────────────────────────────────
-       WRAPS, because it has to. Four labelled chips are ~374px of content and
-       the column gives them 302px (330px less 14px padding either side).
-       Flex items do not shrink below their content by default and the labels
-       are nowrap, so on one line the last chip was pushed straight out past
-       the column border and over the divider.
-       Wrapping is the honest fix: nothing is hidden and nothing is clipped. */
-    .tva-qf { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin-top:9px; }
-    /* margin-auto rather than a spacer div: on a single line it still pins
-       Filters to the right, and when the row wraps it pins it to the right of
-       whichever line it lands on — a flex-grow spacer would claim a line of
-       its own. */
+       One line, no wrap. The column gives this row 302px (330px less 14px
+       padding either side); four LABELLED chips wanted ~374px, which is why
+       the last one used to be pushed out past the border. Three 28px icon
+       toggles plus the labelled Filters button come to ~180px, so it fits
+       with room to spare at any sane column width. */
+    .tva-qf { display:flex; align-items:center; gap:6px; margin-top:9px; }
+    /* Pins Filters right without a spacer div. */
     #filterBtn { margin-left:auto; }
+
+    .tva-qf__ico { position:relative; width:28px; height:28px; flex-shrink:0;
+                   display:inline-flex; align-items:center; justify-content:center;
+                   border:1px solid #e2e8f0; background:#fff; color:#64748b;
+                   border-radius:8px; cursor:pointer; transition:.12s; }
+    .tva-qf__ico svg { width:14px !important; height:14px !important; }
+    .tva-qf__ico:hover { border-color:#c7d2fe; color:#4f46e5; }
+    .tva-qf__ico.is-on { background:#4f46e5; border-color:#4f46e5; color:#fff; }
+    .tva-qf__ico--alert.is-on { background:#dc2626; border-color:#dc2626; }
+    html.dark .tva-qf__ico { background:#1e293b; border-color:#334155; color:#cbd5e1; }
+
+    /* Count rides the corner of the icon. Only rendered when non-zero, so the
+       row stays quiet until it actually has news. */
+    .tva-qf__ico .tva-qf__n { position:absolute; top:-5px; right:-5px; min-width:15px; height:15px;
+                              padding:0 3.5px; border-radius:999px; background:#4f46e5; color:#fff;
+                              font-size:9px; font-weight:700; line-height:15px; text-align:center;
+                              box-shadow:0 0 0 2px #fff; }
+    .tva-qf__ico--alert .tva-qf__n { background:#dc2626; }
+    .tva-qf__ico.is-on .tva-qf__n { background:#0f172a; }
+    html.dark .tva-qf__ico .tva-qf__n { box-shadow:0 0 0 2px #0f172a; }
     .tva-qf__chip { display:inline-flex; align-items:center; gap:5px; border:1px solid #e2e8f0;
                     background:#fff; color:#475569; font-size:11.5px; font-weight:600;
                     padding:5px 9px; border-radius:999px; cursor:pointer; transition:.12s; white-space:nowrap; }
@@ -65,7 +81,6 @@
 
     .tva-qf__n { font-size:10px; font-weight:700; opacity:.8; font-variant-numeric:tabular-nums; }
     .tva-qf__n:empty { display:none; }
-    .tva-qf__dot { width:7px; height:7px; border-radius:50%; background:#6366f1; flex-shrink:0; }
     /* How many filters are on, inline in the button rather than floating off
        its corner — a notification-style dot read as an alert, when all it is
        reporting is a count. */
@@ -184,30 +199,64 @@
        Icon + value only. Four numbers fit in a header exactly as long as
        none of them spells itself out; every chip carries its full wording in
        a title attribute instead. */
-    .tva-mx { display:flex; align-items:center; gap:4px; }
-    .tva-mx__c { position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:4px;
-                 background:#f8fafc; border:1px solid #e8edf3; border-radius:7px;
-                 padding:3px 7px; font-size:11px; color:#64748b; white-space:nowrap; cursor:default; }
-    .tva-mx__c b { font-weight:700; color:#334155; font-variant-numeric:tabular-nums; }
-    .tva-mx__c svg { width:12px !important; height:12px !important; opacity:.7; flex-shrink:0; }
-    html.dark .tva-mx__c { background:#0f172a; border-color:#334155; color:#94a3b8; }
-    html.dark .tva-mx__c b { color:#e2e8f0; }
+    .tva-mx { display:flex; align-items:center; gap:5px; }
+    /* Label above value. The extra 8px line is what makes the strip readable
+       without hovering anything — four bare numbers with only icons to tell
+       them apart could not be. */
+    .tva-mx__c { position:relative; overflow:hidden; display:inline-flex; align-items:center; gap:5px;
+                 background:#f8fafc; border:1px solid #e8edf3; border-left-width:2px; border-radius:7px;
+                 padding:3px 8px; white-space:nowrap; cursor:default; }
+    .tva-mx__t { display:flex; flex-direction:column; line-height:1.15; }
+    .tva-mx__lbl { font-size:8px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+                   color:#94a3b8; }
+    .tva-mx__v { font-size:11.5px; font-weight:700; color:#334155; font-variant-numeric:tabular-nums; }
+    .tva-mx__c svg { width:13px !important; height:13px !important; flex-shrink:0; }
+    html.dark .tva-mx__c { background:#0f172a; border-color:#334155; }
+    html.dark .tva-mx__v { color:#e2e8f0; }
+    html.dark .tva-mx__lbl { color:#64748b; }
 
-    /* Only the reply-window chip changes colour. If everything signalled
+    /* A distinct accent per metric — the left border and the icon only, never
+       the fill. Enough to tell them apart at a glance without any of them
+       competing with the deadline for alarm. */
+    .tva-mx__c--started { border-left-color:#94a3b8; } .tva-mx__c--started svg { color:#94a3b8; }
+    .tva-mx__c--first   { border-left-color:#8b5cf6; } .tva-mx__c--first svg   { color:#8b5cf6; }
+    .tva-mx__c--rate    { border-left-color:#0d9488; } .tva-mx__c--rate svg    { color:#0d9488; }
+    .tva-mx__c--lead    { border-left-color:#4f46e5; } .tva-mx__c--lead svg    { color:#4f46e5; }
+    .tva-mx__c--lead .tva-mx__v { text-transform:capitalize; }
+
+    /* Only the reply-window chip fills with colour. If everything signalled
        urgency, nothing would. */
-    .tva-mx__c.is-ok   { background:#f0fdf4; border-color:#bbf7d0; color:#15803d; }
-    .tva-mx__c.is-ok b { color:#166534; }
-    .tva-mx__c.is-warn { background:#fffbeb; border-color:#fde68a; color:#b45309; }
-    .tva-mx__c.is-warn b { color:#92400e; }
-    .tva-mx__c.is-dead { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
-    .tva-mx__c.is-dead b { color:#991b1b; }
+    .tva-mx__c.is-ok   { background:#f0fdf4; border-color:#bbf7d0; border-left-color:#22c55e; }
+    .tva-mx__c.is-ok   svg, .tva-mx__c.is-ok .tva-mx__lbl { color:#15803d; }
+    .tva-mx__c.is-ok   .tva-mx__v { color:#166534; }
+    .tva-mx__c.is-warn { background:#fffbeb; border-color:#fde68a; border-left-color:#f59e0b; }
+    .tva-mx__c.is-warn svg, .tva-mx__c.is-warn .tva-mx__lbl { color:#b45309; }
+    .tva-mx__c.is-warn .tva-mx__v { color:#92400e; }
+    .tva-mx__c.is-dead { background:#fef2f2; border-color:#fecaca; border-left-color:#ef4444; }
+    .tva-mx__c.is-dead svg, .tva-mx__c.is-dead .tva-mx__lbl { color:#b91c1c; }
+    .tva-mx__c.is-dead .tva-mx__v { color:#991b1b; }
+
     /* Fraction of the 24 hours still left — the trend, without arithmetic. */
-    .tva-mx__bar { position:absolute; left:0; bottom:0; height:2px; background:currentColor; opacity:.5; }
-    .tva-mx__c--lead b { text-transform:capitalize; }
+    .tva-mx__bar { position:absolute; left:0; bottom:0; height:2px; background:currentColor; opacity:.45;
+                   transition:width 1s linear; }
+
+    /* Blinks once a second. Without it a slow-moving number is indistinguishable
+       from one that failed to load — this is the cheapest possible proof the
+       clock is running. */
+    .tva-mx__pulse { width:5px; height:5px; border-radius:50%; background:currentColor; flex-shrink:0;
+                     animation:tvaPulse 1s ease-in-out infinite; }
+    @keyframes tvaPulse { 0%,100% { opacity:.25; } 50% { opacity:1; } }
+    @media (prefers-reduced-motion: reduce) {
+        .tva-mx__pulse { animation:none; opacity:.7; }
+        .tva-mx__bar { transition:none; }
+    }
 
     @media (max-width: 1180px) {
         /* Narrow windows keep the deadline and drop the context. */
-        .tva-mx__c:not(.is-ok):not(.is-warn):not(.is-dead) { display:none; }
+        /* Keyed on the metric, not on its tone: the window chip is the one to
+           keep, and matching "has no tone class" would also drop it in the
+           moment before the first tick applies one. */
+        .tva-mx__c:not(.tva-mx__c--window) { display:none; }
     }
 
     /* ── Conversation status control ──────────────────────────────── */
@@ -267,7 +316,6 @@
     .tva-tag--wait  { background:#fffbeb; border-color:#fde68a; color:#b45309; }
     html.dark .tva-tag { background:#0f172a; border-color:#334155; color:#94a3b8; }
 
-    .tva-qf__chip--alert.is-on { background:#fef2f2; border-color:#fecaca; color:#b91c1c; }
 
     /* ── Thread events (transfers) ─────────────────────────────────
        A rule across the full width with the event floated in the middle: it
@@ -330,16 +378,23 @@
        looked like it was missing rather than unstyled. Given the size and
        colour explicitly so it does not depend on the plugin's expectations. */
     .tva-sm__chk input[type="checkbox"] { appearance:none; -webkit-appearance:none;
-        width:15px; height:15px; flex-shrink:0; margin:0; cursor:pointer;
-        border:1.5px solid #cbd5e1; border-radius:4px; background:#fff; position:relative; transition:.12s; }
+        width:17px; height:17px; flex-shrink:0; margin:0; cursor:pointer;
+        border:1.5px solid #cbd5e1; border-radius:5px; background:#fff; transition:.12s; }
     .tva-sm__chk input[type="checkbox"]:hover { border-color:#a5b4fc; }
-    .tva-sm__chk input[type="checkbox"]:checked { background:#4f46e5; border-color:#4f46e5; }
-    /* Tick drawn as a rotated border corner — no icon font or SVG needed. */
-    .tva-sm__chk input[type="checkbox"]:checked::after {
-        content:''; position:absolute; left:4px; top:1px; width:4px; height:8px;
-        border:solid #fff; border-width:0 1.8px 1.8px 0; transform:rotate(45deg); }
-    .tva-sm__chk input[type="checkbox"]:focus-visible { outline:2px solid #a5b4fc; outline-offset:1px; }
-    html.dark .tva-sm__chk input[type="checkbox"] { background:#0f172a; border-color:#475569; }
+    /* Tick as an inline SVG sized to 76% of the box and centred by
+       background-position. The earlier version drew it from two border edges at
+       fixed pixel offsets, which left it small and off-centre — geometry that
+       has to be hand-tuned per box size, and was wrong at this one. */
+    .tva-sm__chk input[type="checkbox"]:checked {
+        background-color:#4f46e5; border-color:#4f46e5;
+        background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5'/%3E%3C/svg%3E");
+        background-repeat:no-repeat; background-position:center; background-size:76% 76%; }
+    .tva-sm__chk input[type="checkbox"]:focus-visible { outline:2px solid #a5b4fc; outline-offset:2px; }
+    html.dark .tva-sm__chk input[type="checkbox"] { background-color:#0f172a; border-color:#475569; }
+
+    .tva-sm__err { font-size:11px; line-height:1.5; color:#b91c1c; background:#fef2f2;
+                   border:1px solid #fecaca; border-radius:7px; padding:6px 9px; }
+    html.dark .tva-sm__err { background:#450a0a; border-color:#7f1d1d; color:#fecaca; }
 
     /* ── Main column ── */
     .tva-chat__main { flex:1 1 auto; display:flex; flex-direction:column; min-width:0; min-height:0; }
@@ -564,23 +619,33 @@
                     <input id="chatSearch" type="text" class="form-control form-control-sm" placeholder="Search conversations…">
                 </div>
 
+                {{-- The three toggles are icon-only so all four fit one line in
+                     a 302px column. Nothing becomes discoverable-by-icon-alone,
+                     which is the usual cost of this: each has a full tooltip,
+                     the same three appear spelled out inside the Filters panel,
+                     and an ACTIVE one names itself in the pill row below. The
+                     count badge appears only when there is something to find,
+                     so the row is quiet until it has news. --}}
                 <div class="tva-qf">
-                    <button type="button" class="tva-qf__chip" data-quick="needs_reply"
-                            title="The customer is waiting and Meta's 24-hour window is still open — you can reply without an approved template">
-                        <i data-lucide="corner-up-left"></i> Waiting
+                    <button type="button" class="tva-qf__ico" data-quick="needs_reply"
+                            aria-label="Waiting for a reply"
+                            title="Waiting — the customer is waiting and Meta's 24-hour window is still open, so you can reply without an approved template">
+                        <i data-lucide="corner-up-left"></i>
                         <span class="tva-qf__n" data-n="needs_reply"></span>
                     </button>
-                    <button type="button" class="tva-qf__chip tva-qf__chip--alert" data-quick="needs_human"
-                            title="The customer asked for a person, or the AI escalated — and nobody has replied yet">
-                        <i data-lucide="hand"></i> Needs a person
+                    <button type="button" class="tva-qf__ico tva-qf__ico--alert" data-quick="needs_human"
+                            aria-label="Needs a person"
+                            title="Needs a person — the customer asked for a human, or the AI escalated, and nobody has replied yet">
+                        <i data-lucide="hand"></i>
                         <span class="tva-qf__n" data-n="needs_human"></span>
                     </button>
-                    <button type="button" class="tva-qf__chip" data-quick="unread" title="Unread conversations">
-                        <span class="tva-qf__dot"></span> Unread
+                    <button type="button" class="tva-qf__ico" data-quick="unread"
+                            aria-label="Unread" title="Unread — the customer has written since anyone opened this">
+                        <i data-lucide="mail"></i>
                         <span class="tva-qf__n" data-n="unread"></span>
                     </button>
 
-                    <button type="button" id="filterBtn" class="tva-qf__chip tva-qf__chip--more" title="More filters">
+                    <button type="button" id="filterBtn" class="tva-qf__chip tva-qf__chip--more" title="All filters">
                         Filters
                         <span id="filterCount" class="tva-qf__badge" hidden></span>
                         <i data-lucide="chevron-down" class="tva-qf__caret"></i>
@@ -1296,14 +1361,26 @@ function applyWindow(d){
 // ── Header metrics ──
 let METRICS = null;
 
-/** "23h 41m" · "48m" · "4m 07s" — coarse far out, precise when it matters. */
+/**
+ * Hours, minutes and seconds with their units spelled out:
+ * "4h 31m 47s" · "31m 47s" · "47s".
+ *
+ * Always to the second. It was "4h 31m", which only changed once a minute — so
+ * for 59 seconds out of every 60 the countdown looked frozen, indistinguishable
+ * from a static number that had failed to load.
+ *
+ * Unit letters rather than a bare "4:31:47" clock, because a colon-separated
+ * triple is ambiguous at a glance — it reads as a time of day just as easily as
+ * a duration.
+ */
 function fmtCountdown(sec){
     if (sec <= 0) return 'Expired';
     const hh=Math.floor(sec/3600), mm=Math.floor((sec%3600)/60), ss=sec%60;
-    if (hh > 0)  return hh+'h '+String(mm).padStart(2,'0')+'m';
-    if (mm >= 5) return mm+'m';
-    // Under five minutes the seconds are the whole point.
-    return mm+'m '+String(ss).padStart(2,'0')+'s';
+    const p = n => String(n).padStart(2,'0');
+
+    if (hh > 0) return hh+'h '+p(mm)+'m '+p(ss)+'s';
+    if (mm > 0) return mm+'m '+p(ss)+'s';
+    return ss+'s';
 }
 
 /** Elapsed time in one unit — "45s", "12m", "3h", "6d". */
@@ -1320,6 +1397,14 @@ function applyMetrics(d){
     renderMetrics();
 }
 
+/**
+ * Every chip carries a VISIBLE label, not just a tooltip.
+ *
+ * Four numbers with only icons to tell them apart meant the header could not
+ * be read without hovering each one — and a tooltip is not an answer when the
+ * question is "what am I looking at?". The label costs one 8px line and
+ * removes the guessing entirely.
+ */
 function renderMetrics(){
     const box = document.getElementById('hdrMetrics');
     if (!box) return;
@@ -1327,53 +1412,100 @@ function renderMetrics(){
 
     const m = METRICS, now = Date.now()/1000, chips = [];
 
+    // Label + value, plus a per-metric accent so the four are distinguishable
+    // at a glance without any of them competing with the deadline for alarm.
+    const chip = (kind, label, value, title, extra='') =>
+        '<span class="tva-mx__c tva-mx__c--'+kind+'" title="'+title+'">'
+        + '<i data-lucide="'+({window:'timer',started:'play',first:'zap',rate:'trending-up',lead:'user-check'}[kind])+'"></i>'
+        + '<span class="tva-mx__t"><span class="tva-mx__lbl">'+label+'</span>'
+        + '<b class="tva-mx__v">'+value+'</b></span>' + extra + '</span>';
+
     // 1. The reply window — the only hard deadline in the inbox, so it leads
-    //    and it is the only chip that changes colour.
+    //    and it is the only chip whose colour changes.
     if (m.window_expires_at) {
         const left = Math.floor(m.window_expires_at - now);
-        const tone = left <= 0 ? 'is-dead' : (left < 7200 ? 'is-warn' : 'is-ok');
-        // Thin bar showing how much of the 24 hours is left, so the trend is
-        // readable at a glance without doing arithmetic on the number.
-        const pct = Math.max(0, Math.min(100, (left / (m.window_seconds||86400)) * 100));
-        chips.push('<span class="tva-mx__c '+tone+'" title="'+(left<=0
-                ? 'Meta’s 24-hour reply window has closed — only an approved template can reopen it'
-                : 'Time left to reply without an approved template')+'">'
-            + '<i data-lucide="timer"></i><b>'+h(fmtCountdown(left))+'</b>'
-            + '<span class="tva-mx__bar" style="width:'+pct.toFixed(1)+'%"></span></span>');
+        const pct  = Math.max(0, Math.min(100, (left / (m.window_seconds||86400)) * 100));
+
+        chips.push('<span id="mxWindow" class="tva-mx__c tva-mx__c--window '+windowTone(left)+'" title="'
+            + (left<=0 ? 'Meta’s 24-hour reply window has closed — only an approved template can reopen it'
+                       : 'Time left to reply without an approved template')+'">'
+            + '<i data-lucide="timer"></i>'
+            + '<span class="tva-mx__t"><span class="tva-mx__lbl">'
+            + (left<=0 ? 'Reply window' : 'Expires in') + '</span>'
+            + '<b class="tva-mx__v" id="mxCountdown">'+h(fmtCountdown(left))+'</b></span>'
+            // A dot that blinks once a second, so the number is visibly live
+            // rather than possibly stale.
+            + (left>0 ? '<span class="tva-mx__pulse"></span>' : '')
+            + '<span class="tva-mx__bar" id="mxBar" style="width:'+pct.toFixed(1)+'%"></span></span>');
     }
 
-    // 2. When it started.
     if (m.started_at) {
-        chips.push('<span class="tva-mx__c" title="Conversation started '+h(new Date(m.started_at*1000).toLocaleString())+'">'
-            + '<i data-lucide="play"></i><b>'+h(fmtDur(now - m.started_at))+'</b></span>');
+        chips.push(chip('started', 'Started', h(fmtDur(now - m.started_at)) + ' ago',
+            'Conversation started '+h(new Date(m.started_at*1000).toLocaleString())));
     }
 
-    // 3. First response time — the number a customer actually feels.
-    chips.push('<span class="tva-mx__c" title="'+(m.first_response===null
-            ? 'No reply has been sent yet'
-            : 'First reply took '+m.first_response+'s after the customer’s first message')+'">'
-        + '<i data-lucide="zap"></i><b>'+h(fmtDur(m.first_response))+'</b></span>');
+    chips.push(chip('first', 'First reply', h(fmtDur(m.first_response)),
+        m.first_response===null ? 'No reply has been sent yet'
+            : 'The first reply took '+m.first_response+'s after the customer’s first message'));
 
-    // 4. Project-wide leads → converted. Same formula as the dashboard.
     if (m.conversion_rate !== null && m.conversion_rate !== undefined) {
-        chips.push('<span class="tva-mx__c" title="Leads converted across this project — the same figure as the dashboard">'
-            + '<i data-lucide="trending-up"></i><b>'+m.conversion_rate+'%</b></span>');
+        chips.push(chip('rate', 'Converted', m.conversion_rate+'%',
+            'Leads converted across this project — the same figure as the dashboard'));
     }
 
-    // 5. This conversation's own lead, when it produced one.
     if (m.lead) {
-        chips.push('<span class="tva-mx__c tva-mx__c--lead" title="This conversation produced a lead'
-            + (m.lead.confidence!==null?' · '+m.lead.confidence+'% confidence':'')+'">'
-            + '<i data-lucide="user-check"></i><b>'+h(m.lead.status)+'</b></span>');
+        chips.push(chip('lead', 'Lead', h(m.lead.status),
+            'This conversation produced a lead'
+            + (m.lead.confidence!==null ? ' · '+m.lead.confidence+'% confidence' : '')));
     }
 
     box.innerHTML = chips.join('');
     if (window.lucide) try{ lucide.createIcons(); }catch(_){}
 }
 
-// One second is the right cadence: the last five minutes of the window are
-// counted in seconds, and anything slower would visibly stall there.
-setInterval(()=>{ if (METRICS && activeSid) renderMetrics(); }, 1000);
+function windowTone(left){
+    return left <= 0 ? 'is-dead' : (left < 7200 ? 'is-warn' : 'is-ok');
+}
+
+/**
+ * The per-second tick.
+ *
+ * Patches only the countdown text, the progress bar and the tone class —
+ * NOT the whole strip. Rebuilding innerHTML every second would re-run
+ * lucide.createIcons() on the entire header sixty times a minute, which
+ * flickers the icons and throws away any text selection the user had.
+ */
+function tickCountdown(){
+    if (!METRICS || !METRICS.window_expires_at) return;
+
+    const el = document.getElementById('mxCountdown');
+    if (!el) return;
+
+    const left = Math.floor(METRICS.window_expires_at - Date.now()/1000);
+    const text = fmtCountdown(left);
+    if (el.textContent !== text) el.textContent = text;
+
+    const wrap = document.getElementById('mxWindow');
+    if (wrap) {
+        const tone = windowTone(left);
+        if (!wrap.classList.contains(tone)) {
+            wrap.classList.remove('is-ok','is-warn','is-dead');
+            wrap.classList.add(tone);
+        }
+    }
+
+    const bar = document.getElementById('mxBar');
+    if (bar) {
+        bar.style.width = Math.max(0, Math.min(100,
+            (left / (METRICS.window_seconds||86400)) * 100)).toFixed(2) + '%';
+    }
+
+    // Crossing zero changes the label and drops the pulse, which is a
+    // structural change rather than a text one.
+    if (left <= 0 && wrap && wrap.querySelector('.tva-mx__pulse')) renderMetrics();
+}
+
+setInterval(tickCountdown, 1000);
 
 // ── Reply window enforcement ──
 // The rules come from the server (ChatController::replyPolicy). Meta's
@@ -1522,9 +1654,10 @@ function renderStatusManager(editing){
             '<button type="button" class="tva-sm__c'+(c===e.color?' is-on':'')+'" style="background:'+c+'" data-c="'+c+'"'
             + ' onclick="pickStatusColor(this)" title="'+c+'"></button>').join('') + '</div>'
         + '<label class="tva-sm__chk"><input type="checkbox" id="smClosing"'+(e.is_closing?' checked':'')+'>'
-        + ' Marks the conversation resolved</label>'
+        + '<span>Marks the conversation resolved</span></label>'
+        + '<div id="smError" class="tva-sm__err" hidden></div>'
         + '<div class="flex gap-2">'
-        + '<button class="btn btn-sm btn-primary flex-1" onclick="saveStatus('+(e.id||'null')+')">'+(e.id?'Save':'Add status')+'</button>'
+        + '<button id="smSave" class="btn btn-sm btn-primary flex-1" onclick="saveStatus('+(e.id||'null')+')">'+(e.id?'Save':'Add status')+'</button>'
         + (e.id?'<button class="btn btn-sm btn-secondary" onclick="renderStatusManager()">Cancel</button>':'')
         + '</div></div>';
     document.getElementById('statusMgrBody').dataset.color = e.color;
@@ -1537,23 +1670,56 @@ function pickStatusColor(btn){
 }
 function editStatusRow(id){ renderStatusManager(STATUSES.find(s=>s.id===id)); }
 
+/** Show the reason inside the modal, where the user is actually looking. */
+function statusMgrError(msg){
+    const box = document.getElementById('smError');
+    if (!box) return;
+    box.hidden = !msg;
+    box.textContent = msg || '';
+}
+
 async function saveStatus(id){
+    statusMgrError('');
+
     const name = (document.getElementById('smName').value||'').trim();
-    if (!name) { tvaToast('Give the status a name.','error'); return; }
+    if (!name) { statusMgrError('Give the status a name.'); return; }
 
-    const body = JSON.stringify({
-        project_id: CHAT.projectId, name,
-        color: document.getElementById('statusMgrBody').dataset.color,
-        is_closing: document.getElementById('smClosing').checked,
-    });
-    const url = CHAT.base + '/statuses' + (id ? '/' + id : '');
-    const r = await api(url, {method: id?'PATCH':'POST', headers:{'Content-Type':'application/json'}, body});
-    if (!r.ok) { tvaToast('Could not save the status.','error'); return; }
+    const btn = document.getElementById('smSave');
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
 
-    const d = await r.json();
-    STATUSES = d.statuses || STATUSES;
-    renderStatusControl(); renderStatusManager();
-    tvaToast(id?'Status updated':'Status added','success');
+    // Wrapped, because an unhandled rejection here is INVISIBLE: `await` on a
+    // fetch that throws inside an async click handler produces no error, no
+    // toast and no change — which is exactly "click Add and nothing happens".
+    try {
+        const body = JSON.stringify({
+            project_id: CHAT.projectId, name,
+            color: document.getElementById('statusMgrBody').dataset.color,
+            is_closing: document.getElementById('smClosing').checked,
+        });
+        const url = CHAT.base + '/statuses' + (id ? '/' + id : '');
+        const r = await api(url, {method: id?'PATCH':'POST', headers:{'Content-Type':'application/json'}, body});
+
+        if (!r.ok) {
+            // The server's own message, not a generic one — it is the only
+            // thing that can say "run tenant:migrate" or name the bad field.
+            const e = await r.json().catch(()=>({}));
+            statusMgrError(e.message
+                || (e.errors ? Object.values(e.errors).flat().join(' ') : '')
+                || ('The server refused this (HTTP '+r.status+').'));
+            return;
+        }
+
+        const d = await r.json();
+        STATUSES = d.statuses || STATUSES;
+        renderStatusControl();
+        renderStatusManager();
+        tvaToast(id?'Status updated':'Status added','success');
+    } catch (err) {
+        statusMgrError('Could not reach the server: ' + (err && err.message ? err.message : 'network error'));
+    } finally {
+        const b = document.getElementById('smSave');
+        if (b) { b.disabled = false; b.textContent = id ? 'Save' : 'Add status'; }
+    }
 }
 
 async function archiveStatus(id){
