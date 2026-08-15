@@ -1,4 +1,64 @@
 <style>
+/* ── Account dropdown ──────────────────────────────────────────────
+   Sits on the deep navy `.bg-primary` menu, so every colour here is
+   defined against that rather than the page background. */
+.tva-acct { padding: 4px 0; }
+.tva-acct__id {
+    display: flex; align-items: center; gap: 11px;
+    padding: 12px 14px 11px;
+}
+.tva-acct__av {
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.16);
+}
+.tva-acct__name {
+    display: block; font-size: 13.5px; font-weight: 600; color: #fff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tva-acct__mail {
+    display: block; font-size: 11.5px; color: rgba(255,255,255,.6); margin-top: 1px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Plan row — the reason this menu exists beyond profile links. */
+.tva-acct__plan {
+    display: flex; align-items: center; gap: 11px;
+    margin: 2px 10px 8px;
+    padding: 10px 12px;
+    background: rgba(255,255,255,.07);
+    border: 1px solid rgba(255,255,255,.10);
+    border-radius: 11px;
+}
+.tva-acct__badge {
+    width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; color: #fff;
+    box-shadow: 0 4px 12px -4px rgba(0,0,0,.5);
+}
+.tva-acct__plan-name {
+    display: block; font-size: 13px; font-weight: 700; color: #fff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tva-acct__plan-meta {
+    display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+    font-size: 11px; color: rgba(255,255,255,.62); margin-top: 3px;
+}
+.tva-acct__sep { opacity: .5; }
+/* Status word next to the plan name — only rendered when the plan is
+   NOT simply active, so its presence is itself the signal. */
+.tva-acct__state {
+    font-style: normal; font-size: 9.5px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em;
+    padding: 2px 6px; border-radius: 999px;
+    white-space: nowrap; flex-shrink: 0;
+}
+.tva-acct__state.is-green { background: rgba(52,211,153,.22); color: #6ee7b7; }
+.tva-acct__state.is-blue  { background: rgba(96,165,250,.22); color: #93c5fd; }
+.tva-acct__state.is-amber { background: rgba(251,191,36,.22); color: #fcd34d; }
+.tva-acct__state.is-red   { background: rgba(248,113,113,.22); color: #fca5a5; }
+.tva-acct__state.is-slate { background: rgba(148,163,184,.22); color: #cbd5e1; }
+.tva-acct__alert { color: #fca5a5; flex-shrink: 0; }
     .tva-tb-brand {
         display:flex; align-items:center; gap:10px;
         text-decoration:none; color:inherit;
@@ -345,12 +405,100 @@
              title="{{ $tvaUserName }}">
             {{ $tvaUserInit }}
         </div>
-        <div class="dropdown-menu w-56">
-            <ul class="dropdown-content bg-primary text-white">
-                <li class="p-2">
-                    <div class="font-medium">{{ Auth::user()->name }}</div>
-                    <div class="text-xs text-white/70 mt-0.5 dark:text-slate-500">{{ Auth::user()->email }}</div>
+        <div class="dropdown-menu w-64">
+            <ul class="dropdown-content bg-primary text-white tva-acct">
+                <li class="tva-acct__id">
+                    <span class="tva-acct__av" style="background-image: var(--tva-gradient, linear-gradient(135deg,#3b82f6,#2563eb));">{{ $tvaUserInit }}</span>
+                    <span class="min-w-0">
+                        <span class="tva-acct__name">{{ Auth::user()->name }}</span>
+                        <span class="tva-acct__mail">{{ Auth::user()->email }}</span>
+                    </span>
                 </li>
+
+                {{-- Current plan. "What am I on and when does it renew?" is an
+                     account question, and this menu is where people look for
+                     it — the answer was two clicks away on the billing page. --}}
+                @php
+                    $tbClientForPlan = request()->attributes->get('client') ?? Auth::user()->activeClient;
+                    $tbSub = null;
+                    if ($tbClientForPlan) {
+                        try {
+                            $tbSub = \App\Models\Billing\Subscription::with('plan')
+                                ->where('client_id', $tbClientForPlan->id)
+                                ->orderByDesc('id')
+                                ->first();
+                        } catch (\Throwable $e) {
+                            // Billing tables not migrated — the menu still works.
+                        }
+                    }
+
+                    // Each plan gets its own icon + colour so the tier is
+                    // recognisable at a glance rather than read word by word.
+                    $tbPlanSlug = $tbSub?->plan?->slug ?? 'free';
+                    [$tbIcon, $tbC1, $tbC2] = match ($tbPlanSlug) {
+                        'starter'    => ['rocket',   '#38bdf8', '#0284c7'],
+                        'growth'     => ['trending-up', '#34d399', '#059669'],
+                        'scale'      => ['zap',      '#a78bfa', '#7c3aed'],
+                        'enterprise' => ['award',    '#fbbf24', '#d97706'],
+                        default      => ['gift',     '#94a3b8', '#64748b'],
+                    };
+
+                    // What to show as the date depends on the state, and using
+                    // the wrong one is worse than showing nothing: a cancelled
+                    // plan "renewing" on a date it will actually end is exactly
+                    // the sort of thing people budget around.
+                    $tbWhen = null; $tbWhenLabel = null;
+                    if ($tbSub) {
+                        if ($tbSub->onTrial() && $tbSub->trial_ends_at) {
+                            $tbWhen = $tbSub->trial_ends_at; $tbWhenLabel = 'Trial ends';
+                        } elseif ($tbSub->isFree()) {
+                            $tbFreeLeft = $tbSub->freeDaysRemaining();
+                            $tbWhenLabel = $tbFreeLeft !== null
+                                ? ($tbFreeLeft > 0 ? "{$tbFreeLeft} days left" : 'Free window ended')
+                                : null;
+                        } elseif ($tbSub->cancel_at_period_end && $tbSub->current_period_end) {
+                            $tbWhen = $tbSub->current_period_end; $tbWhenLabel = 'Ends';
+                        } elseif ($tbSub->current_period_end) {
+                            $tbWhen = $tbSub->current_period_end; $tbWhenLabel = 'Renews';
+                        }
+                    }
+                    $tbNeedsAction = $tbSub && ! $tbSub->grantsAccess();
+                @endphp
+
+                @if ($tbClientForPlan)
+                    <li class="tva-acct__plan">
+                        <span class="tva-acct__badge" style="background: linear-gradient(135deg, {{ $tbC1 }}, {{ $tbC2 }});">
+                            <i data-lucide="{{ $tbIcon }}" class="w-4 h-4"></i>
+                        </span>
+                        <span class="flex-1 min-w-0">
+                            {{-- Plan name gets the full width. The status used
+                                 to sit beside it as a badge, and the two
+                                 fought: either the status clipped to
+                                 "AWAITING PA…" or the name clipped to "G…".
+                                 The name is the thing being looked up, so the
+                                 status moved down to the meta line where it
+                                 reads with the date anyway. --}}
+                            <span class="tva-acct__plan-name">{{ $tbSub?->plan?->name ?? 'Free' }}</span>
+                            <span class="tva-acct__plan-meta">
+                                @if ($tbSub && $tbSub->status !== 'active')
+                                    <em class="tva-acct__state is-{{ $tbSub->statusColor() }}">{{ $tbSub->statusLabel() }}</em>
+                                    @if ($tbWhen) <span class="tva-acct__sep">·</span> @endif
+                                @endif
+                                @if ($tbWhen)
+                                    {{ $tbWhenLabel }} {{ $tbWhen->format('j M Y') }}
+                                @elseif ($tbWhenLabel && (! $tbSub || $tbSub->status === 'active'))
+                                    {{ $tbWhenLabel }}
+                                @elseif (! $tbSub)
+                                    No renewal date
+                                @endif
+                            </span>
+                        </span>
+                        @if ($tbNeedsAction)
+                            <i data-lucide="alert-circle" class="w-4 h-4 tva-acct__alert" title="{{ $tbSub->statusLabel() }}"></i>
+                        @endif
+                    </li>
+                @endif
+
                 <li>
                     <hr class="dropdown-divider border-white/[0.08]">
                 </li>

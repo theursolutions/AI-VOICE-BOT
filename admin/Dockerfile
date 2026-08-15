@@ -29,20 +29,7 @@ RUN composer install \
         --optimize-autoloader --no-scripts --ignore-platform-reqs
 
 ###############################################################################
-# Stage 2 — PHP dependencies for the webchat widget
-###############################################################################
-# Its own stage because it is a separate application with its own
-# composer.json; installing it beside the admin's would merge two unrelated
-# dependency trees into one autoloader.
-FROM composer:2 AS widget-vendor
-WORKDIR /widget
-COPY widget/ .
-RUN composer install \
-        --no-dev --prefer-dist --no-interaction --no-progress \
-        --optimize-autoloader --no-scripts --ignore-platform-reqs
-
-###############################################################################
-# Stage 3 — Front-end assets (Vite + React Flow Builder + Tailwind/SASS)
+# Stage 2 — Front-end assets (Vite + React Flow Builder + Tailwind/SASS)
 ###############################################################################
 FROM node:20-bookworm-slim AS assets
 WORKDIR /app
@@ -76,8 +63,12 @@ COPY --from=assets /app/public/build ./public/build
 # nginx maps /widget/ here by alias. Keeping it out of the docroot is the whole
 # point: widget/app/config/ holds bootstrap and credentials, and under public/
 # they would be fetchable over HTTP.
+#
+# No composer stage for it: its dependencies are vendored INTO the repo at
+# widget/app/vendor (235 tracked files, autoload.php included), which is what
+# bootstrap.php loads via ../vendor/autoload.php. Its composer.json lives at
+# widget/app/, not widget/, so a stage rooted here would have failed anyway.
 COPY widget/ /var/www/widget/
-COPY --from=widget-vendor /widget/vendor /var/www/widget/vendor
 
 # loader.js is part of the Laravel app but must resolve under the same /widget/
 # alias as the app it loads, so the iframe URL is a plain sibling lookup in

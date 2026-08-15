@@ -352,8 +352,62 @@
 
     {{-- ── Right column ──────────────────────────────────────────── --}}
     <div>
-        {{-- Add-ons: extra seats / AI agents on top of the plan --}}
-        @if ($isOwner && ! empty($addons) && $subscription?->stripe_subscription_ref && $subscription->grantsAccess())
+        {{-- Add-ons: extra seats / AI agents on top of the plan.
+             Buying requires a live Stripe subscription — you cannot add an
+             item to a subscription that doesn't exist yet. But hiding the
+             whole section when that isn't true made add-ons look like a
+             feature we don't have, so the unavailable case now says WHY and
+             what to do about it. --}}
+        @php
+            $blCanBuyAddons = $subscription?->stripe_subscription_ref && $subscription->grantsAccess();
+            $blAddonBlocked = null;
+            if ($isOwner && ! empty($addons) && ! $blCanBuyAddons) {
+                $blAddonBlocked = match (true) {
+                    ! $subscription                          => 'Choose a plan first — add-ons sit on top of a paid subscription.',
+                    $subscription->isFree()                  => 'Add-ons are available on paid plans. Upgrade to add extra seats or agents.',
+                    ! $subscription->stripe_subscription_ref => 'Your subscription isn\'t set up with our payment provider yet.',
+                    $subscription->isPastDue()               => 'Your last payment failed. Update your card and add-ons will be available again.',
+                    default                                  => 'Available once your subscription is active — ' . lcfirst($subscription->statusLabel()) . '.',
+                };
+            }
+        @endphp
+
+        @if ($isOwner && ! empty($addons) && ! $blCanBuyAddons)
+            <div class="bl-card intro-y">
+                <div class="bl-card__head">
+                    <i data-lucide="plus-circle" class="w-4 h-4" style="color:#94a3b8"></i>
+                    <div class="bl-card__title">Add-ons</div>
+                </div>
+                <div style="padding:4px 2px 2px;">
+                    <p style="font-size:12.5px;color:#64748b;line-height:1.6;margin:0 0 12px;">
+                        {{ $blAddonBlocked }}
+                    </p>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+                        @foreach ($addons as $item)
+                            @php $ap = $item['plan']; @endphp
+                            <div style="display:flex;align-items:center;gap:10px;opacity:.6;">
+                                <i data-lucide="{{ $ap->slug === 'addon-seat' ? 'user-plus' : 'bot' }}" class="w-4 h-4" style="color:#94a3b8;"></i>
+                                <span style="font-size:12.5px;color:#334155;flex:1;">{{ $ap->name }}</span>
+                                @if (! empty($item['price']))
+                                    <span style="font-size:12px;color:#64748b;">
+                                        ${{ number_format($item['price']->unit_amount / 100, 2) }}/{{ $item['price']->interval === 'annually' ? 'yr' : 'mo' }}
+                                    </span>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
+                    @if ($subscription?->isPastDue())
+                        <a href="#payment-methods" class="btn btn-primary btn-sm w-full">Update payment method</a>
+                    @else
+                        <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="btn btn-primary btn-sm w-full">
+                            {{ $subscription && ! $subscription->isFree() ? 'Complete your subscription' : 'Choose a plan' }}
+                        </a>
+                    @endif
+                </div>
+            </div>
+        @endif
+
+        @if ($isOwner && ! empty($addons) && $blCanBuyAddons)
             <div class="bl-card intro-y">
                 <div class="bl-card__head">
                     <i data-lucide="plus-circle" class="w-4 h-4" style="color:#6366f1"></i>
