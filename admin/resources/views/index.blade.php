@@ -1040,6 +1040,103 @@
         html:not(.dark) .halo,
         html:not(.dark) .orb { box-shadow: none; filter: none; }
         html:not(.dark) ::selection { color: #fff; }
+
+        /* ── Light mode: dark bands, light body ─────────────────────────
+           Nav, hero and footer stay navy; everything between them is white.
+           That alternation is what gives a marketing page a spine — an
+           unbroken white scroll reads as a document, not a product.
+
+           Implemented by REDEFINING THE TOKENS inside those three regions
+           rather than restyling their contents. Every rule inside the hero
+           already reads --text, --line, --panel; scoping new values to the
+           region means all of them follow with no further edits, and the
+           dark theme is untouched. */
+        html:not(.dark) .nav,
+        html:not(.dark) .hero,
+        html:not(.dark) .site-footer {
+            --text:      #f2f7fd;
+            --text-dim:  #b3c7de;
+            --text-dim2: #93aac6;
+            --line:      rgba(255,255,255,.14);
+            --line-hot:  rgba(120,170,240,.42);
+            --panel:     rgba(255,255,255,.06);
+            --panel-2:   rgba(255,255,255,.09);
+            --neon:      #7db1ff;
+            --neon-2:    #a9cbff;
+            color: var(--text);
+        }
+
+        html:not(.dark) .nav { background: #1b3962; border-bottom-color: rgba(255,255,255,.10); }
+        html:not(.dark) .hero {
+            /* The same navy, lifted very slightly at the top so the band has
+               depth without becoming a gradient feature. */
+            background: linear-gradient(180deg, #21456f 0%, #1b3962 62%);
+        }
+        html:not(.dark) .site-footer { background: #16304f; border-top-color: rgba(255,255,255,.10); }
+
+        /* The CTA is white-on-navy inside the bands, navy-on-white outside. */
+        html:not(.dark) .nav .nav__cta,
+        html:not(.dark) .hero .btn-primary {
+            background: #ffffff; color: #1b3962; box-shadow: 0 8px 20px -8px rgba(0,0,0,.45);
+        }
+        html:not(.dark) .nav .nav__cta:hover,
+        html:not(.dark) .hero .btn-primary:hover { background: #eaf1fa; }
+
+        /* The logo keeps its glow where there is dark to glow against. */
+        html:not(.dark) .nav .nav__brand-mark {
+            filter: drop-shadow(0 0 10px rgba(125,177,255,.45));
+        }
+        /* The starfield belongs to the hero band now, not the whole page. */
+        html:not(.dark) #stars { background: transparent; }
+
+        /* ── Light body ───────────────────────────────────────────────── */
+        /* No greys. Surfaces are white, and every tint is the brand navy at
+           low opacity — which is what makes a two-colour palette read as
+           designed rather than merely desaturated. */
+        html:not(.dark) .section { background: transparent; }
+        html:not(.dark) .section:nth-of-type(even) { background: rgba(27,57,98,.035); }
+
+        html:not(.dark) .card,
+        html:not(.dark) .cap,
+        html:not(.dark) .step,
+        html:not(.dark) .tier,
+        html:not(.dark) .feature {
+            background: #ffffff;
+            border: 1px solid rgba(27,57,98,.12);
+            box-shadow: 0 1px 2px rgba(27,57,98,.05);
+        }
+        html:not(.dark) .card:hover,
+        html:not(.dark) .cap:hover,
+        html:not(.dark) .tier:hover,
+        html:not(.dark) .feature:hover {
+            border-color: rgba(27,57,98,.28);
+            box-shadow: 0 14px 32px -14px rgba(27,57,98,.28);
+        }
+
+        /* ── Testimonials ─────────────────────────────────────────────── */
+        /* The card was a dark navy gradient, which on paper looked like a
+           hole in the page. White card, navy hairline, and the oversized
+           quote mark kept — it is the one flourish worth keeping because it
+           carries meaning rather than decoration. */
+        html:not(.dark) .tm-card {
+            background: #ffffff;
+            border-color: rgba(27,57,98,.12);
+            box-shadow: 0 2px 8px -4px rgba(27,57,98,.14);
+        }
+        html:not(.dark) .tm-card::before { color: rgba(27,57,98,.10); }
+        html:not(.dark) .tm-card:hover {
+            border-color: rgba(27,57,98,.30);
+            box-shadow: 0 22px 46px -22px rgba(27,57,98,.34);
+        }
+        html:not(.dark) .tm-card::after {
+            background: linear-gradient(90deg, transparent, #1b3962, transparent);
+        }
+        html:not(.dark) .tm-card__quote { color: #1b3962; }
+        html:not(.dark) .tm-card__name  { color: #16304f; }
+        html:not(.dark) .tm-card__role  { color: #5b7ba3; }
+        html:not(.dark) .tm-av {
+            box-shadow: 0 0 0 1px rgba(27,57,98,.10), 0 6px 16px -8px rgba(27,57,98,.4);
+        }
 </style>
 </head>
 <body>

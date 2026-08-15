@@ -211,7 +211,25 @@
         .crumbs a:hover { color: var(--neon-2); text-decoration: underline; text-underline-offset: 2px; }
         .crumbs [aria-current="page"] { color: var(--text); }
         .crumbs__sep { color: var(--text-dim2); }
-    </style>
+    
+        /* Navy nav on the inner pages too, matching the homepage. A light
+           header here and a navy one there would look like two sites. */
+        html:not(.dark) .nav {
+            --text:     #f2f7fd;
+            --text-dim: #b3c7de;
+            --line:     rgba(255,255,255,.14);
+            --line-hot: rgba(120,170,240,.42);
+            background: #1b3962;
+            border-bottom-color: rgba(255,255,255,.10);
+            color: var(--text);
+        }
+        html:not(.dark) .nav .nav__cta {
+            background: #ffffff; color: #1b3962;
+            box-shadow: 0 8px 20px -8px rgba(0,0,0,.45);
+        }
+        html:not(.dark) .nav .nav__cta:hover { background: #eaf1fa; }
+        html:not(.dark) .nav .nav__brand-mark { filter: drop-shadow(0 0 10px rgba(125,177,255,.45)); }
+</style>
     @stack('head')
     @include('partials.sweet-alert')
 </head>

@@ -217,4 +217,22 @@
         .site-footer { padding: 48px 0 28px; }
         .site-footer__bottom { flex-direction: column; align-items: flex-start; }
     }
+
+    /* Light mode keeps a DARK footer. Placed here rather than on the
+       homepage because this partial is shared — the blog, pricing and legal
+       pages include it too, and a navy footer on one page and a white one
+       on the next reads as two different sites.
+
+       Tokens are redefined on the element, so every rule below that reads
+       --text-dim / --line follows without being touched. */
+    html:not(.dark) .site-footer {
+        --text:      #f2f7fd;
+        --text-dim:  #b3c7de;
+        --text-dim2: #93aac6;
+        --line:      rgba(255,255,255,.14);
+        --neon:      #7db1ff;
+        background: #16304f;
+        border-top-color: rgba(255,255,255,.10);
+        color: var(--text-dim);
+    }
 </style>
