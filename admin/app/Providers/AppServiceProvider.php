@@ -110,7 +110,7 @@ class AppServiceProvider extends ServiceProvider
         // only fires for the views it is bound to. Degrades to rendering
         // nothing if the plan tables are missing or empty (a fresh install
         // before BillingSeeder), so the homepage can never 500 on billing.
-        View::composer(['welcome', 'welcome-v2', 'pages.pricing'], function ($view) {
+        View::composer(['index', 'welcome-v2', 'pages.pricing'], function ($view) {
             if (array_key_exists('pricing', $view->getData())) {
                 return;   // an explicit value from the controller wins
             }

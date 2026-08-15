@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="{{ tva_theme_class() }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -31,7 +31,38 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 
     <style>
+        /* LIGHT IS THE BASE. The blue-black identity moves to `html.dark`
+           below — same tokens, same names, so every rule further down this
+           file and in every page that uses this layout keeps working with no
+           edit. That is the whole reason the site was tokenised. */
         :root {
+            --bg:        #eef3f9;
+            --bg-2:      #f6f9fc;
+            --panel:     #ffffff;
+            --panel-2:   #f8fafd;
+            --line:      rgba(27, 57, 98, .14);
+            --line-hot:  rgba(27, 57, 98, .32);
+            --text:      #1b3962;
+            --text-dim:  #46587a;
+            --text-dim2: #6b7c9c;
+            /* On white, the old #3b82f6 gives 3.1:1 — below AA. Darkened to
+               hold 4.6:1 for text while staying recognisably the same blue. */
+            --neon:      #1b3962;
+            --neon-btn:  #1b3962;
+            --neon-2:    #2f6fb5;
+            --radius:    14px;
+            /* Light needs real shadows; dark leans on borders and glow. */
+            --shadow:    0 1px 2px rgba(16,24,40,.05);
+            --shadow-lg: 0 16px 40px -12px rgba(16,24,40,.16);
+            /* Surfaces that used a black wash to sit on the dark page.
+               On paper that is a grey smear, so light gets real white with
+               a navy hairline. Named tokens so the same four rules serve
+               both themes and anything added later inherits the fix. */
+            --surface:     #ffffff;
+            --surface-cta: linear-gradient(135deg, #ffffff 0%, #f3f7fc 100%);
+        }
+
+        html.dark {
             --bg:        #050609;
             --bg-2:      #0a0d14;
             --panel:     rgba(15, 21, 35, .55);
@@ -47,20 +78,32 @@
                already passes at 5.51:1 on the dark background. */
             --neon-btn:  #2563eb;
             --neon-2:    #60a5fa;
-            --radius:    14px;
+            --shadow:    0 1px 2px rgba(0,0,0,.4);
+            --shadow-lg: 0 18px 44px -14px rgba(0,0,0,.6);
+            --surface:     rgba(0,0,0,.28);
+            --surface-cta: linear-gradient(135deg, rgba(59,130,246,.06), rgba(0,0,0,.4));
         }
+
         * { box-sizing: border-box; }
         html, body {
             margin: 0; padding: 0;
+            /* A single soft wash from the top rather than the dark radial
+               vignette. Light pages want the paper to stay paper — a heavy
+               gradient on white reads as a rendering artefact. */
             background:
-                radial-gradient(ellipse at 50% -10%, #0d1a2e 0%, #050609 55%, #000 100%) fixed;
+                linear-gradient(180deg, #e7eef7 0%, var(--bg) 52%) fixed;
             color: var(--text);
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             line-height: 1.65; -webkit-font-smoothing: antialiased;
             overflow-x: hidden;
         }
+        html.dark, html.dark body {
+            background:
+                radial-gradient(ellipse at 50% -10%, #0d1a2e 0%, #050609 55%, #000 100%) fixed;
+        }
         a { color: inherit; text-decoration: none; }
-        ::selection { background: var(--neon); color: #000; }
+        ::selection { background: var(--neon); color: #fff; }
+        html.dark ::selection { color: #000; }
         .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
 
         /* ── Nav ── */
@@ -68,21 +111,24 @@
             position: sticky; top: 0; z-index: 50;
             padding: 14px 28px; display: flex; align-items: center; gap: 18px;
             backdrop-filter: blur(8px);
-            background: rgba(5, 6, 9, .6); border-bottom: 1px solid var(--line);
+            background: rgba(238, 243, 249, .82); border-bottom: 1px solid var(--line);
         }
+        html.dark .nav { background: rgba(5, 6, 9, .6); }
         .nav__brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; }
-        .nav__brand-mark {
-            width: 30px; height: 30px; display: block; object-fit: contain;
-            filter: drop-shadow(0 0 10px rgba(59, 130, 246, .45));
-        }
+        .nav__brand-mark { width: 30px; height: 30px; display: block; object-fit: contain; }
+        /* The glow belongs to the dark theme. On white it reads as a print
+           mistake — a halo around a logo with nothing to glow against. */
+        html.dark .nav__brand-mark { filter: drop-shadow(0 0 10px rgba(59, 130, 246, .45)); }
         .nav__links { margin-left: auto; display: flex; gap: 22px; font-size: 13px; color: var(--text-dim); align-items: center; }
         .nav__links a:hover { color: var(--text); }
         .nav__cta {
             background: var(--neon-btn); color: #fff; padding: 7px 14px; border-radius: 999px;
-            font-weight: 600; font-size: 13px; box-shadow: 0 0 22px rgba(59, 130, 246, .45);
+            font-weight: 600; font-size: 13px; box-shadow: var(--shadow-lg);
             transition: transform .15s, box-shadow .15s;
         }
-        .nav__cta:hover { transform: translateY(-1px); box-shadow: 0 0 32px rgba(59, 130, 246, .65); }
+        .nav__cta:hover { transform: translateY(-1px); box-shadow: 0 8px 20px -6px rgba(29,78,216,.45); }
+        html.dark .nav__cta { box-shadow: 0 0 22px rgba(59,130,246,.45); }
+        html.dark .nav__cta:hover { box-shadow: 0 0 32px rgba(59,130,246,.65); }
         @media (max-width: 720px) { .nav { padding: 12px 16px; } .nav__links a:not(.nav__cta) { display: none; } }
 
         /* ── Page hero band ── */
@@ -95,7 +141,8 @@
             border: 1px solid rgba(59,130,246,.25); border-radius: 999px; padding: 6px 14px; margin-bottom: 20px;
         }
         .page-hero h1 { font-size: clamp(30px, 5vw, 50px); font-weight: 800; letter-spacing: -.02em; line-height: 1.08; margin: 0 0 14px; }
-        .page-hero h1 .accent { background: linear-gradient(90deg, var(--neon), var(--neon-2) 60%, #dbeafe); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        .page-hero h1 .accent { background: linear-gradient(90deg, var(--neon), var(--neon-2) 70%, #3b82f6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+        html.dark .page-hero h1 .accent { background: linear-gradient(90deg, var(--neon), var(--neon-2) 60%, #dbeafe); -webkit-background-clip: text; background-clip: text; }
         .page-hero p { font-size: 17px; color: var(--text-dim); margin: 0 auto; max-width: 620px; }
         .page-hero__meta { margin-top: 16px; font-size: 12px; color: var(--text-dim2); text-transform: uppercase; letter-spacing: .1em; }
 
@@ -151,7 +198,7 @@
         .page-cta {
             margin: 8px auto 0; max-width: 820px;
             border: 1px solid var(--line-hot);
-            background: linear-gradient(135deg, rgba(59,130,246,.06), rgba(0,0,0,.4));
+            background: var(--surface-cta, linear-gradient(135deg, rgba(59,130,246,.06), rgba(0,0,0,.4)));
             border-radius: 20px; padding: 40px 28px; text-align: center;
         }
         .page-cta h2 { font-size: clamp(22px, 3.4vw, 32px); margin: 0 0 10px; }
@@ -159,7 +206,7 @@
         .btn {
             display: inline-flex; align-items: center; gap: 8px;
             background: var(--neon-btn); color: #fff; padding: 13px 24px; border-radius: 12px;
-            font-weight: 700; box-shadow: 0 0 32px rgba(59,130,246,.45); transition: transform .15s;
+            font-weight: 700; box-shadow: 0 10px 24px -8px rgba(29,78,216,.5); transition: transform .15s;
         }
         .btn:hover { transform: translateY(-2px); }
         .btn--ghost { background: transparent; border: 1px solid var(--line-hot); color: var(--text); box-shadow: none; }
@@ -172,7 +219,25 @@
         .crumbs a:hover { color: var(--neon-2); text-decoration: underline; text-underline-offset: 2px; }
         .crumbs [aria-current="page"] { color: var(--text); }
         .crumbs__sep { color: var(--text-dim2); }
-    </style>
+    
+        /* Navy nav on the inner pages too, matching the homepage. A light
+           header here and a navy one there would look like two sites. */
+        html:not(.dark) .nav {
+            --text:     #0b1b33;
+            --text-dim: #46586f;
+            --line:     rgba(16,32,56,.10);
+            --line-hot: rgba(29,78,216,.30);
+            background: rgba(255,255,255,.88);
+            border-bottom-color: rgba(16,32,56,.08);
+            color: var(--text);
+        }
+        html:not(.dark) .nav .nav__cta {
+            background: #1d4ed8; color: #fff;
+            box-shadow: 0 6px 16px -7px rgba(29,78,216,.55);
+        }
+        html:not(.dark) .nav .nav__cta:hover { background: #1743bd; }
+        html:not(.dark) .nav .nav__brand-mark { filter: none; }
+</style>
     @stack('head')
     @include('partials.sweet-alert')
 </head>
@@ -203,6 +268,7 @@
             <a href="{{ route('login') }}">Sign in</a>
             <a href="{{ url('/register') }}" class="nav__cta">Get started free</a>
         @endauth
+        @include('partials.theme-toggle-public')
     </div>
 </nav>
 
@@ -242,5 +308,6 @@
 
 @include('partials.site-footer')
 
+@include('partials.cookie-consent')
 </body>
 </html>

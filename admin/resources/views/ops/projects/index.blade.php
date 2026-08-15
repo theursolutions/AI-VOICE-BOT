@@ -23,10 +23,11 @@
                 Include deleted
             </label>
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($projects->total()) }} project(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-projects', 'filename' => 'ops-projects', 'paginator' => $projects ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-projects">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -34,7 +35,7 @@
                         <th>Owner</th>
                         <th>Tenant DB</th>
                         <th>State</th>
-                        <th style="text-align:right;">Actions</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

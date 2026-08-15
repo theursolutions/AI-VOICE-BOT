@@ -31,10 +31,11 @@
                 Include deleted
             </label>
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($paginator->total()) }} voice(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-voices', 'filename' => 'ops-voices', 'paginator' => $paginator ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-voices">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -43,7 +44,7 @@
                         <th>Language</th>
                         <th>Project · Owner</th>
                         <th>Status</th>
-                        <th style="text-align:right;">Actions</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

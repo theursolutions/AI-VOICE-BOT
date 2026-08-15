@@ -2,29 +2,33 @@
 
 @section('content')
 <style>
-    .cm-wrap { color:#e2e8f0; }
+    .cm-wrap { color:var(--tva-text-2); }
     .cm-cards { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin:14px 0 16px; }
     @media (max-width:1100px){ .cm-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-    .cm-card { background:#0f172a; border:1px solid #1e293b; border-radius:13px; padding:14px 16px; }
-    .cm-card__label { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#64748b; font-weight:700; }
-    .cm-card__val { font-size:26px; font-weight:800; color:#f1f5f9; line-height:1.1; margin-top:4px; }
-    .cm-card__val small { font-size:13px; font-weight:600; color:#94a3b8; }
-    .cm-card__sub { font-size:11px; color:#64748b; margin-top:3px; }
-    .cm-stage { background:radial-gradient(circle at 50% 40%, #131c33 0%, #0b1220 70%); border:1px solid #1e293b; border-radius:16px; padding:8px; position:relative; overflow:hidden; }
+    .cm-card { background:var(--tva-surface); border:1px solid var(--tva-border); border-radius:13px; padding:14px 16px; }
+    .cm-card__label { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--tva-text-3); font-weight:700; }
+    .cm-card__val { font-size:26px; font-weight:800; color:var(--tva-text); line-height:1.1; margin-top:4px; }
+    .cm-card__val small { font-size:13px; font-weight:600; color:var(--tva-text-3); }
+    .cm-card__sub { font-size:11px; color:var(--tva-text-3); margin-top:3px; }
+    .cm-stage { background:var(--tva-surface); border:1px solid var(--tva-border); border-radius:16px; padding:8px; position:relative; overflow:hidden; }
     .cm-stage__head { display:flex; align-items:center; gap:10px; padding:10px 12px 4px; }
+    /* Dark keeps the lit stage it was designed for. */
+    html.dark .cm-stage { background:radial-gradient(circle at 50% 40%, #131c33 0%, #0b1220 70%); }
     .cm-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; }
-    .cm-badge--on { background:#052e1b; color:#4ade80; border:1px solid #16653433; }
-    .cm-badge--off { background:#3f1d1d; color:#f87171; }
+    .cm-badge--on { background:var(--tva-ok-bg); color:var(--tva-ok); border:1px solid var(--tva-ok-line); }
+    html.dark .cm-badge--on { background:#052e1b; color:#4ade80; border-color:#16653433; }
+    .cm-badge--off { background:var(--tva-danger-bg); color:var(--tva-danger); border:1px solid var(--tva-danger-line); }
+    html.dark .cm-badge--off { background:#3f1d1d; color:#f87171; border-color:transparent; }
     .cm-svg { width:100%; height:auto; display:block; }
 
-    .mesh-link { stroke:#334155; stroke-width:1.4; fill:none; opacity:.45; }
+    .mesh-link { stroke:var(--tva-border); stroke-width:1.4; fill:none; opacity:.85; }
     .mesh-link.flow { stroke:#6366f1; stroke-width:1.8; stroke-dasharray:3 7; opacity:.9; animation:cmflow .8s linear infinite; }
     .mesh-link.flow.voice { stroke:#a855f7; }
     @keyframes cmflow { to { stroke-dashoffset:-20; } }
     .mesh-node text { font-family:system-ui,sans-serif; }
     .mesh-ico { font-size:18px; }
-    .mesh-lbl { font-size:11px; font-weight:700; fill:#e2e8f0; }
-    .mesh-sub { font-size:9.5px; fill:#94a3b8; }
+    .mesh-lbl { font-size:11px; font-weight:700; fill:var(--tva-text); }
+    .mesh-sub { font-size:9.5px; fill:var(--tva-text-3); }
     .mesh-node.busy .mesh-main { animation:cmpulse 1.5s ease-in-out infinite; }
     @keyframes cmpulse { 0%,100%{ filter:none; } 50%{ filter:drop-shadow(0 0 8px currentColor); } }
     .mesh-new { animation:cmpop .4s ease; }
@@ -38,12 +42,12 @@
     .mesh-node.busy .mesh-dot { animation:cmdot 1.1s ease-in-out infinite; }
     @keyframes cmdot { 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.4; } }
     .mesh-particle { filter:drop-shadow(0 0 3px currentColor); }
-    .cm-note { font-size:12px; color:#64748b; margin-top:10px; }
+    .cm-note { font-size:12px; color:var(--tva-text-3); margin-top:10px; }
 </style>
 
 <div class="content cm-wrap">
     <div class="flex items-center gap-3 mt-4">
-        <h2 class="text-lg font-semibold" style="color:#f1f5f9;">Compute Mesh</h2>
+        <h2 class="text-lg font-semibold" style="color:var(--tva-text);">Compute Mesh</h2>
         <span id="cmPulse" class="cm-badge cm-badge--off">connecting…</span>
         <form method="GET" class="ml-auto">
             <select name="project_id" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -68,7 +72,7 @@
     <div class="cm-stage">
         <div class="cm-stage__head">
             <i data-lucide="cpu" class="w-4 h-4" style="color:#818cf8;"></i>
-            <b style="color:#f1f5f9;">Live fleet topology</b>
+            <b style="color:var(--tva-text);">Live fleet topology</b>
             <span class="cm-note" style="margin:0;">nodes scale with live load</span>
         </div>
         <svg id="cmSvg" class="cm-svg" viewBox="0 0 1000 540" preserveAspectRatio="xMidYMid meet"></svg>
@@ -99,7 +103,7 @@ function node(p, label, sub, color, icon, busy, isNew){
         ${ripple}
         <circle class="mesh-main" r="22" fill="${color}22" stroke="${color}" stroke-width="2"></circle>
         <text class="mesh-ico" text-anchor="middle" dy="6">${icon}</text>
-        <circle class="mesh-dot" cx="16" cy="-16" r="4.5" fill="${busy?'#4ade80':'#475569'}" stroke="#0b1220" stroke-width="2"></circle>
+        <circle class="mesh-dot" cx="16" cy="-16" r="4.5" fill="${busy?'#16a34a':'#94a3b8'}" stroke="var(--tva-surface)" stroke-width="2"></circle>
         <text class="mesh-lbl" text-anchor="middle" y="40">${cmEsc(label)}</text>
         ${sub?`<text class="mesh-sub" text-anchor="middle" y="53">${cmEsc(sub)}</text>`:''}
     </g>`;

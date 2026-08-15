@@ -28,11 +28,21 @@ class SiteContentController extends Controller
     {
         $t = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'text'];
         $a = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'textarea'];
+        $sel = fn (string $key, string $label, array $options, string $help = '') =>
+            ['key' => $key, 'label' => $label, 'type' => 'select', 'options' => $options, 'help' => $help];
 
         // Brand-glyph slugs accepted by the channel icon fields.
         $icons = implode(' · ', \App\Support\BrandIcons::slugs());
 
         return [
+            ['title' => 'Appearance', 'fields' => [
+                $sel('default_theme', 'Default theme — public website', [
+                    'light' => 'Light', 'dark' => 'Dark',
+                ], 'What a first-time visitor to the marketing site sees.'),
+                $sel('default_theme_admin', 'Default theme — after login', [
+                    'light' => 'Light', 'dark' => 'Dark',
+                ], 'What a member sees in the workspace before they choose for themselves. Separate from the public site: a marketing page often wants dark for impact, while the app people work in all day wants light. Either way, anyone who picks a theme keeps their choice.'),
+            ]],
             'Brand' => ['icon' => '🏷️', 'fields' => [
                 $t('brand_name', 'Brand name (nav + footer)'),
             ]],

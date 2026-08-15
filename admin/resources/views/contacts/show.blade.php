@@ -157,7 +157,7 @@
                         <em>{{ $contact->last_seen_at ? \Carbon\Carbon::createFromTimestamp($contact->last_seen_at)->diffForHumans() : '—' }}</em>
                     </div>
                     <div class="tva-cd__field">
-                        <i data-lucide="messages-square"></i>
+                        <i data-lucide="message-circle"></i>
                         <span>Messages</span>
                         <em>{{ number_format($profile['messages']['total']) }}</em>
                     </div>

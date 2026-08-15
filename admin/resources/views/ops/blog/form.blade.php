@@ -260,7 +260,7 @@
                 </div>
 
                 <div class="bf-card">
-                    <div class="bf-card__t"><i data-lucide="tags" class="w-4 h-4"></i> Organise</div>
+                    <div class="bf-card__t"><i data-lucide="tag" class="w-4 h-4"></i> Organise</div>
 
                     <div class="bf-field">
                         <label>Category <span class="hint">groups articles and adds a filter</span></label>

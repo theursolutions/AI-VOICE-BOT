@@ -260,8 +260,32 @@
 
 {{-- ── Google Analytics 4 ────────────────────────────────────────── --}}
 @if (!empty($seo['ga4_id']))
-<script async src="https://www.googletagmanager.com/gtag/js?id={{ $seo['ga4_id'] }}"></script>
-<script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ $seo['ga4_id'] }}');</script>
+{{-- Loaded only AFTER an explicit accept. Firing analytics before consent
+     is the thing the banner exists to prevent, and a banner that does not
+     actually gate anything is decoration. --}}
+<script>
+(function () {
+    var loaded = false;
+    function loadGa4() {
+        if (loaded) return; loaded = true;
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id={{ $seo['ga4_id'] }}';
+        document.head.appendChild(s);
+        window.dataLayer = window.dataLayer || [];
+        window.gtag = function () { dataLayer.push(arguments); };
+        gtag('js', new Date());
+        gtag('config', '{{ $seo['ga4_id'] }}');
+    }
+    window.addEventListener('tva:consent', function (e) {
+        if (e.detail && e.detail.consent === 'accept') loadGa4();
+    });
+    try {
+        if (localStorage.getItem('tva_cookie_consent') === 'accept') loadGa4();
+    } catch (err) {}
+})();
+</script>
+
 @endif
 
 {{-- ── Meta (Facebook) Pixel ─────────────────────────────────────── --}}

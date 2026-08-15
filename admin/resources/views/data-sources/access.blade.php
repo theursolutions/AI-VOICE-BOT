@@ -640,7 +640,7 @@
             <div class="tva-acl-card">
                 <div class="tva-acl-card__head">
                     <div class="tva-acl-card__title">
-                        <i data-lucide="table-2" class="w-4 h-4" style="color:#3b82f6;"></i>
+                        <i data-lucide="table" class="w-4 h-4" style="color:#3b82f6;"></i>
                         Database tables
                     </div>
                     <span class="tva-acl-card__count">
@@ -707,7 +707,7 @@
                         </div>
                     @empty
                         <div class="tva-acl-empty">
-                            <i data-lucide="database-zap" class="w-10 h-10 inline"></i>
+                            <i data-lucide="database" class="w-10 h-10 inline"></i>
                             <div class="tva-acl-empty__title">No tables introspected yet</div>
                             <div class="tva-acl-empty__sub">Re-sync this data source to refresh its schema.</div>
                         </div>
@@ -720,7 +720,7 @@
                 <div class="tva-acl-side__card">
                     <div class="tva-acl-side__head tva-acl-side__head--placeholder" id="aclSideHead">
                         <div class="tva-acl-side__title">
-                            <i data-lucide="columns-3" class="w-3.5 h-3.5"></i> Column access
+                            <i data-lucide="columns" class="w-3.5 h-3.5"></i> Column access
                         </div>
                         <div class="tva-acl-side__name">No table selected</div>
                         <div class="tva-acl-side__sub">

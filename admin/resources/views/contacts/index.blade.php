@@ -117,7 +117,8 @@
         </div>
 
         <div class="tva-ct-panel">
-            <table class="tva-ct-tbl">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-contacts', 'filename' => 'contacts', 'paginator' => $contacts ?? null])</div>
+            <table class="tva-ct-tbl" id="tva-t-contacts">
                 <thead>
                     <tr>
                         <th>Contact</th>

@@ -398,7 +398,7 @@
                                 @foreach ($mTables as $tbl)
                                     @php $cols = $tbl['columns'] ?? []; $rows = $tbl['rows'] ?? []; @endphp
                                     <details class="tva-json-block">
-                                        <summary><i data-lucide="table-2" class="w-3 h-3 inline mr-1"></i> {{ $tbl['title'] ?? 'Data' }} · {{ count($rows) }} {{ \Illuminate\Support\Str::plural('row', count($rows)) }}</summary>
+                                        <summary><i data-lucide="table" class="w-3 h-3 inline mr-1"></i> {{ $tbl['title'] ?? 'Data' }} · {{ count($rows) }} {{ \Illuminate\Support\Str::plural('row', count($rows)) }}</summary>
                                         @if ($cols)
                                             <div style="overflow-x:auto;">
                                                 <table class="tva-mini-table">
@@ -417,7 +417,7 @@
                             @endif
                             @if (!empty($mTables) || !empty($mSources))
                                 <details class="tva-json-block">
-                                    <summary><i data-lucide="braces" class="w-3 h-3 inline mr-1"></i> Response JSON</summary>
+                                    <summary><i data-lucide="code" class="w-3 h-3 inline mr-1"></i> Response JSON</summary>
                                     <pre class="tva-json-pre">{{ json_encode(['tables' => $mTables ?: [], 'sources' => $mSources ?: []], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) }}</pre>
                                 </details>
                             @endif
@@ -430,7 +430,7 @@
                     </div>
                 @empty
                     <div class="tva-empty">
-                        <i data-lucide="message-square-off"></i>
+                        <i data-lucide="inbox"></i>
                         <div>No messages in this session</div>
                     </div>
                 @endforelse

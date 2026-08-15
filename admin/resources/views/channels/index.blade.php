@@ -37,6 +37,47 @@
     /* per-platform identity */
     .tva-ch-tile--whatsapp { border-top-color:#25d366; }
     .tva-ch-tile--whatsapp .tva-ch-tile__icon { background:#25d366; }
+    /* ── Onboarding ────────────────────────────────────────────────────
+       Two cards side by side on desktop, stacked on a phone. Inside each,
+       a 2-up grid at ALL sizes: six buttons in one wrapping flex row meant
+       a phone showed a ragged column of full-width bars, and a desktop
+       showed a line so long the two ways in looked like one list. */
+    .tva-ob { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:18px; }
+    @media (max-width: 900px) { .tva-ob { grid-template-columns:1fr; } }
+
+    .tva-ob__group { background:var(--tva-surface,#fff); border:1px solid var(--tva-border,#e2e8f0);
+                     border-radius:14px; padding:15px 16px 16px; }
+    .tva-ob__head { display:flex; align-items:flex-start; gap:11px; margin-bottom:13px; }
+    .tva-ob__head > svg, .tva-ob__head > i { width:17px; height:17px; flex-shrink:0; margin-top:2px;
+                                             color:var(--tva-text-3,#94a3b8); }
+    .tva-ob__head b { display:block; font-size:13.5px; font-weight:650; color:var(--tva-text,#0f172a); }
+    .tva-ob__head span { display:block; font-size:11.5px; color:var(--tva-text-3,#94a3b8); line-height:1.5; margin-top:1px; }
+
+    /* Two per row everywhere. Below 380px they go full width, because at
+       that size a half-width button cannot hold "Instagram" and its icon. */
+    .tva-ob__grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+    @media (max-width: 380px) { .tva-ob__grid { grid-template-columns:1fr; } }
+
+    /* The brand colour lives on the border and the icon, not the fill. Four
+       saturated blocks in a 2x2 grid fight each other; an outline keeps each
+       channel recognisable without the panel turning into a paint chart. */
+    .tva-ob__btn {
+        --ob:#64748b;
+        display:flex; align-items:center; gap:9px; min-width:0;
+        padding:10px 12px; border-radius:10px; cursor:pointer;
+        border:1px solid var(--tva-border,#e2e8f0); background:var(--tva-surface,#fff);
+        color:var(--tva-text,#0f172a); font-size:13px; font-weight:600; font-family:inherit;
+        text-align:left; transition:border-color .14s, background .14s, transform .1s;
+    }
+    .tva-ob__btn:hover { border-color:var(--ob); background:var(--tva-hover,#f8fafc); }
+    .tva-ob__btn:active { transform:translateY(1px); }
+    .tva-ob__btn:focus-visible { outline:none; box-shadow:0 0 0 3px color-mix(in srgb, var(--ob) 30%, transparent); }
+    .tva-ob__ico { width:28px; height:28px; flex-shrink:0; border-radius:8px;
+                   display:flex; align-items:center; justify-content:center;
+                   background:color-mix(in srgb, var(--ob) 12%, transparent); color:var(--ob); }
+    .tva-ob__ico svg, .tva-ob__ico i { width:16px; height:16px; }
+    .tva-ob__btn--plain .tva-ob__ico { background:var(--tva-surface-3,#f1f5f9); color:var(--tva-text-3,#94a3b8); }
+
     .tva-ch-tile--instagram { border-top-color:#dc2743; }
     .tva-ch-tile--instagram .tva-ch-tile__icon { background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%); }
     .tva-ch-tile--facebook_page, .tva-ch-tile--messenger { border-top-color:#1877f2; }
@@ -134,44 +175,84 @@
     </div>
 
     @if ($project)
-    <div class="flex flex-wrap items-center gap-2 mb-4">
-        @php
-            // Which Instagram path is live decides what we can honestly
-            // promise on the button: Instagram Login needs no Facebook Page,
-            // the older Facebook-Login path does.
-            $igDirect = (bool) config('meta.instagram.app_id') && (bool) config('meta.instagram.app_secret');
-        @endphp
-        <div class="text-sm text-slate-500 mr-auto">Connect a platform — sign in in a popup and pick what to link.</div>
-        <button type="button" onclick="openConnect('facebook')" class="btn text-white" style="background:#1877f2;">
-            <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('facebook', 16) !!}</span> Connect Facebook
-        </button>
-        <button type="button" onclick="openConnect('instagram')" class="btn text-white"
-                style="background:linear-gradient(45deg,#f09433,#dc2743,#bc1888);"
-                title="{{ $igDirect
-                    ? 'Sign in with Instagram — no Facebook Page needed'
-                    : 'Signs in with Facebook; your Instagram account must be linked to a Facebook Page' }}">
-            <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('instagram', 16) !!}</span> Connect Instagram
-        </button>
-        {{-- Instagram gets its own QR handoff for the same reason WhatsApp
-             does, only more so: Instagram blocks logins it cannot tie to a
-             device the account has used before, and the phone running the
-             Instagram app is that device. --}}
-        <button type="button" onclick="openHandoff('instagram')" class="btn btn-secondary"
-                title="Finish on the phone where the Instagram app is signed in">
-            <i data-lucide="qr-code" class="w-4 h-4 mr-1 inline"></i> Instagram on phone
-        </button>
-        <button type="button" onclick="connectWhatsApp()" class="btn text-white" style="background:#25d366;">
-            <span class="ch-glyph mr-2">{!! App\Support\BrandIcons::render('whatsapp', 16) !!}</span> Connect WhatsApp
-        </button>
-        {{-- The customer's WhatsApp lives on their phone, not the machine
-             they administer from. Scanning hands the flow to the device that
-             can actually complete it. --}}
-        <button type="button" onclick="openHandoff('whatsapp')" class="btn btn-secondary" title="Finish on your phone by scanning a QR code">
-            <i data-lucide="qr-code" class="w-4 h-4 mr-1 inline"></i> Scan with phone
-        </button>
-        <button type="button" class="btn btn-secondary" data-tva-modal-open="channel-create">
-            <i data-lucide="plus" class="w-4 h-4 mr-1 inline"></i> Connect channel
-        </button>
+    @php
+        // Which Instagram path is live decides what we can honestly promise
+        // on the button: Instagram Login needs no Facebook Page, the older
+        // Facebook-Login path does.
+        $igDirect = (bool) config('meta.instagram.app_id') && (bool) config('meta.instagram.app_secret');
+    @endphp
+
+    {{-- Two groups, because there are genuinely two ways in and mixing them
+         made the row a guessing game: six buttons where "Connect Instagram"
+         and "Instagram on phone" sat apart and looked unrelated.
+
+         Split by DEVICE, which is the actual decision a customer makes:
+         finish here at the desk, or finish on the phone where the app is
+         already signed in. --}}
+    <div class="tva-ob">
+        <div class="tva-ob__group">
+            <div class="tva-ob__head">
+                <i data-lucide="monitor"></i>
+                <div>
+                    <b>Connect here</b>
+                    <span>Sign in to Meta in a popup and pick what to link</span>
+                </div>
+            </div>
+            <div class="tva-ob__grid">
+                <button type="button" onclick="openConnect('facebook')" class="tva-ob__btn" style="--ob:#1877f2">
+                    <span class="tva-ob__ico">{!! App\Support\BrandIcons::render('facebook', 18) !!}</span>
+                    Facebook
+                </button>
+                <button type="button" onclick="openConnect('instagram')" class="tva-ob__btn" style="--ob:#dc2743"
+                        title="{{ $igDirect
+                            ? 'Sign in with Instagram — no Facebook Page needed'
+                            : 'Signs in with Facebook; your Instagram account must be linked to a Facebook Page' }}">
+                    <span class="tva-ob__ico">{!! App\Support\BrandIcons::render('instagram', 18) !!}</span>
+                    Instagram
+                </button>
+                <button type="button" onclick="connectWhatsApp()" class="tva-ob__btn" style="--ob:#25d366">
+                    <span class="tva-ob__ico">{!! App\Support\BrandIcons::render('whatsapp', 18) !!}</span>
+                    WhatsApp
+                </button>
+                <button type="button" class="tva-ob__btn tva-ob__btn--plain" data-tva-modal-open="channel-create">
+                    <span class="tva-ob__ico"><i data-lucide="plus"></i></span>
+                    Add manually
+                </button>
+            </div>
+        </div>
+
+        <div class="tva-ob__group">
+            <div class="tva-ob__head">
+                <i data-lucide="qr-code"></i>
+                <div>
+                    <b>Finish on your phone</b>
+                    <span>Scan a code and complete it where the app is signed in</span>
+                </div>
+            </div>
+            <div class="tva-ob__grid">
+                {{-- The customer's WhatsApp lives on their phone, not the
+                     machine they administer from. --}}
+                <button type="button" onclick="openHandoff('whatsapp')" class="tva-ob__btn" style="--ob:#25d366">
+                    <span class="tva-ob__ico">{!! App\Support\BrandIcons::render('whatsapp', 18) !!}</span>
+                    WhatsApp
+                </button>
+                {{-- Instagram needs this more than WhatsApp does: it blocks
+                     logins it cannot tie to a device the account has used
+                     before, and the phone running the app is that device. --}}
+                <button type="button" onclick="openHandoff('instagram')" class="tva-ob__btn" style="--ob:#dc2743">
+                    <span class="tva-ob__ico">{!! App\Support\BrandIcons::render('instagram', 18) !!}</span>
+                    Instagram
+                </button>
+                <button type="button" onclick="openHandoff('facebook')" class="tva-ob__btn" style="--ob:#1877f2">
+                    <span class="tva-ob__ico">{!! App\Support\BrandIcons::render('facebook', 18) !!}</span>
+                    Facebook
+                </button>
+                <button type="button" class="tva-ob__btn tva-ob__btn--plain" data-tva-modal-open="channel-create">
+                    <span class="tva-ob__ico"><i data-lucide="plus"></i></span>
+                    Add manually
+                </button>
+            </div>
+        </div>
     </div>
     @endif
 

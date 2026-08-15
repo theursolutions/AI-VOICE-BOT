@@ -43,7 +43,7 @@
     .blog-filters { display:flex; flex-wrap:wrap; gap:9px; justify-content:center; margin: 0 0 34px; }
     .blog-filter {
         font-size:12.5px; font-weight:600; padding:7px 15px; border-radius:999px;
-        border:1px solid var(--line); color:var(--text-dim); background:rgba(0,0,0,.25);
+        border:1px solid var(--line); color:var(--text-dim); background:var(--surface, rgba(0,0,0,.25));
         transition:border-color .15s, color .15s, background .15s;
     }
     .blog-filter:hover { color:var(--text); border-color:var(--line-hot); }

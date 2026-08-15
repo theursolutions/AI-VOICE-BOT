@@ -24,10 +24,11 @@
                 <a href="{{ route('ops.audit.index') }}" class="btn btn-secondary btn-sm">Clear</a>
             @endif
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($entries->total()) }} event(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-audit', 'filename' => 'ops-audit', 'paginator' => $entries ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-audit">
                 <thead>
                     <tr>
                         <th>When</th>

@@ -47,7 +47,7 @@
 
     .cform label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); margin: 16px 0 7px; }
     .cform input, .cform textarea {
-        width: 100%; background: rgba(0,0,0,.3); border: 1px solid var(--line);
+        width: 100%; background: var(--surface, rgba(0,0,0,.3)); border: 1px solid var(--line);
         border-radius: 11px; padding: 12px 14px; color: var(--text); font-family: inherit; font-size: 15px; outline: none;
         transition: border-color .15s;
     }

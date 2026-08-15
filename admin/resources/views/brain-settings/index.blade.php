@@ -349,7 +349,7 @@
         <div class="tva-bs-card">
             <div class="tva-bs-card__head">
                 <div class="tva-bs-card__icon" style="background:#fef3c7; color:#b45309;">
-                    <i data-lucide="sparkles" class="w-4 h-4"></i>
+                    <i data-lucide="wand" class="w-4 h-4"></i>
                 </div>
                 <div>
                     <div class="tva-bs-card__title">Choose the AI brain</div>

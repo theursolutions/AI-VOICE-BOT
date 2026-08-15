@@ -28,7 +28,7 @@
         </li>
         <li>
             <a href="{{ route('ops.analytics.index') }}" class="side-menu {{ $is('ops.analytics.*') ? 'side-menu--active' : '' }}">
-                <div class="side-menu__icon"><i data-lucide="bar-chart-3"></i></div>
+                <div class="side-menu__icon"><i data-lucide="bar-chart-2"></i></div>
                 <div class="side-menu__title">Analytics</div>
             </a>
         </li>
@@ -155,7 +155,7 @@
         </li>
         <li>
             <a href="{{ route('ops.blog.index') }}" class="side-menu {{ $is('ops.blog.*') ? 'side-menu--active' : '' }}">
-                <div class="side-menu__icon"><i data-lucide="newspaper"></i></div>
+                <div class="side-menu__icon"><i data-lucide="book-open"></i></div>
                 <div class="side-menu__title">Articles</div>
             </a>
         </li>

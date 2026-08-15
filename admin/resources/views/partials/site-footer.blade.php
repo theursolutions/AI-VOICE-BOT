@@ -217,4 +217,23 @@
         .site-footer { padding: 48px 0 28px; }
         .site-footer__bottom { flex-direction: column; align-items: flex-start; }
     }
+
+    /* Light footer. Not a dark band: a page that is white throughout and
+       then ends in black reads as two documents stapled together.
+
+       What gives it weight instead of colour: a hairline top rule, a very
+       faint tint so it separates from the last section, and real hierarchy
+       between the brand block and the link columns. */
+    html:not(.dark) .site-footer {
+        --text:      #0b1b33;
+        --text-dim:  #46586f;
+        --text-dim2: #6b7c93;
+        --line:      rgba(16,32,56,.10);
+        --neon:      #1d4ed8;
+        background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+        border-top: 1px solid rgba(16,32,56,.10);
+        color: var(--text-dim);
+    }
+    html:not(.dark) .site-footer a:hover { color: #1d4ed8; }
+    html:not(.dark) .site-footer__bottom { border-top-color: rgba(16,32,56,.08); }
 </style>

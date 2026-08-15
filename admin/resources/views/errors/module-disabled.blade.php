@@ -52,7 +52,7 @@
             <i data-lucide="hard-hat" class="w-3.5 h-3.5"></i> Coming soon
         </div>
         <div class="ud-icon">
-            <i data-lucide="construction" class="w-11 h-11"></i>
+            <i data-lucide="alert-triangle" class="w-11 h-11"></i>
         </div>
         <h1 class="ud-title">{{ $label }} is under development</h1>
         <p class="ud-text">
