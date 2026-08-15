@@ -399,6 +399,47 @@ class GraphClient
         return $this->post("{$fromId}/messages", $body) !== null;
     }
 
+    /**
+     * Show "typing…" to a WhatsApp customer, and mark their message read.
+     *
+     * One call does both: Meta expects `status: read` alongside the typing
+     * indicator, so the blue ticks and the bubble arrive together.
+     *
+     * The indicator clears after 25 SECONDS or the moment we send a reply,
+     * whichever comes first — so it is self-cancelling and there is nothing
+     * to turn off. Meta's guidance is to only show it when a reply is
+     * genuinely coming, which is why this fires from the inbound job rather
+     * than on webhook receipt: by then we know a handler is about to run.
+     *
+     * Failure is deliberately silent. A missing typing bubble must never
+     * cost the customer their reply.
+     */
+    public function sendTypingIndicator(string $phoneNumberId, string $messageId): bool
+    {
+        if ($messageId === '') {
+            return false;
+        }
+
+        return $this->post("{$phoneNumberId}/messages", [
+            'messaging_product' => 'whatsapp',
+            'status'            => 'read',
+            'message_id'        => $messageId,
+            'typing_indicator'  => ['type' => 'text'],
+        ]) !== null;
+    }
+
+    /**
+     * Messenger / Instagram equivalent. A different API entirely — a sender
+     * action rather than a message status — and it lasts 20 seconds.
+     */
+    public function sendMessengerTyping(string $fromId, string $recipientId, bool $on = true): bool
+    {
+        return $this->post("{$fromId}/messages", [
+            'recipient'     => ['id' => $recipientId],
+            'sender_action' => $on ? 'typing_on' : 'typing_off',
+        ]) !== null;
+    }
+
     public function markRead(string $phoneNumberId, string $messageId): void
     {
         if ($messageId === '') {

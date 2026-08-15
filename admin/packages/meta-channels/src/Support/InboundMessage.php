@@ -27,5 +27,7 @@ class InboundMessage
         // Instagram Login carry graph.instagram.com, whose tokens the
         // Facebook host rejects.
         public ?string $graphBase = null,
+        // Provider id (wamid / mid) of the message this one is a reply to.
+        public ?string $replyToExternalId = null,
     ) {}
 }

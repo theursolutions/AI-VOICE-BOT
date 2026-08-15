@@ -361,6 +361,15 @@
                     </a>
                 </li>
                 @endif
+                @if($can('contacts'))
+                <li>
+                    <a href="{{ $clientSlug ? route('contacts.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('contacts.*') ? 'side-menu--active' : '' }}">
+                        <div class="side-menu__icon"><i data-lucide="contact"></i></div>
+                        <div class="side-menu__title">Contacts</div>
+                    </a>
+                </li>
+                @endif
                 @if($can('leads'))
                 <li>
                     <a href="{{ $clientSlug ? route('leads.index', ['client' => $clientSlug]) : '#' }}"

@@ -16,6 +16,11 @@ use App\Models\Skill;
  *   3. Anything missing/empty → first active project agent
  *   4. Nothing at all → null (caller falls back to project defaults)
  *
+ * At every stage candidates are filtered by CHANNEL: an agent configured
+ * for WhatsApp only will not be handed a Facebook conversation. An agent
+ * with no channels configured handles all of them, so nothing that worked
+ * before this existed stops working.
+ *
  * Round-robin is intentionally crude: `id % count` keyed on session id.
  * Good enough for early-stage load distribution; can swap for an
  * agent_load_counter in a later pass without breaking callers.
@@ -30,11 +35,11 @@ class AgentRouter
     /**
      * @param  array{routing_type?:string, agent_ids?:array, skill_id?:int|null}|null  $routing
      */
-    public function pick(Project $project, ?array $routing, int $sessionId): ?BotAgent
+    public function pick(Project $project, ?array $routing, int $sessionId, ?string $channel = null): ?BotAgent
     {
         $candidates = $this->candidateIds($project, $routing);
         if (empty($candidates)) {
-            return $this->fallback($project);
+            return $this->fallback($project, $channel);
         }
 
         $active = BotAgent::query()
@@ -42,10 +47,12 @@ class AgentRouter
             ->where('project_id', $project->id)
             ->where('status', BotAgent::STATUS_ACTIVE)
             ->orderBy('id')
-            ->get();
+            ->get()
+            ->filter(fn (BotAgent $a) => $a->handlesChannel($channel))
+            ->values();
 
         if ($active->isEmpty()) {
-            return $this->fallback($project);
+            return $this->fallback($project, $channel);
         }
 
         // Deterministic per-session pick → same session always lands
@@ -86,23 +93,35 @@ class AgentRouter
     }
 
     /**
-     * No routing config or empty pool → pick the project's default
-     * agent (is_default=true), or fall back to the first active one.
+     * No routing config or empty pool → the project's default agent for this
+     * channel, else the first active one that handles it.
+     *
+     * Restricted to AI agents. This is the persona whose prompt the bot
+     * speaks with; returning a human here — which the old query happily did
+     * whenever a human happened to be `is_default` — meant the AI answered
+     * as a person who was not actually present.
+     *
+     * The channel filter runs in PHP because the assignment lives in the
+     * `metadata` JSON column, and MySQL and SQLite disagree enough on JSON
+     * path syntax to make a pushed-down query pass in production and fail in
+     * the test suite.
      */
-    private function fallback(Project $project): ?BotAgent
+    private function fallback(Project $project, ?string $channel = null): ?BotAgent
     {
-        $default = BotAgent::query()
+        $agents = BotAgent::query()
             ->where('project_id', $project->id)
             ->where('status', BotAgent::STATUS_ACTIVE)
-            ->where('is_default', true)
-            ->first();
-        if ($default) return $default;
+            ->where('type', BotAgent::TYPE_AI)
+            ->orderByDesc('is_default')     // the project default first…
+            ->orderByDesc('id')             // …then the newest
+            ->get();
 
-        return BotAgent::query()
-            ->where('project_id', $project->id)
-            ->where('status', BotAgent::STATUS_ACTIVE)
-            ->orderByDesc('id')
-            ->first();
+        return $agents->first(fn (BotAgent $a) => $a->handlesChannel($channel))
+            // A project whose agents are all restricted to other channels
+            // gets the default anyway. Silence is a worse outcome than a
+            // slightly wrong persona, and the alternative is a customer
+            // messaging a channel nobody covers and hearing nothing at all.
+            ?: $agents->first();
     }
 
     /**
@@ -113,7 +132,10 @@ class AgentRouter
     public function assignToSession(Project $project, \App\Models\Session $session): ?BotAgent
     {
         $routing = (array) data_get($session->metadata, 'routing');
-        $agent = $this->pick($project, $routing ?: null, $session->id);
+        // The channel is taken from the session rather than a parameter, so
+        // every existing caller — telephony, webchat, all three Meta
+        // channels — becomes channel-aware without being touched.
+        $agent = $this->pick($project, $routing ?: null, $session->id, $session->channel);
         if (!$agent) return null;
 
         $session->agent_id = $agent->id;

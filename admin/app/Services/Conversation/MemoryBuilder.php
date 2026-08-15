@@ -9,7 +9,19 @@ use App\Services\DataSource\ResolverResult;
 
 class MemoryBuilder
 {
-    private const RECENT_TURNS = 6;
+    /**
+     * How many exchanges of raw history to replay to the model.
+     *
+     * Was 6 — twelve messages — which a WhatsApp conversation overflows in
+     * minutes. The customer then gives their email, the bot acknowledges it,
+     * and ten messages later asks for it again and flatly denies ever
+     * receiving it. That is the single most damaging thing a support bot can
+     * do, and it was a constant.
+     *
+     * 20 turns is a few thousand tokens on a 70b model — cheap next to
+     * looking like you have amnesia.
+     */
+    private const RECENT_TURNS = 20;
 
     /**
      * Build the messages array sent to the LLM.
@@ -21,7 +33,13 @@ class MemoryBuilder
         $project = $session->project;
         $summary = $session->summary?->summary;
         $agent   = $session->agent_id ? BotAgent::find($session->agent_id) : null;
+        // Roles are filtered in the QUERY, not after. Filtering afterwards
+        // meant system notes and tool rows counted against the limit and were
+        // then thrown away — so the actual conversation the model saw was
+        // routinely far shorter than the window suggests.
         $recent  = Message::where('session_id', $session->id)
+            ->whereIn('role', ['user', 'assistant'])
+            ->whereNotNull('content')
             ->orderByDesc('id')
             ->limit(self::RECENT_TURNS * 2)
             ->get()
@@ -41,18 +59,90 @@ class MemoryBuilder
             'content' => $this->systemPrompt($project, $summary, $agent, $language),
         ];
 
+        // Everything already captured about this person, restated on EVERY
+        // turn. This is what makes forgetting structurally impossible: the
+        // details survive independently of the history window, so however
+        // long the conversation runs the bot cannot ask for an email it was
+        // given an hour ago.
+        //
+        // The data was always there — ExtractLeadFromTurn writes it after
+        // every turn and merges rather than overwrites. Nothing read it.
+        $known = $this->knownFacts($session);
+        if ($known !== '') {
+            $messages[] = ['role' => 'system', 'content' => $known];
+        }
+
         $context = $this->formatContext($contextResults);
         if ($context !== '') {
             $messages[] = ['role' => 'system', 'content' => $context];
         }
 
         foreach ($recent as $msg) {
-            if (in_array($msg->role, ['user', 'assistant'], true) && $msg->content) {
-                $messages[] = ['role' => $msg->role, 'content' => $msg->content];
+            $content = (string) $msg->content;
+
+            // Surface what the customer quoted. WhatsApp's reply-swipe was
+            // invisible to the model, so "yes, that one" or a re-sent email
+            // attached to the original message arrived with nothing to
+            // attach it to — which is how a quoted email still got answered
+            // with "you never sent one".
+            if ($msg->role === 'user' && ($quoted = data_get($msg->metadata, 'reply_to.preview'))) {
+                $content = '[replying to: "' . trim((string) $quoted) . '"] ' . $content;
             }
+
+            $messages[] = ['role' => $msg->role, 'content' => $content];
         }
 
         return $messages;
+    }
+
+    /**
+     * What we already hold about this customer, as a blunt system note.
+     *
+     * Sources, in order of trust: the session's own contact columns (set by
+     * the channel — WhatsApp gives us the name and number for free), then
+     * the fields ExtractLeadFromTurn has captured from the conversation.
+     *
+     * Phrased as a prohibition rather than a fact list because a fact list
+     * alone does not stop a model asking anyway. "Do not ask for these" does.
+     */
+    private function knownFacts(Session $session): string
+    {
+        $facts = array_filter([
+            'name'  => $session->customer_name,
+            'phone' => $session->customer_phone,
+            'email' => $session->customer_email,
+        ]);
+
+        try {
+            $lead = \App\Models\Lead::where('session_id', $session->id)
+                ->orderByDesc('id')
+                ->first(['fields']);
+
+            foreach ((array) ($lead->fields ?? []) as $key => $value) {
+                // Session columns win — they come from the platform rather
+                // than from a model's reading of a sentence.
+                if (is_scalar($value) && trim((string) $value) !== '' && empty($facts[$key])) {
+                    $facts[$key] = (string) $value;
+                }
+            }
+        } catch (\Throwable $e) {
+            // A project whose tenant DB predates the leads table must still
+            // get a reply. Missing facts are a worse answer, not no answer.
+        }
+
+        if (! $facts) {
+            return '';
+        }
+
+        $lines = [];
+        foreach ($facts as $key => $value) {
+            $lines[] = '- ' . str_replace('_', ' ', (string) $key) . ': ' . $value;
+        }
+
+        return "ALREADY PROVIDED BY THIS CUSTOMER — treat as confirmed fact:\n"
+            . implode("\n", $lines)
+            . "\n\nNEVER ask for any of the above again, and NEVER say they have not given it. "
+            . 'If they mention one of these, acknowledge it as already on file and move on.';
     }
 
     /** Short code → human name for the reply-language instruction. */
@@ -90,7 +180,18 @@ class MemoryBuilder
         if ($summary)                      { $parts[] = "Conversation so far: {$summary}"; }
 
         $langName = self::LANG_NAMES[strtolower(substr($language, 0, 2))] ?? 'English';
-        $parts[] = 'Reply in a short, precise and natural way — usually 1-3 sentences and no more than ~60 words. Get straight to the point and skip filler. Always reply in the SAME language as the user\'s most recent message; if you cannot tell which language they used, reply in '.$langName.'; if you cannot write that language, use English. Use plain text only: no markdown, no HTML tags, and never write "<br>". Capture lead details (name, email, phone, intent) naturally, asking for one thing at a time.';
+        $parts[] = 'Reply in a short, precise and natural way — usually 1-3 sentences and no more than ~60 words. Get straight to the point and skip filler. Always reply in the SAME language as the user\'s most recent message; if you cannot tell which language they used, reply in '.$langName.'; if you cannot write that language, use English. Use plain text only: no markdown, no HTML tags, and never write "<br>".';
+
+        // Conversation discipline. Written as hard rules rather than advice
+        // because the failure they prevent is the one customers actually
+        // complain about: an interrogation that repeats itself.
+        $parts[] = 'HOW TO HOLD A CONVERSATION (follow exactly):'
+            . "\n- The whole conversation above is yours. You remember all of it. Never claim a customer did not tell you something."
+            . "\n- Ask AT MOST ONE question per reply, and only when you genuinely cannot proceed without the answer."
+            . "\n- Never ask for anything already given, or anything listed as already provided. Re-asking is the fastest way to lose this customer."
+            . "\n- Answer first, ask second. If you can help with what you already have, do that instead of collecting more details."
+            . "\n- Do not open with pleasantries, do not restate the question back, and do not end every message with an offer of further help."
+            . "\n- If the customer says they already told you something, believe them, apologise once briefly, and continue. Never argue.";
 
         // Grounding rule — kept SEPARATE and blunt so even a small model
         // obeys it: use only the retrieved facts, copy numbers verbatim,

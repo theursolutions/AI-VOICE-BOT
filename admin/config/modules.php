@@ -17,6 +17,7 @@ return [
     'assistant'    => ['label' => 'Team Assistant',  'routes' => ['assistant']],
     'conversations'=> ['label' => 'Conversations',   'routes' => ['sessions']],
     'messages'     => ['label' => 'Messages',        'routes' => ['chat']],
+    'contacts'     => ['label' => 'Contacts',        'routes' => ['contacts']],
     'leads'        => ['label' => 'Leads',           'routes' => ['leads']],
     'agents'       => ['label' => 'Agents',          'routes' => ['bot-agents']],
     'channels'     => ['label' => 'Channels',        'routes' => ['channels']],

@@ -411,6 +411,23 @@
                 </div>
             @endif
 
+            {{-- The person, not just this one opportunity. A lead is a single
+                 capture; the contact is every conversation they have ever had
+                 with the business, on any channel. --}}
+            @if ($lead->contact_id)
+                <a href="{{ route('contacts.show', ['client' => $client->slug, 'id' => $lead->contact_id, 'project_id' => hashid($projectId)]) }}"
+                   class="intro-y tva-source-banner">
+                    <div class="tva-meta-icon" style="background:#ede9fe; color:#6d28d9;">
+                        <i data-lucide="contact" class="w-4 h-4"></i>
+                    </div>
+                    <div class="flex-1">
+                        <div class="tva-meta-label">Contact</div>
+                        <div class="tva-meta-value">Full history across every channel</div>
+                    </div>
+                    <i data-lucide="external-link" class="w-5 h-5"></i>
+                </a>
+            @endif
+
             @if ($lead->session_id)
                 <a href="{{ route('sessions.show', ['client' => $client->slug, 'id' => $lead->session_id]) }}?project_id={{ hashid($projectId) }}"
                    class="intro-y tva-source-banner">

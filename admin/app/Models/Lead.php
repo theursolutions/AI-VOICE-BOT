@@ -15,6 +15,10 @@ class Lead extends Model
     protected $fillable = [
         'session_id',
         'project_id',
+        // Required here, not just as a column: Lead::create() mass-assigns,
+        // and an unlisted key is dropped SILENTLY — every new lead would
+        // have been created with no contact and nothing to show for it.
+        'contact_id',
         'fields',
         'confidence',
         'status',

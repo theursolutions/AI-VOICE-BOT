@@ -34,6 +34,18 @@ class ProcessInboundMessage implements ShouldQueue
     {
         $this->enrichSenderProfile();
 
+        $graph = new GraphClient($this->message->accessToken, $this->message->graphBase);
+
+        // Show "typing…" BEFORE running the handler, not after.
+        //
+        // The handler is the slow part — RAG lookups and an LLM call take a
+        // few seconds, which is exactly the silence that makes a customer
+        // wonder whether anything received their message. Sent here rather
+        // than on webhook receipt because by this point we know a reply is
+        // actually being produced, which is Meta's stated condition for
+        // showing it at all.
+        $this->showTyping($graph);
+
         $reply = $handler->handle($this->message);
 
         if ($reply === null || trim($reply) === '') {
@@ -41,14 +53,34 @@ class ProcessInboundMessage implements ShouldQueue
             return;
         }
 
-        $graph = new GraphClient($this->message->accessToken, $this->message->graphBase);
-
         if ($this->message->provider === ChannelConnection::PROVIDER_WHATSAPP) {
             // WhatsApp Cloud API
             $graph->sendText($this->message->channelExternalId, $this->message->from, $reply);
         } else {
             // Messenger Platform (Facebook Page / Instagram)
             $graph->sendMessengerText($this->message->channelExternalId, $this->message->from, $reply);
+        }
+    }
+
+    /**
+     * Best-effort typing indicator. Never allowed to break the reply.
+     *
+     * WhatsApp clears it automatically after 25 seconds or when we send;
+     * Messenger after 20. Neither needs turning off, so there is no cleanup
+     * path to get wrong if the handler throws.
+     */
+    private function showTyping(GraphClient $graph): void
+    {
+        try {
+            if ($this->message->provider === ChannelConnection::PROVIDER_WHATSAPP) {
+                // Doubles as the read receipt — Meta requires status:read on
+                // the same call, so the customer gets blue ticks too.
+                $graph->sendTypingIndicator($this->message->channelExternalId, (string) $this->message->messageId);
+            } else {
+                $graph->sendMessengerTyping($this->message->channelExternalId, $this->message->from);
+            }
+        } catch (\Throwable $e) {
+            Log::info('MetaChannels: typing indicator failed: ' . $e->getMessage());
         }
     }
 

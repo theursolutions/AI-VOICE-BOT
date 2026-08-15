@@ -34,6 +34,27 @@
     }
     .tva-ag-name { font-size:14px; font-weight:600; color:#0f172a; }
     .tva-ag-meta { font-size:11px; color:#64748b; margin-top:3px; display:flex; flex-wrap:wrap; gap:6px; }
+    /* Channels + permissions block in the agent modal. Boxed and set apart
+       from the identity fields above it, because these change who gets a
+       conversation rather than what the agent is called. */
+    .tva-ag-perm { border:1px solid #e2e8f0; border-radius:10px; padding:11px 13px; margin-bottom:12px; background:#f8fafc; }
+    html.dark .tva-ag-perm { background:#0f172a; border-color:#334155; }
+    .tva-ag-perm__h { font-size:9.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+                      color:#64748b; margin-bottom:4px; }
+    .tva-ag-perm__grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:5px 12px; }
+    .tva-ag-perm__opt { display:flex; align-items:center; gap:7px; font-size:12px; color:#334155; cursor:pointer; }
+    html.dark .tva-ag-perm__opt { color:#cbd5e1; }
+    /* @tailwindcss/forms strips the native control, so it is drawn here —
+       the same reason the status checkbox needed it. */
+    .tva-ag-perm__opt input[type="checkbox"] { appearance:none; -webkit-appearance:none;
+        width:16px; height:16px; flex-shrink:0; margin:0; cursor:pointer;
+        border:1.5px solid #cbd5e1; border-radius:5px; background:#fff; transition:.12s; }
+    .tva-ag-perm__opt input[type="checkbox"]:checked {
+        background-color:#4f46e5; border-color:#4f46e5;
+        background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 8.5l3.2 3.2L13 5'/%3E%3C/svg%3E");
+        background-repeat:no-repeat; background-position:center; background-size:76% 76%; }
+    html.dark .tva-ag-perm__opt input[type="checkbox"] { background-color:#1e293b; border-color:#475569; }
+
     .tva-ag-chip { font-size:10px; padding:2px 8px; border-radius:999px; background:#e2e8f0; color:#475569; font-weight:600; }
     .tva-ag-chip.is-default { background:#dcfce7; color:#15803d; }
     .tva-ag-chip.is-archived { background:#f1f5f9; color:#94a3b8; }

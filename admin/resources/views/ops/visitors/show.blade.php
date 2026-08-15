@@ -148,5 +148,5 @@
     </div>
 </div>
 
-<script>if (window.lucide?.createIcons) window.lucide.createIcons();</script>
+<script>if (window.lucide?.createIcons) { try { window.lucide.createIcons({ icons: (window.lucide.icons || {}), nameAttr: "data-lucide" }); } catch (_) {} }</script>
 @endsection

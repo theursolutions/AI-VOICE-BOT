@@ -106,18 +106,70 @@ class ExtractLeadFromTurn implements ShouldQueue
             // Only raise confidence — never overwrite a stronger past
             // extraction with a weaker one.
             $existing->confidence = max((float) ($existing->confidence ?? 0), $confidence);
+            $existing->contact_id = $existing->contact_id ?: $session->contact_id;
             $existing->update_at = $now;
             $existing->save();
         } else {
             Lead::create([
                 'session_id' => $session->id,
                 'project_id' => $session->project_id,
+                'contact_id' => $session->contact_id,
                 'fields'     => $fields,
                 'confidence' => $confidence,
                 'status'     => 'new',
                 'created_at' => $now,
                 'update_at'  => $now,
             ]);
+        }
+
+        // This is the moment cross-channel identity actually resolves.
+        //
+        // An email or phone extracted here is usually the FIRST strong
+        // identifier we have for someone who arrived on Instagram or
+        // Messenger — where the handle is an opaque page-scoped id that
+        // matches nothing. Feeding it back is what links them to the
+        // WhatsApp conversation they had last month.
+        $this->reconcileContact($session, $fields);
+    }
+
+    /** Push newly-learned identifiers into the contact record. */
+    private function reconcileContact(Session $session, array $fields): void
+    {
+        $details = array_filter([
+            'name'  => $fields['name']  ?? null,
+            'email' => $fields['email'] ?? null,
+            'phone' => $fields['phone'] ?? null,
+        ], fn ($v) => is_scalar($v) && trim((string) $v) !== '');
+
+        if (! $details) {
+            return;
+        }
+
+        try {
+            $resolver = app(\App\Services\Crm\ContactResolver::class);
+
+            if ($session->contact_id && ($contact = \App\Models\Contact::find($session->contact_id))) {
+                $resolver->reconcile($contact, $details);
+                return;
+            }
+
+            // No contact yet — webchat and telephony sessions do not create
+            // one on arrival the way Meta channels do.
+            $contact = $resolver->resolve(
+                projectId:  (int) $session->project_id,
+                channel:    (string) $session->channel,
+                externalId: (string) ($session->external_id ?: $session->id),
+                details:    $details,
+            );
+
+            if ($contact) {
+                $session->contact_id = $contact->id;
+                $session->save();
+            }
+        } catch (\Throwable $e) {
+            // Identity resolution is an enrichment. It must never cost the
+            // lead that has already been saved above.
+            Log::warning('Contact reconcile failed: ' . $e->getMessage());
         }
     }
 
