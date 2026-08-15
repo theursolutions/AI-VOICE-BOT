@@ -152,11 +152,75 @@ class PlanFeatureService
         return $plan === null ? true : $this->planHas($plan, $featureKey);
     }
 
+    /**
+     * The workspace's EFFECTIVE limit: the plan's allowance plus anything
+     * bought as an add-on.
+     *
+     * This is the integration point that makes add-ons real. Buying five extra
+     * seats has to raise the ceiling from 10 to 15 everywhere the ceiling is
+     * consulted — the sidebar, the member form, the usage meters — not just on
+     * the invoice. Every caller already went through here, so they all inherit
+     * it.
+     *
+     * NULL (unlimited) stays unlimited: you cannot top up infinity.
+     */
     public function clientLimit(Client $client, string $featureKey): ?int
     {
         $plan = $client->currentPlan();
 
-        return $plan === null ? null : $this->planLimit($plan, $featureKey);
+        if ($plan === null) {
+            return null;
+        }
+
+        $base = $this->planLimit($plan, $featureKey);
+
+        if ($base === null) {
+            return null;
+        }
+
+        return $base + $this->addonContribution($client, $featureKey);
+    }
+
+    /**
+     * How much the purchased add-ons add to one feature.
+     *
+     * An add-on plan's own `plan_features` say what a single unit grants, so
+     * "Extra seat" carries `seats = 1` and five of them contribute 5. That
+     * keeps add-ons inside the same feature system rather than inventing a
+     * parallel one — and means an operator can change what an add-on grants
+     * from the same matrix as everything else.
+     */
+    public function addonContribution(Client $client, string $featureKey): int
+    {
+        $subscription = $client->currentSubscription();
+
+        if (! $subscription) {
+            return 0;
+        }
+
+        $addons = $subscription->relationLoaded('addons')
+            ? $subscription->addons->whereNull('cancelled_at')->where('quantity', '>', 0)
+            : $subscription->addons()->active()->get();
+
+        $total = 0;
+
+        foreach ($addons as $addon) {
+            if (! $addon->plan_id) {
+                continue;
+            }
+
+            $perUnit = $this->planLimit($addon->plan_id, $featureKey);
+
+            // An add-on granting "unlimited" of something is not a sane
+            // product, and multiplying null by a quantity is meaningless.
+            if ($perUnit === null || $perUnit <= 0) {
+                continue;
+            }
+
+            $total += $perUnit * max(0, (int) $addon->quantity);
+        }
+
+        return $total;
     }
 
     /**

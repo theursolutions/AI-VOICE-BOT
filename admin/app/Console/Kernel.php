@@ -66,6 +66,15 @@ class Kernel extends ConsoleKernel
             ->dailyAt('05:10')
             ->withoutOverlapping();
 
+        // Absolute usage metrics (indexed pages, stored MB) measured from real
+        // state rather than counted from events — the ingest pipeline is
+        // asynchronous, so there is no moment in PHP that knows the final page
+        // count. Idempotent: it SETS values, so re-running changes nothing.
+        // Hourly is ample for a figure that only moves when someone uploads.
+        $schedule->command('billing:reconcile-usage')
+            ->hourly()
+            ->withoutOverlapping();
+
         // GeoLite2 refresh. Shared .mmdb — one file serves both the local-price
         // display and visitor analytics. MaxMind publishes weekly; the command
         // no-ops if the file is under 6 days old, and is a silent no-op with no

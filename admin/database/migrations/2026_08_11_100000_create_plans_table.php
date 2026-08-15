@@ -34,7 +34,7 @@ return new class extends Migration
             // standard  — a normal self-serve paid plan
             // enterprise— "talk to us"; rendered as a CTA band, not a price card
             // custom    — a private, negotiated plan (is_public = false)
-            $table->enum('type', ['free', 'standard', 'enterprise', 'custom'])
+            $table->enum('type', ['free', 'standard', 'enterprise', 'custom', 'addon'])
                   ->default('standard')
                   ->index();
 

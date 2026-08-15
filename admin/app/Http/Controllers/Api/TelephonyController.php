@@ -288,6 +288,23 @@ XML;
                     $session->ended_at = time();
                     $session->save();
                 }
+
+                // Meter the call. Twilio reports whole seconds in
+                // `CallDuration` on the terminal status only, which is exactly
+                // once per call — so this cannot double-count on a retry of an
+                // earlier status. Rounded up to the minute in UsageRecorder,
+                // because that is how the carrier bills us.
+                //
+                // Keyed off the SESSION's project, not the `Project::first()`
+                // above — that lookup is a pre-existing single-tenant shortcut
+                // (see the comment there) and would bill the wrong workspace
+                // on a multi-tenant install.
+                if ($session) {
+                    app(\App\Services\Billing\UsageRecorder::class)->callCompleted(
+                        (int) $session->project_id,
+                        (int) $request->input('CallDuration', 0),
+                    );
+                }
             }
         }
 

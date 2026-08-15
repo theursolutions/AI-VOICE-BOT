@@ -30,6 +30,8 @@ use Illuminate\Support\Str;
  */
 class OAuthController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     private const PROVIDERS = ['salesforce', 'pipedrive', 'zoho'];
 
     /** Display names used in flash messages / data_sources.name defaults. */
@@ -51,6 +53,16 @@ class OAuthController extends Controller
         if (!in_array($provider, self::PROVIDERS, true)) {
             return redirect()->route('dashboard')
                 ->with('error', "Unsupported OAuth provider '{$provider}'.");
+        }
+
+        // CRM connectors are a paid feature (`crm_connectors`, Growth+).
+        // Checked at `start`, before the customer is sent to the provider's
+        // consent screen — refusing on the callback instead would mean they
+        // authorise us at HubSpot/Salesforce and only then get told no.
+        $client = $request->attributes->get('client');
+
+        if ($client && ($refusal = $this->refuseUnlessPlanFeature($client, 'crm_connectors', 'CRM connectors'))) {
+            return $refusal;
         }
 
         $data = $request->validate([

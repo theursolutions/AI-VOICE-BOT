@@ -445,10 +445,21 @@
                 $widgetBase = rtrim((string) config('services.widget.base_url'), '/');
                 if ($widgetBase === '') {
                     $scriptDir = str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? ''));
+                    $host      = request()->getSchemeAndHttpHost();
+
+                    // Development: admin/public and widget/ are siblings, so
+                    // swap the tail. Deployed: the docroot IS admin/public, so
+                    // there is nothing to swap and the widget is served at
+                    // /widget by an nginx alias.
+                    //
+                    // The old code only handled the first. On a deploy the
+                    // script dir is "/", the swap matched nothing, and the
+                    // preview fell back to the bare host — producing
+                    // https://host/webchat-app.php, which 404s.
                     $candidate = preg_replace('#/admin/public/?$#', '/widget', $scriptDir);
-                    if ($candidate && $candidate !== $scriptDir) {
-                        $widgetBase = request()->getSchemeAndHttpHost() . rtrim($candidate, '/');
-                    }
+                    $widgetBase = ($candidate && $candidate !== $scriptDir)
+                        ? $host . rtrim($candidate, '/')
+                        : $host . rtrim($scriptDir === '/' ? '' : $scriptDir, '/') . '/widget';
                 }
                 $previewUrl = ($widgetBase && $project)
                     ? $widgetBase . '/webchat-app.php?key=' . urlencode($project->project_api_key) . '&embed=1&_=' . time()

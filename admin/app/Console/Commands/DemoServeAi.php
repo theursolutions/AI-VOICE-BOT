@@ -4,10 +4,10 @@ namespace App\Console\Commands;
 
 use App\Models\BotAgent;
 use App\Models\Client;
-use App\Models\ClientProjectUser;
 use App\Models\DataSource;
 use App\Models\Flow;
 use App\Models\Project;
+use App\Models\Role;
 use App\Models\Skill;
 use App\Models\User;
 use App\Models\Voice;
@@ -144,18 +144,35 @@ class DemoServeAi extends Command
         }
 
         // Membership, so the owner can actually open it in the dashboard.
-        $exists = ClientProjectUser::where('user_id', $owner->id)
-            ->where('client_id', $client->id)
-            ->exists();
+        //
+        // It needs a ROLE, not merely a row. `User::roleForClient()` selects
+        // `whereNotNull('role_id')`, so a membership without one resolves to
+        // no role at all — which makes isOwnerOf() false and allowedModules()
+        // empty, and EnsureModuleAccess then 403s every section with "You
+        // don't have access to this section." The workspace looks created and
+        // is completely unusable.
+        //
+        // This mirrors what RegisteredUserController does for a real signup:
+        // an all-access Owner role, then a membership pointing at it.
+        $ownerRole = Role::where('client_id', $client->id)
+            ->where('is_owner', true)
+            ->first();
 
-        if (! $exists) {
-            ClientProjectUser::create([
-                'user_id'     => $owner->id,
-                'client_id'   => $client->id,
-                'project_id'  => null,
-                'assigned_at' => time(),
+        if (! $ownerRole) {
+            $ownerRole = Role::create([
+                'client_id'  => $client->id,
+                'name'       => 'Owner',
+                'modules'    => ['*'],
+                'is_owner'   => true,
+                'created_at' => time(),
+                'updated_at' => time(),
             ]);
         }
+
+        // Handles both cases in one call: creates the membership if missing,
+        // and back-fills role_id on one created by an earlier run of this
+        // command — which is what leaves an existing demo workspace locked.
+        $owner->attachMembership($client->id, null, $owner->id, $ownerRole->id);
 
         return $client;
     }

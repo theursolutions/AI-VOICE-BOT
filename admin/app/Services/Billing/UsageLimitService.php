@@ -96,6 +96,40 @@ class UsageLimitService
         return $this->counter($client, $metric, fresh: true);
     }
 
+    /**
+     * SET an absolute metric to a measured value, rather than adding to it.
+     *
+     * Absolute metrics (storage, indexed pages) are a standing total, not a
+     * count of events: 40 MB stored is 40 MB however many uploads produced it.
+     * Pushing them through record() would add 40 every time we measured, so
+     * reconciling twice would report 80 MB of the same files.
+     *
+     * This is what makes reconciliation safe to re-run — the defining property
+     * of measuring state instead of counting events.
+     */
+    public function setAbsolute(Client $client, string $metric, int $value, ?int $projectId = null): void
+    {
+        [$start, $end] = $this->currentPeriod($client, $metric);
+
+        $allowance = $this->allowanceFor($client, $metric);
+        $overage   = $allowance === null ? 0 : max(0, $value - $allowance);
+
+        UsageCounter::query()->updateOrCreate(
+            [
+                'client_id'    => $client->getKey(),
+                'metric'       => $metric,
+                'period_start' => $start,
+            ],
+            [
+                'period_end'       => $end,
+                'project_id'       => $projectId,
+                'used'             => max(0, $value),
+                'overage'          => $overage,
+                'last_recorded_at' => now(),
+            ]
+        );
+    }
+
     // ── Asking permission ────────────────────────────────────────────
 
     /**
