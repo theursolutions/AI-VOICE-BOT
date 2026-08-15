@@ -113,8 +113,31 @@
        surfaces as a stray white card behind the page's own hero. */
     html:not(.dark) body > .flex > .content {
         background-color: var(--tva-bg);
-        background-image: linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
+        background-image: linear-gradient(#1b3962 0, #1b3962 98px, transparent 98px);
         background-repeat: no-repeat;
+    }
+
+    /* In dark the whole column — top bar included — is one panel, so its 30px
+       radius is visible at the top. In light the top of that same panel is
+       navy against a navy page, so the curve is there but invisible, and the
+       work area below it began on a hard horizontal edge.
+
+       This gives the paper its own rounded shoulder: the navy band is run 30px
+       deeper than the bar needs, and this element covers that overrun in page
+       colour with the top corners rounded, leaving two small navy wedges. The
+       negative bottom margin cancels its height, so nothing below it moves —
+       and being early in the DOM it paints behind the page's own content
+       rather than over it. Sized only in light; in dark it collapses to
+       nothing. */
+    html:not(.dark) .tva-shoulder {
+        height: 30px;
+        margin: 0 -22px -30px;
+        background: var(--tva-bg);
+        border-radius: 30px 30px 0 0;
+    }
+    @media (max-width: 767px) {
+        /* `.content` drops to px-4 below md, so the bleed has to match. */
+        html:not(.dark) .tva-shoulder { margin-left: -16px; margin-right: -16px; }
     }
     /* Those nested wrappers inherit the page instead of painting their own
        slightly-different slate, which otherwise shows as a faint rounded

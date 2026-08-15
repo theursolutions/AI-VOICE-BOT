@@ -9,6 +9,7 @@
     body { padding: 0 !important; }
     .side-nav,
     .top-bar,
+    .tva-shoulder,
     .mobile-menu,
     nav.side-nav {
         display: none !important;
