@@ -54,6 +54,12 @@
             /* Light needs real shadows; dark leans on borders and glow. */
             --shadow:    0 1px 2px rgba(16,24,40,.05);
             --shadow-lg: 0 16px 40px -12px rgba(16,24,40,.16);
+            /* Surfaces that used a black wash to sit on the dark page.
+               On paper that is a grey smear, so light gets real white with
+               a navy hairline. Named tokens so the same four rules serve
+               both themes and anything added later inherits the fix. */
+            --surface:     #ffffff;
+            --surface-cta: linear-gradient(135deg, #ffffff 0%, #f3f7fc 100%);
         }
 
         html.dark {
@@ -74,6 +80,8 @@
             --neon-2:    #60a5fa;
             --shadow:    0 1px 2px rgba(0,0,0,.4);
             --shadow-lg: 0 18px 44px -14px rgba(0,0,0,.6);
+            --surface:     rgba(0,0,0,.28);
+            --surface-cta: linear-gradient(135deg, rgba(59,130,246,.06), rgba(0,0,0,.4));
         }
 
         * { box-sizing: border-box; }
@@ -190,7 +198,7 @@
         .page-cta {
             margin: 8px auto 0; max-width: 820px;
             border: 1px solid var(--line-hot);
-            background: linear-gradient(135deg, rgba(59,130,246,.06), rgba(0,0,0,.4));
+            background: var(--surface-cta, linear-gradient(135deg, rgba(59,130,246,.06), rgba(0,0,0,.4)));
             border-radius: 20px; padding: 40px 28px; text-align: center;
         }
         .page-cta h2 { font-size: clamp(22px, 3.4vw, 32px); margin: 0 0 10px; }

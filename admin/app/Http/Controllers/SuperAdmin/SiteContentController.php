@@ -28,11 +28,18 @@ class SiteContentController extends Controller
     {
         $t = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'text'];
         $a = fn (string $key, string $label) => ['key' => $key, 'label' => $label, 'type' => 'textarea'];
+        $sel = fn (string $key, string $label, array $options, string $help = '') =>
+            ['key' => $key, 'label' => $label, 'type' => 'select', 'options' => $options, 'help' => $help];
 
         // Brand-glyph slugs accepted by the channel icon fields.
         $icons = implode(' · ', \App\Support\BrandIcons::slugs());
 
         return [
+            ['title' => 'Appearance', 'fields' => [
+                $sel('default_theme', 'Default theme for the public website', [
+                    'light' => 'Light', 'dark' => 'Dark',
+                ], 'What a first-time visitor sees. Anyone who picks a theme themselves keeps that choice — this only sets the starting point.'),
+            ]],
             'Brand' => ['icon' => '🏷️', 'fields' => [
                 $t('brand_name', 'Brand name (nav + footer)'),
             ]],

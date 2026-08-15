@@ -181,9 +181,25 @@ if (! function_exists('tva_theme')) {
      */
     function tva_theme(): string
     {
-        $theme = request()->cookie('tva_theme');
+        // 1. The visitor's own choice, if they have made one. It always wins —
+        //    an admin changing the site default must never silently override
+        //    someone who has deliberately picked a theme.
+        $chosen = request()?->cookie('tva_theme');
+        if ($chosen === 'dark' || $chosen === 'light') {
+            return $chosen;
+        }
 
-        return $theme === 'dark' ? 'dark' : 'light';
+        // 2. Otherwise the site default, set in Ops → Page Content →
+        //    Appearance. Wrapped because this runs on every page render
+        //    including error pages, where the settings table may be
+        //    unreachable — a broken database must not also break the layout.
+        try {
+            $default = tva_setting('content.default_theme', 'light');
+        } catch (\Throwable $e) {
+            $default = 'light';
+        }
+
+        return $default === 'dark' ? 'dark' : 'light';
     }
 }
 
