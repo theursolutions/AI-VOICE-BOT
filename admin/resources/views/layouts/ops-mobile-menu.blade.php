@@ -23,7 +23,7 @@
                 <div class="menu__title">Overview</div>
             </a></li>
             <li><a href="{{ route('ops.analytics.index') }}" class="menu {{ $is('ops.analytics.*') ? 'menu--active' : '' }}">
-                <div class="menu__icon"><i data-lucide="bar-chart-3"></i></div>
+                <div class="menu__icon"><i data-lucide="bar-chart-2"></i></div>
                 <div class="menu__title">Analytics</div>
             </a></li>
             <li class="menu__devider my-4"></li>
@@ -75,7 +75,7 @@
                 <div class="menu__title">Page Content</div>
             </a></li>
             <li><a href="{{ route('ops.blog.index') }}" class="menu {{ $is('ops.blog.*') ? 'menu--active' : '' }}">
-                <div class="menu__icon"><i data-lucide="newspaper"></i></div>
+                <div class="menu__icon"><i data-lucide="book-open"></i></div>
                 <div class="menu__title">Articles</div>
             </a></li>
             <li class="menu__devider my-4"></li>

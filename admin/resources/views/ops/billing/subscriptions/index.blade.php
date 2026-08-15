@@ -1,6 +1,8 @@
 @extends('layouts.ops')
 
 @section('content')
+@include('ops.billing._styles')
+
 <style>
     .sb-stats { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); margin-bottom:16px; }
     .sb-stat { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:16px 18px; }
@@ -34,10 +36,10 @@
         font-size:11.5px; font-weight:600; padding:5px 10px; border-radius:7px;
         border:1px solid #e2e8f0; background:#fff; color:#334155;
     }
-    .sb-btn--primary { background:var(--tva-gradient, linear-gradient(135deg,#6366f1,#8b5cf6)); color:#fff; border-color:transparent; }
+    .sb-btn--primary { background:var(--tva-gradient); color:#fff; border-color:transparent; }
     .sb-inline { display:inline-flex; gap:5px; align-items:center; }
     .sb-inline input[type=number] { width:56px; border:1px solid #e2e8f0; border-radius:7px; padding:4px 6px; font-size:11.5px; background:#fff; }
-    .sb-actions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
+    .ob-rowactions { display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end; }
 
     .sb-note { font-size:11.5px; color:#94a3b8; margin-top:14px; line-height:1.55; }
 
@@ -59,14 +61,14 @@
             </div>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <a href="{{ route('ops.billing.subscriptions.events') }}" class="sb-btn">
-                <i data-lucide="webhook" class="w-3.5 h-3.5"></i>
+            <a href="{{ route('ops.billing.subscriptions.events') }}" class="ob-btn ob-btn--sm">
+                <i data-lucide="link" class="w-3.5 h-3.5"></i>
                 Stripe events
                 @if ($failedEvents > 0)
-                    <span class="sb-pill sb-pill--red">{{ $failedEvents }} failed</span>
+                    <span class="ob-pill ob-pill--red">{{ $failedEvents }} failed</span>
                 @endif
             </a>
-            <a href="{{ route('ops.billing.plans.index') }}" class="sb-btn">
+            <a href="{{ route('ops.billing.plans.index') }}" class="ob-btn ob-btn--sm">
                 <i data-lucide="credit-card" class="w-3.5 h-3.5"></i> Plans
             </a>
         </div>
@@ -90,8 +92,8 @@
         {{-- ── Filters ────────────────────────────────────────────── --}}
         <form method="GET" class="sb-filters">
             <div>
-                <label class="sb-label" for="f-status">Status</label>
-                <select id="f-status" name="status">
+                <label class="ob-field-label" for="f-status">Status</label>
+                <select id="f-status" name="status" class="ob-select">
                     <option value="">All</option>
                     @foreach (['free','trialing','active','past_due','expired','canceled','unpaid','incomplete','paused'] as $st)
                         <option value="{{ $st }}" @selected($filters['status'] === $st)>{{ $st }}</option>
@@ -99,8 +101,8 @@
                 </select>
             </div>
             <div>
-                <label class="sb-label" for="f-plan">Plan</label>
-                <select id="f-plan" name="plan">
+                <label class="ob-field-label" for="f-plan">Plan</label>
+                <select id="f-plan" name="plan" class="ob-select">
                     <option value="">All</option>
                     @foreach ($plans as $p)
                         <option value="{{ $p->id }}" @selected((int) $filters['plan'] === $p->id)>{{ $p->name }}</option>
@@ -108,17 +110,18 @@
                 </select>
             </div>
             <div>
-                <label class="sb-label" for="f-q">Search</label>
-                <input id="f-q" name="q" value="{{ $filters['q'] }}" placeholder="workspace or Stripe ref">
+                <label class="ob-field-label" for="f-q">Search</label>
+                <input id="f-q" name="q" class="ob-input" value="{{ $filters['q'] }}" placeholder="workspace or Stripe ref">
             </div>
-            <button type="submit" class="sb-btn sb-btn--primary" style="padding:8px 14px">
+            <button type="submit" class="ob-btn ob-btn--primary" >
                 <i data-lucide="search" class="w-3.5 h-3.5"></i> Filter
             </button>
         </form>
 
         {{-- ── Table ──────────────────────────────────────────────── --}}
         <div style="overflow-x:auto">
-            <table class="sb-table">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-billing-subscriptions', 'filename' => 'ops-billing-subscriptions', 'paginator' => $subscriptions ?? null])</div>
+            <table class="sb-table" id="tva-t-ops-billing-subscriptions">
                 <thead>
                     <tr>
                         <th>Workspace</th><th>Plan</th><th>Status</th><th>Amount</th>
@@ -139,7 +142,7 @@
                                 @endif
                             </td>
                             <td>
-                                <span class="sb-pill sb-pill--{{ $sub->statusColor() }}">{{ $sub->statusLabel() }}</span>
+                                <span class="ob-pill ob-pill--{{ $sub->statusColor() }}">{{ $sub->statusLabel() }}</span>
                                 @if ($sub->read_only_since)
                                     <div class="sb-ref" style="margin-top:3px">read-only since {{ $sub->read_only_since->format('j M') }}</div>
                                 @endif
@@ -165,28 +168,28 @@
                                 @if ($sub->stripe_subscription_ref)
                                     <div class="sb-ref">{{ $sub->stripe_subscription_ref }}</div>
                                     @if ($sub->stripe_status && $sub->stripe_status !== $sub->status)
-                                        <span class="sb-pill sb-pill--amber">stripe: {{ $sub->stripe_status }}</span>
+                                        <span class="ob-pill ob-pill--amber">stripe: {{ $sub->stripe_status }}</span>
                                     @endif
                                 @else
-                                    <span class="sb-pill sb-pill--slate">no stripe object</span>
+                                    <span class="ob-pill ob-pill--slate">no stripe object</span>
                                 @endif
                             </td>
                             <td>
-                                <div class="sb-actions">
+                                <div class="ob-rowactions">
                                     {{-- Extend free access: moves the clock and clears the degraded
                                          flags. Never fabricates paid state. --}}
                                     <form method="POST" action="{{ route('ops.billing.subscriptions.extend-free', ['id' => $sub->id]) }}" class="sb-inline">
                                         @csrf
                                         <input type="number" name="days" min="1" max="90" value="7" title="Days">
-                                        <button type="submit" class="sb-btn" title="Extend free access">
-                                            <i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i>
+                                        <button type="submit" class="ob-btn ob-btn--sm" title="Extend free access">
+                                            <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
                                         </button>
                                     </form>
 
                                     @if ($sub->stripe_subscription_ref)
                                         <form method="POST" action="{{ route('ops.billing.subscriptions.reconcile', ['id' => $sub->id]) }}">
                                             @csrf
-                                            <button type="submit" class="sb-btn" title="Re-pull from Stripe">
+                                            <button type="submit" class="ob-btn ob-btn--sm" title="Re-pull from Stripe">
                                                 <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
                                             </button>
                                         </form>
@@ -196,7 +199,7 @@
                                         <form method="POST" action="{{ route('ops.billing.subscriptions.waive-trial', ['clientId' => $sub->client_id]) }}"
                                               onsubmit="return confirm('Waive the free-window blocks for this workspace so they can start a fresh free period?');">
                                             @csrf
-                                            <button type="submit" class="sb-btn" title="Waive trial-abuse blocks">
+                                            <button type="submit" class="ob-btn ob-btn--sm" title="Waive trial-abuse blocks">
                                                 <i data-lucide="unlock" class="w-3.5 h-3.5"></i>
                                             </button>
                                         </form>
@@ -221,7 +224,7 @@
             customer is done with a 100%-off coupon in Stripe or a private plan — a manual override would
             leave a workspace with access and nothing to reconcile against.
             <br>
-            If a status looks stale, check <a href="{{ route('ops.billing.subscriptions.events') }}" style="color:#6366f1">Stripe events</a>
+            If a status looks stale, check <a href="{{ route('ops.billing.subscriptions.events') }}" style="color:#c97a00">Stripe events</a>
             for a failed webhook first, then use the re-pull button.
         </p>
     </div>

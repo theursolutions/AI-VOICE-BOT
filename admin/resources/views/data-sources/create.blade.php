@@ -175,7 +175,7 @@
             <div class="flex items-center mb-4">
                 <div class="w-10 h-10 rounded-full flex items-center justify-center mr-3"
                      style="background:#dcfce7; color:#15803d;">
-                    <i data-lucide="database-zap" class="w-5 h-5"></i>
+                    <i data-lucide="database" class="w-5 h-5"></i>
                 </div>
                 <div class="flex-1">
                     <h3 class="font-medium text-base flex items-center gap-2">

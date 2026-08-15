@@ -9,6 +9,14 @@
     $tvaProjectKey = isset($_GET['key']) ? trim($_GET['key']) : '';
     $tvaEmbed      = isset($_GET['embed']) && $_GET['embed'] === '1';
 
+    // Theme the host page is currently in, handed over by loader.js. Applied
+    // to the initial markup rather than after boot: the widget defaulted to
+    // dark, so opening it on a light site flashed black before any JS could
+    // correct it. Anything other than "light" keeps the historical dark
+    // default, so a direct visit with no parameter is unchanged.
+    $tvaTheme = (isset($_GET['theme']) && $_GET['theme'] === 'light') ? 'light' : 'dark';
+    $tvaIsDark = $tvaTheme === 'dark';
+
     // Fetched config + project defaults — populated below if a key was
     // supplied. Otherwise we render with safe placeholders.
     $tvaConfig = [
@@ -158,7 +166,7 @@
             <i class="fas fa-comment"></i>
         </button>
 
-        <div class="tvaibwc-chat-widget" id="tvaibwc-chatWidget">
+        <div class="tvaibwc-chat-widget<?= $tvaIsDark ? " dark" : "" ?>" id="tvaibwc-chatWidget">
             <div class="tvaibwc-widget-header">
                 <h6><?= htmlspecialchars($tvaConfig['bot_name']) ?></h6>
                 <div class="tvaibwc-header-actions">
@@ -199,7 +207,7 @@
                     <?php endif; ?>
                     <?php if (!empty($tvaConfig['show_theme_toggle'])): ?>
                     <label class="tvaibwc-theme-switch" title="Toggle light / dark mode">
-                        <input type="checkbox" checked id="tvaibwc-themeToggle">
+                        <input type="checkbox" <?= $tvaIsDark ? "checked" : "" ?> id="tvaibwc-themeToggle">
                         <span class="tvaibwc-slider">
                             <i class="fas fa-sun"></i>
                             <i class="fas fa-moon"></i>
@@ -273,8 +281,8 @@
                 </div>
             </div>
 
-            <div class="tvaibwc-widget-content" id="tvaibwc-chatContent">
-                <div class="tvaibwc-chat-messages" id="tvaibwc-chatMessages">
+            <div class="tvaibwc-widget-content<?= $tvaIsDark ? " dark" : "" ?>" id="tvaibwc-chatContent">
+                <div class="tvaibwc-chat-messages <?= $tvaIsDark ? "dark" : "light" ?>" id="tvaibwc-chatMessages">
                     <div class="tvaibwc-message tvaibwc-bot">
                         <div class="tvaibwc-message-text"><?= htmlspecialchars($tvaConfig['welcome_message']) ?></div>
                         <div class="tvaibwc-message-time"><?= date('g:i A') ?></div>
@@ -506,6 +514,38 @@
             if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'tvaibwc:ready' }, '*');
             }
+        });
+
+        /* Follow the host page's light/dark switch.
+           loader.js sends this whenever the site's theme changes. Rather
+           than re-implementing the class toggling, we flip the existing
+           theme checkbox and fire its change handler — one source of truth
+           for what "dark" means, so the two can never drift apart. */
+        window.addEventListener('message', function (ev) {
+            if (!ev.data || ev.data.type !== 'tvaibwc:theme') return;
+
+            var wantDark = ev.data.theme === 'dark';
+            var toggle   = document.getElementById('tvaibwc-themeToggle');
+
+            if (!toggle) {
+                // The project hid the theme switch — apply the classes directly
+                // so the widget still follows the page.
+                document.getElementById('tvaibwc-chatWidget')?.classList.toggle('dark', wantDark);
+                document.querySelectorAll('.tvaibwc-widget-content').forEach(function (el) {
+                    el.classList.toggle('dark', wantDark);
+                });
+                var msgs = document.getElementById('tvaibwc-chatMessages');
+                if (msgs) { msgs.classList.toggle('dark', wantDark); msgs.classList.toggle('light', !wantDark); }
+                return;
+            }
+
+            if (toggle.checked === wantDark) return;   // already there
+            toggle.checked = wantDark;
+
+            // jQuery's .change() handler is what does the real work; a native
+            // event alone would not reach a jQuery-bound listener.
+            if (window.jQuery) window.jQuery(toggle).trigger('change');
+            else toggle.dispatchEvent(new Event('change', { bubbles: true }));
         });
     </script>
     <?php endif; ?>

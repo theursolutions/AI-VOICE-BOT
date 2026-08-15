@@ -29,6 +29,10 @@
     .ct-field { margin-bottom:14px; }
     .ct-field.span2 { grid-column:1 / -1; }
     .ct-field > label { display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:6px; }
+    /* Help text under a field. Needed for settings whose consequence is not
+       obvious from the label — "Default theme" says nothing about what
+       happens to someone who has already chosen one. */
+    .ct-help { font-size:11px; color:var(--tva-text-3,#94a3b8); line-height:1.55; margin-top:5px; }
     .ct-input, .ct-textarea {
         width:100%; padding:9px 12px; border:1px solid #e2e8f0; border-radius:9px;
         background:#fff; font-size:13px; color:#0f172a;
@@ -119,8 +123,17 @@
                                         <label>{{ $f['label'] }}</label>
                                         @if ($isWide)
                                             <textarea name="{{ $f['key'] }}" class="ct-textarea" rows="3">{{ $values[$f['key']] ?? '' }}</textarea>
+                                        @elseif ($f['type'] === 'select')
+                                            <select name="{{ $f['key'] }}" class="ct-input">
+                                                @foreach ($f['options'] as $val => $label)
+                                                    <option value="{{ $val }}" @selected(($values[$f['key']] ?? '') === $val)>{{ $label }}</option>
+                                                @endforeach
+                                            </select>
                                         @else
                                             <input type="text" name="{{ $f['key'] }}" class="ct-input" value="{{ $values[$f['key']] ?? '' }}">
+                                        @endif
+                                        @if (!empty($f['help']))
+                                            <div class="ct-help">{{ $f['help'] }}</div>
                                         @endif
                                     </div>
                                 @endforeach

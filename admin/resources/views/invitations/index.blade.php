@@ -56,7 +56,8 @@
             <h3 class="font-medium text-base">All invitations</h3>
         </div>
         <div class="overflow-x-auto">
-            <table class="table table-report">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-invitations', 'filename' => 'invitations', 'paginator' => null])</div>
+            <table class="table table-report" id="tva-t-invitations">
                 <thead>
                     <tr>
                         <th>Email</th>

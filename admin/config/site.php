@@ -167,6 +167,11 @@ return [
 
     // ── Landing-page editable content (mirrors welcome.blade.php) ─────
     'content' => [
+        // Starting theme for the public site. A visitor who chooses one
+        // keeps their choice — this is only the default. See tva_theme().
+        'default_theme'       => 'light',   // marketing site
+        'default_theme_admin' => 'light',   // after login
+
         'brand_name'        => 'Serve AI',
 
         // What the articles section is CALLED in navigation and the footer.

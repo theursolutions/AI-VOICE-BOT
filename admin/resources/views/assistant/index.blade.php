@@ -4,43 +4,66 @@
 @php $slug = $client->slug; @endphp
 
 <style>
+    /* Light first. Every colour on this page routes through these six
+       tokens, so the dark block below is the only thing that changes — and
+       the hardcoded hexes further down have been replaced with the tokens
+       for the same reason. --panel-2/-3 and --line-2 were the values that
+       used to be typed inline. */
     .jv {
-        --bg:#070b16; --panel:#0a0f1d; --line:#1e293b; --txt:#e2e8f0; --muted:#94a3b8;
+        --bg:#ffffff; --panel:#f9fafb; --panel-2:#f3f5f9; --panel-3:#eef1f6;
+        --line:#e4e7ec; --line-2:#dfe3ea; --txt:#16202e; --muted:#667085;
+        --accent:#1d4ed8; --accent2:#2563eb;
+        --overlay:rgba(255,255,255,.72);
+        --danger-bg:#fef3f2; --danger-line:#fecdca;
+        --avatar-1:#bfdbfe;
+    }
+    /* The original palette, kept intact — only its trigger changed. */
+    html.dark .jv {
+        --bg:#070b16; --panel:#0b1120; --panel-2:#101a31; --panel-3:#16203a;
+        --line:#1e293b; --line-2:#24324f; --txt:#e2e8f0; --muted:#94a3b8;
         --accent:#3b82f6; --accent2:#60a5fa;
+        --overlay:rgba(2,6,16,.72);
+        --danger-bg:#1b1014; --danger-line:#7f1d1d;
+        --avatar-1:#1e3a8a;
+    }
+    html.dark .jv {
+        background:radial-gradient(1200px 600px at 50% -10%, rgba(59,130,246,.10), transparent 60%), var(--bg);
+    }
+    .jv {
         position:relative; height:calc(100vh - 120px); min-height:600px; margin-top:18px;
         border:1px solid var(--line); border-radius:16px; overflow:hidden;
-        background:radial-gradient(1200px 600px at 50% -10%, rgba(59,130,246,.10), transparent 60%), var(--bg);
-        color:var(--txt); font-family:'Inter',system-ui,sans-serif; box-shadow:0 24px 60px -24px rgba(0,0,0,.6);
+        background:var(--bg);
+        color:var(--txt); font-family:'Inter',system-ui,sans-serif; box-shadow:0 12px 32px -14px rgba(16,24,40,.16);
         display:flex; flex-direction:column;
     }
 
     /* Themed scrollbars — replaces the chunky default OS scrollbar everywhere
        inside the Ask AI page (response panel, tables, chat stream, drawer). */
     .jv *::-webkit-scrollbar { width:10px; height:10px; }
-    .jv *::-webkit-scrollbar-track { background:rgba(15,23,42,.55); border-radius:10px; }
+    .jv *::-webkit-scrollbar-track { background:var(--panel-2); border-radius:10px; }
     .jv *::-webkit-scrollbar-thumb {
         background:linear-gradient(180deg,var(--accent),#2563eb);
         border-radius:10px; border:2px solid var(--panel); background-clip:padding-box;
     }
     .jv *::-webkit-scrollbar-thumb:hover { background:linear-gradient(180deg,var(--accent2),var(--accent)); border-color:var(--panel); background-clip:padding-box; }
     .jv *::-webkit-scrollbar-corner { background:transparent; }
-    .jv * { scrollbar-width:thin; scrollbar-color:var(--accent) rgba(15,23,42,.55); }
+    .jv * { scrollbar-width:thin; scrollbar-color:var(--accent) transparent; }
     /* Print/export popups inherit the page font; their default scrollbar is fine. */
 
     /* Top bar */
     .jv-top { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); z-index:4; }
-    .jv-iconbtn { background:#0b1120; color:var(--muted); border:1px solid var(--line); border-radius:9px; width:38px; height:38px;
+    .jv-iconbtn { background:var(--panel); color:var(--muted); border:1px solid var(--line); border-radius:9px; width:38px; height:38px;
         display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.15s; }
-    .jv-iconbtn:hover { color:var(--txt); border-color:#334155; }
+    .jv-iconbtn:hover { color:var(--txt); border-color:var(--line-2); }
     .jv-iconbtn.on { color:#fff; background:linear-gradient(135deg,var(--accent),#2563eb); border-color:var(--accent); }
     /* mic muted (listening stopped) — red so it reads as "off" at a glance */
     #jv-micbtn.on { background:linear-gradient(135deg,#22c55e,#16a34a); border-color:#16a34a; }
-    #jv-micbtn.muted { color:#fca5a5; background:#1b1014; border-color:#7f1d1d; animation:none; }
+    #jv-micbtn.muted { color:#fca5a5; background:var(--danger-bg); border-color:var(--danger-line); animation:none; }
     #jv-micbtn.on::after { content:''; }
     .jv-title { font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; }
     .jv-title .asst-dot { width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px #22c55e; }
     .jv-tools { margin-left:auto; display:flex; align-items:center; gap:8px; }
-    .jv-project { background:#0b1120;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12.5px;outline:none; }
+    .jv-project { background:var(--panel);color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12.5px;outline:none; }
 
     /* Stage */
     .jv-stage { flex:1; min-height:0; position:relative; }
@@ -82,23 +105,23 @@
     .jv-state { font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent2); font-family:ui-monospace,monospace; min-height:15px; }
     .jv-state.listening { color:#22c55e; } .jv-state.speaking { color:var(--accent2); } .jv-state.idle { color:var(--muted); }
     .jv-transcript { width:100%; max-width:560px; flex-shrink:0; }
-    .jv-transcript input { width:100%; text-align:center; background:rgba(10,15,29,.6); border:1px solid var(--line);
+    .jv-transcript input { width:100%; text-align:center; background:var(--panel-2); border:1px solid var(--line);
         border-radius:12px; padding:12px 16px; color:var(--txt); font-size:15px; outline:none; }
     .jv-transcript input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15); }
-    .jv-hint { font-size:11px; color:#64748b; text-align:center; max-width:520px; }
+    .jv-hint { font-size:11px; color:var(--muted); text-align:center; max-width:520px; }
 
     /* Right response panel */
     .jv-right__head { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); flex-shrink:0; }
-    .jv-right__title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; color:#cbd5e1; }
+    .jv-right__title { font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px; color:var(--txt); }
     .jv-right__head .jv-iconbtn { margin-left:auto; width:34px; height:34px; }
     .jv-right__body { flex:1; min-height:0; overflow-y:auto; padding:18px 20px; display:flex; flex-direction:column; gap:14px; }
-    .jv-answer__text { background:#101a31; border:1px solid var(--line); border-radius:14px; padding:14px 16px; font-size:14.5px; line-height:1.65; }
+    .jv-answer__text { background:var(--panel-2); border:1px solid var(--line); border-radius:14px; padding:14px 16px; font-size:14.5px; line-height:1.65; }
 
     /* Colorful skeleton loader */
     .jv-skel { display:flex; flex-direction:column; gap:12px; animation:jvSkelIn .3s ease; }
     .jv-skel__line, .jv-skel__card {
         border-radius:10px;
-        background:linear-gradient(100deg, #16203a 28%, #1e3a8a 42%, #3b82f6 50%, #8b5cf6 58%, #16203a 72%);
+        background:linear-gradient(100deg, var(--panel-3) 28%, #1e3a8a 42%, #3b82f6 50%, #8b5cf6 58%, var(--panel-3) 72%);
         background-size:240% 100%; animation:jvShimmer 1.25s linear infinite; }
     .jv-skel__line { height:14px; }
     .jv-skel__line.w90{width:90%} .jv-skel__line.w70{width:70%} .jv-skel__line.w55{width:55%} .jv-skel__line.w40{width:40%}
@@ -118,15 +141,15 @@
     .jv-rrow.user { flex-direction:row-reverse; }
     .jv-rav { width:30px; height:30px; flex-shrink:0; border-radius:9px; display:flex; align-items:center; justify-content:center; }
     .jv-rav.bot { background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; }
-    .jv-rav.user { background:#1e293b; color:#cbd5e1; border:1px solid var(--line); }
+    .jv-rav.user { background:var(--line); color:var(--txt); border:1px solid var(--line); }
     .jv-rcol { display:flex; flex-direction:column; gap:6px; min-width:0; max-width:88%; }
     .jv-rrow.user .jv-rcol { align-items:flex-end; }
     .jv-rbubble { padding:11px 14px; border-radius:13px; font-size:14px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
-    .jv-rrow.bot .jv-rbubble { background:#0f1a2e; border:1px solid var(--line); color:#e2e8f0; border-top-left-radius:4px; }
+    .jv-rrow.bot .jv-rbubble { background:var(--panel-2); border:1px solid var(--line); color:var(--txt); border-top-left-radius:4px; }
     .jv-rrow.user .jv-rbubble { background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; border-top-right-radius:4px; }
-    .jv-rmeta, .jv-tmeta { font-size:10.5px; color:#64748b; padding:0 4px; }
+    .jv-rmeta, .jv-tmeta { font-size:10.5px; color:var(--muted); padding:0 4px; }
     .jv-rrow.user .jv-rmeta { text-align:right; }
-    .jv-rsrc { font-size:10px; color:#94a3b8; margin-top:6px; font-family:ui-monospace,monospace; opacity:.85; }
+    .jv-rsrc { font-size:10px; color:var(--muted); margin-top:6px; font-family:ui-monospace,monospace; opacity:.85; }
 
     /* ───────── Text mode ───────── */
     .jv-text { position:absolute; inset:0; display:none; flex-direction:column; }
@@ -135,22 +158,22 @@
     .jv-stream { max-width:880px; margin:0 auto; padding:0 24px; display:flex; flex-direction:column; gap:18px; }
     .jv-row { display:flex; gap:12px; align-items:flex-start; } .jv-row.user { flex-direction:row-reverse; }
     .jv-av { width:30px;height:30px;border-radius:9px;flex-shrink:0;display:flex;align-items:center;justify-content:center; }
-    .jv-av.bot{ background:radial-gradient(circle at 30% 25%,#1e3a8a,#0b1120); border:1px solid #24324f; color:var(--accent2); }
+    .jv-av.bot{ background:radial-gradient(circle at 30% 25%,var(--avatar-1),var(--panel)); border:1px solid var(--line-2); color:var(--accent2); }
     .jv-av.user{ background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; }
     .jv-col { max-width:88%; display:flex; flex-direction:column; gap:10px; } .jv-row.user .jv-col{ align-items:flex-end; }
     .jv-bubble { padding:12px 15px; border-radius:14px; font-size:13.6px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word; }
-    .jv-row.bot .jv-bubble{ background:#16203a; border:1px solid #1e293b; border-top-left-radius:4px; }
+    .jv-row.bot .jv-bubble{ background:var(--panel-3); border:1px solid var(--line); border-top-left-radius:4px; }
     .jv-row.user .jv-bubble{ background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; border-top-right-radius:4px; }
-    .jv-composer { padding:16px 24px 22px; border-top:1px solid var(--line); background:linear-gradient(to top, rgba(8,12,22,.5), transparent); }
+    .jv-composer { padding:16px 24px 22px; border-top:1px solid var(--line); background:transparent; }
     .jv-inputbar {
         max-width:880px; margin:0 auto; display:flex; gap:10px; align-items:flex-end;
-        background:#0b1322; border:1px solid #243352; border-radius:16px; padding:7px 7px 7px 18px;
+        background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:7px 7px 7px 18px;
         transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
     }
-    .jv-inputbar:hover { border-color:#2f4368; }
+    .jv-inputbar:hover { border-color:var(--line-2); }
     /* ONE focus treatment lives on the bar — a single accent ring + soft glow. */
     .jv-inputbar:focus-within {
-        border-color:var(--accent); background:#0c1528;
+        border-color:var(--accent); background:var(--bg-2, #fff);
         box-shadow:0 0 0 4px rgba(59,130,246,.16), 0 10px 28px -14px rgba(59,130,246,.55);
     }
     /* The textarea must carry NO chrome of its own. @tailwindcss/forms (bundled
@@ -167,7 +190,7 @@
         border:0; outline:none; box-shadow:none;
         --tw-ring-shadow:0 0 #0000; --tw-ring-offset-shadow:0 0 #0000;
     }
-    .jv-input::placeholder{ color:#64748b; }
+    .jv-input::placeholder{ color:var(--muted); }
     .jv-send {
         flex-shrink:0; width:42px; height:42px; border:none; border-radius:12px; cursor:pointer;
         background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff;
@@ -180,21 +203,21 @@
     .jv-send:disabled { opacity:.5; cursor:default; box-shadow:none; transform:none; filter:none; }
 
     /* Data widget */
-    .jv-widget { background:#0b1120; border:1px solid #24324f; border-radius:12px; overflow:hidden; }
-    .jv-widget__bar { display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); background:#0a0f1d; position:sticky; top:0; z-index:3; }
-    .jv-widget__title { font-size:12px; font-weight:600; color:#cbd5e1; }
+    .jv-widget { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; overflow:hidden; }
+    .jv-widget__bar { display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); background:var(--panel-2); position:sticky; top:0; z-index:3; }
+    .jv-widget__title { font-size:12px; font-weight:600; color:var(--txt); }
     .jv-widget__count { font-size:10.5px; color:var(--muted); font-family:ui-monospace,monospace; }
     .jv-widget__acts { margin-left:auto; display:flex; gap:6px; }
-    .jv-wbtn { background:#16203a; color:#cbd5e1; border:1px solid #24324f; border-radius:7px; padding:5px 10px; font-size:11.5px; cursor:pointer; display:flex; align-items:center; gap:5px; }
-    .jv-wbtn:hover { background:#1c2942; border-color:var(--accent); color:#fff; }
+    .jv-wbtn { background:var(--panel-3); color:var(--txt); border:1px solid var(--line-2); border-radius:7px; padding:5px 10px; font-size:11.5px; cursor:pointer; display:flex; align-items:center; gap:5px; }
+    .jv-wbtn:hover { background:var(--panel-3); border-color:var(--accent); color:var(--txt); }
     .jv-tblwrap { max-height:240px; overflow:auto; }
     .jv-tbl { width:100%; border-collapse:collapse; font-size:12.3px; }
     .jv-tbl th,.jv-tbl td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
-    .jv-tbl th { position:sticky; top:0; background:#101a31; color:#93a4bf; font-weight:600; font-family:ui-monospace,monospace; font-size:11px; }
-    .jv-tbl tbody tr:hover { background:#101a31; }
+    .jv-tbl th { position:sticky; top:0; background:var(--panel-2); color:var(--muted); font-weight:600; font-family:ui-monospace,monospace; font-size:11px; }
+    .jv-tbl tbody tr:hover { background:var(--panel-2); }
 
     /* History drawer (hidden by default) */
-    .jv-overlay { position:absolute; inset:0; background:rgba(2,6,16,.55); z-index:8; opacity:0; pointer-events:none; transition:opacity .2s; }
+    .jv-overlay { position:absolute; inset:0; background:var(--overlay); z-index:8; opacity:0; pointer-events:none; transition:opacity .2s; }
     .jv-overlay.show { opacity:1; pointer-events:auto; }
     .jv-drawer { position:absolute; top:0; left:0; bottom:0; width:280px; z-index:9; background:var(--panel); border-right:1px solid var(--line);
         transform:translateX(-100%); transition:transform .25s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; }
@@ -203,10 +226,10 @@
     .jv-newchat { flex:1; display:flex; align-items:center; justify-content:center; gap:8px; background:linear-gradient(135deg,var(--accent),#2563eb);
         color:#fff; border:none; border-radius:10px; padding:10px; font-size:13px; font-weight:600; cursor:pointer; }
     .jv-threads { flex:1; overflow-y:auto; padding:8px; }
-    .jv-thread { display:flex; align-items:center; gap:8px; padding:9px 10px; margin-bottom:4px; border-radius:9px; cursor:pointer; color:#cbd5e1; font-size:13px; border:1px solid transparent; }
-    .jv-thread:hover { background:#131c2f; } .jv-thread.is-active { background:#16203a; border-color:#24324f; }
+    .jv-thread { display:flex; align-items:center; gap:8px; padding:9px 10px; margin-bottom:4px; border-radius:9px; cursor:pointer; color:var(--txt); font-size:13px; border:1px solid transparent; }
+    .jv-thread:hover { background:var(--panel-2); } .jv-thread.is-active { background:var(--panel-3); border-color:var(--line-2); }
     .jv-thread__title { flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .jv-thread__del { opacity:0; color:#64748b; font-size:14px; padding:2px; } .jv-thread:hover .jv-thread__del { opacity:1; } .jv-thread__del:hover{ color:#f87171; }
+    .jv-thread__del { opacity:0; color:var(--muted); font-size:14px; padding:2px; } .jv-thread:hover .jv-thread__del { opacity:1; } .jv-thread__del:hover{ color:#f87171; }
     .jv-drawer__foot { padding:12px 14px; border-top:1px solid var(--line); font-size:11px; color:var(--muted); }
     .jv-typing span { display:inline-block; width:6px;height:6px;margin-right:3px;border-radius:50%;background:var(--accent2); animation:jvp 1.2s infinite ease-in-out; }
     .jv-typing span:nth-child(2){animation-delay:.2s} .jv-typing span:nth-child(3){animation-delay:.4s}
@@ -270,7 +293,7 @@
             {{-- RIGHT: response panel (slides in when an answer/skeleton is shown) --}}
             <div class="jv-right" id="jv-right">
                 <div class="jv-right__head">
-                    <span class="jv-right__title"><i data-lucide="sparkles" style="width:14px;height:14px"></i> Conversation</span>
+                    <span class="jv-right__title"><i data-lucide="wand" style="width:14px;height:14px"></i> Conversation</span>
                     <button class="jv-iconbtn" id="jv-rmin" title="Close panel (full-screen orb)"><i data-lucide="x" style="width:16px;height:16px"></i></button>
                 </div>
                 <div class="jv-right__body" id="jv-answer"></div>
@@ -997,7 +1020,16 @@
 
     var orbMat=new THREE.MeshBasicMaterial({color:0x3b82f6, wireframe:true, transparent:true, opacity:0.85});
     var orb=new THREE.Mesh(new THREE.IcosahedronGeometry(1.35,2), orbMat); scene.add(orb);
-    scene.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.0,1), new THREE.MeshBasicMaterial({color:0x1e3a8a, transparent:true, opacity:0.25})));
+    /* Inner core. It gives the orb depth against the dark page, but on white
+       it is a grey faceted lump showing through the wireframe — every flat
+       face legible. Hidden in light and kept in sync with the theme toggle,
+       which a canvas cannot pick up from CSS. Same treatment as the hero orb
+       on the marketing site. */
+    var core=new THREE.Mesh(new THREE.IcosahedronGeometry(1.0,1), new THREE.MeshBasicMaterial({color:0x1e3a8a, transparent:true, opacity:0.25}));
+    scene.add(core);
+    function syncCore(){ core.visible=document.documentElement.classList.contains('dark'); }
+    syncCore();
+    window.addEventListener('tva:theme', syncCore);
     var ringMat=new THREE.MeshBasicMaterial({color:0x3b82f6, side:THREE.DoubleSide, transparent:true, opacity:0.35});
     var ring=new THREE.Mesh(new THREE.RingGeometry(1.75,1.78,64), ringMat); ring.rotation.x=Math.PI/2.4; scene.add(ring);
 

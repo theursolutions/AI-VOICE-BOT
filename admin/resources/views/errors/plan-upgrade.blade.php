@@ -58,7 +58,7 @@
 <div class="pu-wrap">
     <div class="pu-card intro-y">
         <div class="pu-badge">
-            <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Plan upgrade
+            <i data-lucide="wand" class="w-3.5 h-3.5"></i> Plan upgrade
         </div>
         <div class="pu-icon">
             <i data-lucide="lock" class="w-10 h-10"></i>

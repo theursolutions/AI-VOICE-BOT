@@ -2,6 +2,38 @@
 
 @section('content')
 <style>
+    /* ── The rail drops below the work area's corner ────────────────────
+       Dashboard is the FIRST item in the sidebar, and that position is the
+       whole problem. The rail's first menu item begins 113px down — 16px of
+       logo padding, a ~28px lockup, then the divider's 24px margins either
+       side — and the wedge that curves the top of an active item sits 30px
+       above it, spanning 83-113. The work area's rounded corner spans 88-118.
+
+       So on this page, and only this page, both draw a curve in the same band,
+       20px apart and facing opposite ways, and what is caught between them
+       reads as a splinter in the corner.
+
+       Neither is worth giving up: the corner is what every other page shows,
+       and ::before is what gives the tab the same curve on top that ::after
+       gives it underneath. Dropping the rail 40px moves the tab clear of 118
+       with a few pixels to spare, so both keep their shape.
+
+       Scoped here on purpose — no other page has an active item at that
+       height, so no other rail needs moving. The trade is that the menu sits
+       40px lower on the Dashboard than elsewhere. */
+    html:not(.dark) .side-nav > ul { margin-top: 40px; }
+
+    /* Nudges the top wedge 5px right so its edge meets the tab instead of
+       leaving a sliver. Scaling or rotating it was the wrong lever — the wedge
+       is not the wrong size or angle, it is simply parked 5px short.
+
+       Light mode only: the gap comes from the 40px rail offset above, which is
+       itself light-only, so in dark the wedge is already where the theme put
+       it and moving it would introduce the very gap this closes. */
+    html:not(.dark) .side-nav > ul > li > .side-menu.side-menu--active::before {
+        right: -5px;
+    }
+
     /* ── KPI cards ─────────────────────────────────────────────────── */
     .tva-dash-hero {
         background: var(--tva-gradient);
@@ -192,7 +224,7 @@
     <div class="tva-row" style="margin-bottom: 22px;">
         <div class="tva-card">
             <div class="tva-card__title">
-                <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Activity — last 14 days
+                <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Activity — last 14 days
             </div>
             <div class="tva-chart-wrap">
                 <canvas id="tvaActivityChart"></canvas>

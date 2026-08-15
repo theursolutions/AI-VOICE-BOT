@@ -97,7 +97,7 @@
     <div class="ops-chart-grid">
         <div class="intro-y box p-5">
             <div class="ops-card-title">
-                <i data-lucide="bar-chart-3" class="w-4 h-4" style="color: var(--tva-accent);"></i>
+                <i data-lucide="bar-chart-2" class="w-4 h-4" style="color: var(--tva-accent);"></i>
                 Activity — 14 days
                 <span class="badge">sessions + leads</span>
             </div>

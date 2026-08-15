@@ -37,10 +37,11 @@
                 Include deleted
             </label>
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($paginator->total()) }} lead(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-leads', 'filename' => 'ops-leads', 'paginator' => $paginator ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-leads">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -49,7 +50,7 @@
                         <th>Project · Owner</th>
                         <th>Confidence</th>
                         <th>Status</th>
-                        <th style="text-align:right;">Actions</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

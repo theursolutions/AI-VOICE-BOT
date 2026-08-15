@@ -16,38 +16,46 @@
     body > .flex { display: block !important; margin-top: 0 !important; }
     body > .flex > .content { padding: 0 !important; max-width: none !important; }
 
-    /* Full-bleed editor — uses the whole viewport. */
+    /* Full-bleed editor — uses the whole viewport.
+
+       Colours come from the editor's own --fb-* tokens (defined in the
+       bundled flow-editor stylesheet, which this page always loads) rather
+       than being typed here. This strip sits directly above the React
+       canvas, so any palette of its own shows up immediately as a dark
+       header bolted onto a light editor. */
     .tva-flow-editor-wrap {
         position: fixed; inset: 0;
-        background: #0f172a;
+        background: var(--fb-bg);
     }
     .tva-flow-editor-header {
         display:flex; align-items:center; gap:14px;
         padding: 12px 18px;
-        background:#0f172a; border-bottom: 1px solid #334155; color:#e6edf3;
+        background:var(--fb-bg-2); border-bottom: 1px solid var(--fb-line); color:var(--fb-text);
     }
     .tva-flow-editor-header h2 { font-size:15px; font-weight:600; margin:0; }
-    .tva-flow-editor-header .pill { font-size:10px; background:#334155; padding:3px 9px; border-radius:999px; font-family: ui-monospace, monospace; letter-spacing:.04em; }
+    .tva-flow-editor-header .pill {
+        font-size:10px; background:var(--fb-line-3); color:var(--fb-text-2);
+        padding:3px 9px; border-radius:999px; font-family: ui-monospace, monospace; letter-spacing:.04em;
+    }
+    .tva-flow-editor-header .tva-flow-back { color: var(--fb-text-3); text-decoration:none; font-size:13px; }
+    .tva-flow-editor-header .tva-flow-back:hover { color: var(--fb-text); }
     #flow-editor-root { width:100%; height: calc(100% - 50px); }
     .editor-placeholder {
         height:100%; display:flex; align-items:center; justify-content:center;
-        color:#94a3b8; font-size:13px;
+        color:var(--fb-text-3); font-size:13px;
     }
 </style>
 
 <div class="tva-flow-editor-wrap">
     <div class="tva-flow-editor-header">
         <a href="{{ route('flows.index', ['client' => $client->slug]) }}?project_id={{ hashid($flow->project_id) }}"
-           style="color:#94a3b8; text-decoration:none; font-size:13px;">
+           class="tva-flow-back">
             <i data-lucide="arrow-left" class="w-4 h-4 inline -mt-0.5"></i> Back to flows
         </a>
         <h2>{{ $flow->name }}</h2>
         <span class="pill">v{{ $flow->version }}</span>
         <span class="pill">{{ $flow->language }}</span>
-        <span class="pill" style="background: {{ $flow->status === 'active' ? '#15803d' : ($flow->status === 'draft' ? '#92400e' : '#475569') }};">{{ $flow->status }}</span>
-        <div style="margin-left:auto; font-size:12px; color:#94a3b8;">
-            Phase 1B (visual builder) lands next — for now this is the mount point.
-        </div>
+        <span class="pill" style="background: {{ $flow->status === 'active' ? '#15803d' : ($flow->status === 'draft' ? '#92400e' : '#475569') }}; color:#fff;">{{ $flow->status }}</span>
     </div>
 
     <div id="flow-editor-root"

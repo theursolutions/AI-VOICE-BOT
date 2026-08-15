@@ -67,7 +67,7 @@
     /* ── Byline ── */
     .post-byline {
         display:flex; align-items:center; gap:12px; max-width:820px; margin:26px auto 0;
-        padding:14px 18px; border:1px solid var(--line); border-radius:14px; background:rgba(0,0,0,.25);
+        padding:14px 18px; border:1px solid var(--line); border-radius:14px; background:var(--surface, rgba(0,0,0,.25));
     }
     .post-byline__av {
         width:42px; height:42px; border-radius:50%; flex-shrink:0;

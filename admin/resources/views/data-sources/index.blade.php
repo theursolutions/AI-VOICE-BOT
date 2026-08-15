@@ -38,7 +38,8 @@
             </p>
         </div>
         <div class="overflow-x-auto">
-            <table class="table table-report">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-data-sources', 'filename' => 'data-sources', 'paginator' => null])</div>
+            <table class="table table-report" id="tva-t-data-sources">
                 <thead>
                     <tr>
                         <th>Name</th>

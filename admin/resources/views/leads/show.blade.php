@@ -69,7 +69,7 @@
 
     .tva-meta-label { font-size:11px; color:#64748b; text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
     .tva-meta-value { font-size:14px; color:#0f172a; font-weight:500; margin-top:2px; }
-    .tva-meta-value--empty { color:#cbd5e1; font-style:italic; font-weight:400; }
+    .tva-meta-value--empty { color:var(--tva-text-3); font-style:italic; font-weight:400; }
 
     /* ── Status funnel ─────────────────────────────────────────────── */
     .tva-funnel { display:flex; align-items:center; gap:6px; margin:8px 0 0; }
