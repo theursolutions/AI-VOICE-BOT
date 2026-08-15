@@ -1367,9 +1367,11 @@
             color: #ffffff;
             box-shadow: 0 6px 14px -6px rgba(27,57,98,.45);
         }
-        html:not(.dark) .step:nth-of-type(2) .step__icon { background: #23548c; }
-        html:not(.dark) .step:nth-of-type(3) .step__icon { background: #2b6fb5; }
-        html:not(.dark) .step:nth-of-type(4) .step__icon { background: #3488d6; }
+        /* One colour for all four. The ramp I tried — each tile a step
+           lighter — was meant to imply sequence, but the numbers 01..04
+           already say that, and four different blues just read as four
+           unrelated cards. The numbering carries the order; the tiles carry
+           the family. */
 
         /* The step number sat on --bg with a neon border; on white that was
            a pale outline around pale text. */
