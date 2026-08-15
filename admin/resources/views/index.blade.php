@@ -1137,6 +1137,101 @@
         html:not(.dark) .tm-av {
             box-shadow: 0 0 0 1px rgba(27,57,98,.10), 0 6px 16px -8px rgba(27,57,98,.4);
         }
+
+        /* ── Light mode, second pass ────────────────────────────────────
+           The grey was not the cards. Three FIXED, FULL-SCREEN overlays sit
+           above the entire page and were still running:
+
+             .fx-depth-tint  a black radial vignette at 72% that fades in as
+                             you scroll — it was greying every surface
+                             underneath, which is why cards, sections and
+                             the CTA all looked washed at once
+             .fx-scanlines   CRT lines on `mix-blend-mode: screen`, which
+                             lightens on dark and muddies on white
+             .fx-sweep       a blue scan line down the top edge
+
+           They are the vocabulary of a dark sci-fi console. On paper they
+           are dirt on the lens, so light mode retires all three. */
+        html:not(.dark) .fx-depth-tint,
+        html:not(.dark) .fx-scanlines,
+        html:not(.dark) .fx-sweep { display: none !important; }
+
+        /* The CTA panel faded to rgba(0,0,0,.5) — literal 50% black. */
+        html:not(.dark) .cta {
+            background: linear-gradient(135deg, #ffffff 0%, #f2f6fc 100%);
+            border-color: rgba(27,57,98,.16);
+            box-shadow: 0 18px 44px -22px rgba(27,57,98,.28);
+        }
+        html:not(.dark) .cta h2 { color: #16304f; }
+        html:not(.dark) .cta p  { color: #4a6285; }
+        html:not(.dark) .cta .btn {
+            background: #1b3962; color: #fff;
+            box-shadow: 0 10px 24px -10px rgba(27,57,98,.55);
+        }
+        html:not(.dark) .cta .btn:hover { background: #16304f; }
+
+        /* Mobile nav drawer was near-black over a navy bar. */
+        html:not(.dark) .nav.is-open { background: #1b3962; }
+
+        /* Seam dividers and the depth HUD are dark-console furniture. The
+           HUD in particular labels sections LAYER 01..09 in mono caps — it
+           reads as a spaceship readout, not a business site. */
+        html:not(.dark) .hud { display: none; }
+        html:not(.dark) .seam { opacity: .35; }
+
+        /* Body: white, not tinted. Depth comes from the navy bands at the
+           top and bottom, so the middle can stay clean paper. */
+        html:not(.dark), html:not(.dark) body { background: #ffffff; }
+        html:not(.dark) .section:nth-of-type(even) { background: #f7fafd; }
+
+        /* Panels: white on white needs a real edge, not a glow. */
+        html:not(.dark) .console,
+        html:not(.dark) .step,
+        html:not(.dark) .cap,
+        html:not(.dark) .mock-call,
+        html:not(.dark) .mock-trans,
+        html:not(.dark) .mock-lead {
+            background: #ffffff;
+            border-color: rgba(27,57,98,.13);
+            box-shadow: 0 1px 2px rgba(27,57,98,.05), 0 10px 26px -18px rgba(27,57,98,.22);
+        }
+        html:not(.dark) .console:hover,
+        html:not(.dark) .cap:hover,
+        html:not(.dark) .step:hover {
+            border-color: rgba(27,57,98,.28);
+            box-shadow: 0 18px 38px -18px rgba(27,57,98,.28);
+        }
+        html:not(.dark) .console__head { color: #5b7ba3; border-bottom-color: rgba(27,57,98,.10); }
+        html:not(.dark) .trust { background: transparent; }
+
+        /* ── Hero polish ───────────────────────────────────────────────
+           The band was a flat navy rectangle butted against white — the
+           join is what read as rough. Three changes: a soft radial lift
+           behind the headline so the band has a centre, a hairline of
+           brand blue along the bottom edge so the transition is intentional
+           rather than abrupt, and the eyebrow given a real chip. */
+        html:not(.dark) .hero {
+            background:
+                radial-gradient(1100px 520px at 26% 18%, rgba(125,177,255,.16), transparent 62%),
+                linear-gradient(180deg, #224975 0%, #1b3962 58%, #17334f 100%);
+            border-bottom: 1px solid rgba(125,177,255,.22);
+        }
+        html:not(.dark) .hero__eyebrow {
+            background: rgba(255,255,255,.10);
+            border: 1px solid rgba(255,255,255,.20);
+            color: #cfe1fb;
+        }
+        html:not(.dark) .hero__meta-item { color: #b3c7de; }
+        html:not(.dark) .hero h1 .accent { color: #8fbcff; }
+
+        /* Nav: a hairline and a shadow once scrolled, so it separates from
+           the hero instead of merging into one navy slab. */
+        html:not(.dark) .nav {
+            border-bottom: 1px solid rgba(255,255,255,.10);
+            box-shadow: 0 1px 0 rgba(255,255,255,.04);
+        }
+        html:not(.dark) .nav__links a { color: #c5d7ee; }
+        html:not(.dark) .nav__links a:hover { color: #ffffff; }
 </style>
 </head>
 <body>
