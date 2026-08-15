@@ -1,57 +1,66 @@
 @extends('layouts.ops')
 
 @section('content')
+@include('ops.billing._styles')
+
 <style>
-    .ft-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:20px; margin-bottom:16px; }
-    .ft-card__title {
-        font-size:12px; font-weight:800; color:#0f172a; text-transform:uppercase; letter-spacing:.07em;
-        display:flex; align-items:center; gap:8px; margin-bottom:16px;
-        padding-bottom:12px; border-bottom:1px solid #e2e8f0;
+    /* Matrix: the feature column is sticky so plan columns stay identifiable
+       while scrolling sideways, and every value cell is the same fixed width
+       so the inputs form clean vertical tracks instead of jittering with
+       whatever each cell happens to contain. */
+    .fm-wrap { overflow-x:auto; }
+    .fm { width:100%; border-collapse:separate; border-spacing:0; font-size:13px; min-width:720px; }
+    .fm th, .fm td { padding:10px 12px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+    .fm thead th {
+        position:sticky; top:0; z-index:2; background:#fff;
+        font-size:10.5px; text-transform:uppercase; letter-spacing:.06em;
+        color:#94a3b8; font-weight:800; text-align:center; border-bottom:2px solid #e2e8f0;
     }
-    .ft-scroll { overflow-x:auto; }
-    .ft-matrix { width:100%; border-collapse:collapse; font-size:13px; min-width:760px; }
-    .ft-matrix th, .ft-matrix td { padding:9px 10px; border-bottom:1px solid #f1f5f9; text-align:left; vertical-align:top; }
-    .ft-matrix thead th {
-        font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8;
-        font-weight:700; position:sticky; top:0; background:#fff; z-index:1;
+    .fm thead th:first-child, .fm tbody th { text-align:left; }
+    .fm .fm-col { width:132px; }
+    .fm tbody th {
+        position:sticky; left:0; z-index:1; background:#fff;
+        min-width:250px; font-weight:500; padding-left:0;
     }
-    .ft-matrix td:not(:first-child), .ft-matrix thead th:not(:first-child) { text-align:center; }
-    .ft-grp td {
-        background:#f8fafc; font-size:10.5px; font-weight:800; letter-spacing:.08em;
-        text-transform:uppercase; color:#6366f1;
-    }
-    .ft-name { font-weight:600; color:#0f172a; }
-    .ft-key  { font-family:ui-monospace,monospace; font-size:10.5px; color:#94a3b8; }
-    .ft-matrix input[type=text] {
-        width:96px; border:1px solid #e2e8f0; border-radius:7px; padding:5px 8px;
-        font-size:12.5px; text-align:center; background:#fff; color:#0f172a;
-    }
-    .ft-tag { font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:5px; background:#f1f5f9; color:#475569; }
+    .fm tbody tr:hover th, .fm tbody tr:hover td { background:#fcfcfd; }
+    .fm td { text-align:center; }
 
-    .ft-btn {
-        display:inline-flex; align-items:center; gap:6px; cursor:pointer; text-decoration:none;
-        font-size:12.5px; font-weight:600; padding:8px 14px; border-radius:9px;
-        border:1px solid #e2e8f0; background:#fff; color:#334155;
+    .fm-grp td {
+        background:#fffbeb; border-bottom:1px solid #fde68a; padding:7px 12px;
+        font-size:10.5px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:#b45309;
     }
-    .ft-btn--primary { background:var(--tva-gradient, linear-gradient(135deg,#6366f1,#8b5cf6)); color:#fff; border-color:transparent; }
-    .ft-btn--danger { border-color:#fecaca; color:#b91c1c; background:#fff; }
+    .fm-grp td:first-child { padding-left:0; }
 
-    .ft-form-grid { display:grid; gap:14px; grid-template-columns:1fr; }
-    @media (min-width:900px){ .ft-form-grid { grid-template-columns:repeat(4,1fr); } }
-    .ft-label { font-size:10.5px; color:#64748b; text-transform:uppercase; letter-spacing:.06em; font-weight:700; margin-bottom:5px; display:block; }
-    .ft-input, .ft-select {
-        width:100%; border:1px solid #e2e8f0; border-radius:9px; padding:8px 10px;
-        font-size:13px; background:#fff; color:#0f172a;
+    .fm-name { font-weight:600; color:#0f172a; font-size:13px; }
+    .fm-key { font-family:ui-monospace,monospace; font-size:10.5px; color:#94a3b8; margin-top:2px; }
+    .fm-tags { display:flex; gap:5px; flex-wrap:wrap; margin-top:5px; }
+    .fm-tag {
+        font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:5px;
+        background:#f1f5f9; color:#475569; display:inline-flex; align-items:center; gap:3px;
     }
-    .ft-help { font-size:11px; color:#94a3b8; margin-top:10px; line-height:1.55; }
+    .fm-tag--mod { background:#eef2ff; color:#4338ca; }
+    .fm-tag--met { background:#ecfdf3; color:#067647; }
 
-    html.dark .ft-card { background:#1e293b; border-color:#334155; }
-    html.dark .ft-card__title, html.dark .ft-name { color:#f1f5f9; }
-    html.dark .ft-matrix th, html.dark .ft-matrix td { border-color:#334155; }
-    html.dark .ft-matrix thead th { background:#1e293b; }
-    html.dark .ft-grp td { background:#172033; }
-    html.dark .ft-matrix input, html.dark .ft-input, html.dark .ft-select { background:#0f172a; border-color:#334155; color:#e2e8f0; }
-    html.dark .ft-btn { background:#0f172a; border-color:#334155; color:#cbd5e1; }
+    /* One consistent control per cell — the earlier version mixed raw
+       checkboxes with differently-sized text inputs, so no two columns lined up. */
+    .fm input[type=text] { width:100%; max-width:108px; margin:0 auto; text-align:center; }
+    .fm input[type=checkbox] { width:17px; height:17px; accent-color:#c97a00; cursor:pointer; }
+
+    .fm-legend { display:flex; gap:18px; flex-wrap:wrap; font-size:11.5px; color:#94a3b8; margin-top:14px; }
+    .fm-legend b { color:#475569; font-weight:700; }
+
+    .fm-savebar {
+        display:flex; align-items:center; gap:12px; justify-content:flex-end;
+        margin-top:18px; padding-top:16px; border-top:1px solid #e2e8f0;
+    }
+    .fm-savebar p { margin:0; margin-right:auto; }
+
+    html.dark .fm thead th, html.dark .fm tbody th { background:#1e293b; }
+    html.dark .fm th, html.dark .fm td { border-color:#334155; }
+    html.dark .fm tbody tr:hover th, html.dark .fm tbody tr:hover td { background:#0f172a; }
+    html.dark .fm-name { color:#f1f5f9; }
+    html.dark .fm-grp td { background:rgba(180,83,9,.15); border-color:rgba(253,230,138,.3); color:#fbbf24; }
+    html.dark .fm-savebar { border-color:#334155; }
 </style>
 
 <div class="content">
@@ -60,235 +69,284 @@
         <div class="flex-1">
             <div style="font-size:20px; font-weight:700;">Features &amp; limits</div>
             <div style="font-size:13px; opacity:.9; margin-top:4px;">
-                One grid for every plan's entitlements and quotas. A blank cell means the plan does
+                One grid for every plan’s entitlements and quotas. A blank cell means the plan does
                 <strong>not</strong> include that feature.
             </div>
         </div>
-        <a href="{{ route('ops.billing.plans.index') }}" class="ft-btn">
-            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Plans
-        </a>
+        <div class="ob-card__actions">
+            <a href="{{ route('ops.billing.plans.index') }}" class="ob-btn">
+                <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Plans
+            </a>
+        </div>
     </div>
 
-    {{-- ── The matrix ─────────────────────────────────────────────── --}}
-    <form method="POST" action="{{ route('ops.billing.features.matrix') }}" class="mt-5">
-        @csrf
-        <div class="ft-card">
-            <div class="ft-card__title"><i data-lucide="grid" class="w-4 h-4"></i> Plan × feature matrix</div>
+    <div class="mt-5">
+        {{-- ── The matrix ────────────────────────────────────────────── --}}
+        <form method="POST" action="{{ route('ops.billing.features.matrix') }}">
+            @csrf
+            <div class="ob-card">
+                <div class="ob-card__head">
+                    <i data-lucide="grid" class="w-4 h-4" style="color:#c97a00"></i>
+                    <div>
+                        <div class="ob-card__title">Plan × feature matrix</div>
+                        <div class="ob-card__sub">Changes take effect immediately — the entitlement cache is cleared on save.</div>
+                    </div>
+                </div>
 
-            <div class="ft-scroll">
-                <table class="ft-matrix">
-                    <thead>
-                        <tr>
-                            <th style="min-width:230px">Feature</th>
-                            @foreach ($plans as $plan)
-                                <th>
-                                    {{ $plan->name }}
-                                    @unless ($plan->is_active)
-                                        <div style="font-weight:600;color:#b91c1c;text-transform:none;letter-spacing:0">hidden</div>
-                                    @endunless
-                                </th>
-                            @endforeach
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @php $group = null; @endphp
-                        @foreach ($features as $feature)
-                            @if ($feature->group !== $group)
-                                @php $group = $feature->group; @endphp
-                                <tr class="ft-grp"><td colspan="{{ 1 + $plans->count() }}">{{ $group ?: 'General' }}</td></tr>
-                            @endif
-
+                <div class="fm-wrap">
+                    <table class="fm">
+                        <thead>
                             <tr>
-                                <td>
-                                    <div class="ft-name">{{ $feature->name }}</div>
-                                    <div class="ft-key">{{ $feature->key }}</div>
-                                    <div style="margin-top:4px">
-                                        @if ($feature->module_key)
-                                            <span class="ft-tag" title="Gates this admin module">🔒 {{ $feature->module_key }}</span>
-                                        @endif
-                                        @if ($feature->metric_key)
-                                            <span class="ft-tag" title="Enforced as a usage quota">📊 {{ $feature->metric_key }}</span>
-                                        @endif
-                                        <span class="ft-tag">{{ $valueTypes[$feature->value_type] ?? $feature->value_type }}</span>
-                                    </div>
-                                </td>
-
+                                <th>Feature</th>
                                 @foreach ($plans as $plan)
-                                    @php $current = $matrix[$feature->id][$plan->id] ?? null; @endphp
-                                    <td>
-                                        @if ($feature->value_type === 'boolean' || $feature->value_type === 'unlimited')
-                                            {{-- Hidden 0 first: an unchecked box still submits, and the
-                                                 service deletes "0" rows. Missing row = not granted. --}}
-                                            <input type="hidden" name="values[{{ $plan->id }}][{{ $feature->id }}]" value="0">
-                                            <input type="checkbox" name="values[{{ $plan->id }}][{{ $feature->id }}]" value="1"
-                                                   @checked($feature->value_type === 'unlimited' ? $current !== null : filter_var($current, FILTER_VALIDATE_BOOLEAN))>
-                                        @else
-                                            <input type="text" name="values[{{ $plan->id }}][{{ $feature->id }}]"
-                                                   value="{{ $current }}"
-                                                   placeholder="{{ $feature->value_type === 'numeric' ? '—' : 'text' }}">
-                                        @endif
-                                    </td>
+                                    <th class="fm-col">
+                                        {{ $plan->name }}
+                                        @unless ($plan->is_active)
+                                            <div style="font-weight:700;color:#b42318;text-transform:none;letter-spacing:0;margin-top:2px">hidden</div>
+                                        @endunless
+                                    </th>
                                 @endforeach
                             </tr>
-                        @endforeach
+                        </thead>
+                        <tbody>
+                            @php $group = null; @endphp
+                            @forelse ($features as $feature)
+                                @if ($feature->group !== $group)
+                                    @php $group = $feature->group; @endphp
+                                    <tr class="fm-grp"><td colspan="{{ 1 + $plans->count() }}">{{ $group ?: 'General' }}</td></tr>
+                                @endif
 
-                        @if ($features->isEmpty())
-                            <tr>
-                                <td colspan="{{ 1 + $plans->count() }}" style="color:#94a3b8;padding:20px">
-                                    No features defined yet. Add one below, or run
-                                    <code>php artisan db:seed --class=BillingSeeder</code>.
-                                </td>
-                            </tr>
-                        @endif
-                    </tbody>
-                </table>
-            </div>
+                                <tr>
+                                    <th scope="row">
+                                        <div class="fm-name">{{ $feature->name }}</div>
+                                        <div class="fm-key">{{ $feature->key }}</div>
+                                        <div class="fm-tags">
+                                            <span class="fm-tag">{{ $valueTypes[$feature->value_type] ?? $feature->value_type }}</span>
+                                            @if ($feature->module_key)
+                                                <span class="fm-tag fm-tag--mod" title="Gates this admin module">
+                                                    <i data-lucide="lock" style="width:9px;height:9px"></i>{{ $feature->module_key }}
+                                                </span>
+                                            @endif
+                                            @if ($feature->metric_key)
+                                                <span class="fm-tag fm-tag--met" title="Enforced as a usage quota">
+                                                    <i data-lucide="gauge" style="width:9px;height:9px"></i>{{ $feature->metric_key }}
+                                                </span>
+                                            @endif
+                                        </div>
+                                    </th>
 
-            <p class="ft-help">
-                Numeric cells: a number is the ceiling, <code>-1</code> means unlimited, and blank means the
-                plan doesn't include it at all. <strong>Blank and 0 are different</strong> — 0 grants the
-                feature with a zero allowance (which is how “telephony, but no minutes” would be expressed),
-                blank withholds it entirely.
-            </p>
-
-            <div style="display:flex;justify-content:flex-end;margin-top:14px">
-                <button type="submit" class="ft-btn ft-btn--primary">
-                    <i data-lucide="save" class="w-4 h-4"></i> Save all limits
-                </button>
-            </div>
-        </div>
-    </form>
-
-    {{-- ── Add a feature ──────────────────────────────────────────── --}}
-    <div class="ft-card">
-        <div class="ft-card__title"><i data-lucide="plus-circle" class="w-4 h-4"></i> Add a feature</div>
-
-        <form method="POST" action="{{ route('ops.billing.features.store') }}">
-            @csrf
-            <div class="ft-form-grid">
-                <div>
-                    <label class="ft-label" for="f-name">Display name</label>
-                    <input class="ft-input" id="f-name" name="name" required maxlength="150" placeholder="AI conversations">
+                                    @foreach ($plans as $plan)
+                                        @php $current = $matrix[$feature->id][$plan->id] ?? null; @endphp
+                                        <td>
+                                            @if ($feature->value_type === 'boolean' || $feature->value_type === 'unlimited')
+                                                {{-- Hidden 0 first: an unchecked box still submits, and the
+                                                     service deletes "0" rows. Missing row = not granted. --}}
+                                                <input type="hidden" name="values[{{ $plan->id }}][{{ $feature->id }}]" value="0">
+                                                <input type="checkbox" name="values[{{ $plan->id }}][{{ $feature->id }}]" value="1"
+                                                       @checked($feature->value_type === 'unlimited' ? $current !== null : filter_var($current, FILTER_VALIDATE_BOOLEAN))>
+                                            @else
+                                                <input type="text" class="ob-input ob-input--sm"
+                                                       name="values[{{ $plan->id }}][{{ $feature->id }}]"
+                                                       value="{{ $current }}"
+                                                       placeholder="{{ $feature->value_type === 'numeric' ? '—' : 'text' }}">
+                                            @endif
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="{{ 1 + $plans->count() }}">
+                                        <div class="ob-empty">
+                                            <i data-lucide="sliders" class="w-8 h-8"></i>
+                                            No features defined yet. Add one below, or run
+                                            <code>php artisan db:seed --class=BillingSeeder</code>.
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
-                <div>
-                    <label class="ft-label" for="f-type">Value type</label>
-                    <select class="ft-select" id="f-type" name="value_type">
-                        @foreach ($valueTypes as $value => $label)
-                            <option value="{{ $value }}">{{ $label }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="ft-label" for="f-unit">Unit</label>
-                    <input class="ft-input" id="f-unit" name="unit" maxlength="40" placeholder="conversations / seats / GB">
-                </div>
-                <div>
-                    <label class="ft-label" for="f-group">Group heading</label>
-                    <input class="ft-input" id="f-group" name="group" maxlength="80" placeholder="Volume">
+
+                <div class="fm-legend">
+                    <span><b>number</b> = the ceiling</span>
+                    <span><b>-1</b> = unlimited</span>
+                    <span><b>blank</b> = not included at all</span>
+                    <span><b>0</b> = included, zero allowance</span>
                 </div>
 
-                <div>
-                    <label class="ft-label" for="f-module">Gate a module <span style="text-transform:none">(optional)</span></label>
-                    <select class="ft-select" id="f-module" name="module_key">
-                        <option value="">— none —</option>
-                        @foreach ($moduleKeys as $key => $cfg)
-                            <option value="{{ $key }}">{{ $cfg['label'] ?? $key }} ({{ $key }})</option>
-                        @endforeach
-                    </select>
+                <div class="fm-savebar">
+                    <p class="ob-help" style="margin:0">
+                        Blank and 0 are different: blank withholds the feature, 0 grants it with nothing in it
+                        (which is how “has telephony, but no minutes” is expressed).
+                    </p>
+                    <button type="submit" class="ob-btn ob-btn--primary">
+                        <i data-lucide="save" class="w-4 h-4"></i> Save all limits
+                    </button>
                 </div>
-                <div>
-                    <label class="ft-label" for="f-metric">Cap a usage meter <span style="text-transform:none">(optional)</span></label>
-                    <select class="ft-select" id="f-metric" name="metric_key">
-                        <option value="">— none —</option>
-                        @foreach ($metricKeys as $key => $meta)
-                            <option value="{{ $key }}">{{ $meta['label'] ?? $key }} ({{ $key }})</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div>
-                    <label class="ft-label" for="f-sort">Sort order</label>
-                    <input class="ft-input" id="f-sort" name="sort_order" type="number" min="0" max="9999" value="0">
-                </div>
-                <div style="display:flex;flex-direction:column;gap:8px;justify-content:flex-end">
-                    <label style="font-size:12.5px;display:flex;gap:7px;align-items:center">
-                        <input type="hidden" name="is_visible" value="0">
-                        <input type="checkbox" name="is_visible" value="1" checked> In comparison table
-                    </label>
-                    <label style="font-size:12.5px;display:flex;gap:7px;align-items:center">
-                        <input type="hidden" name="is_headline" value="0">
-                        <input type="checkbox" name="is_headline" value="1"> Bullet on the plan card
-                    </label>
-                </div>
-            </div>
-
-            <div style="margin-top:14px">
-                <label class="ft-label" for="f-desc">Description</label>
-                <input class="ft-input" id="f-desc" name="description" maxlength="500"
-                       placeholder="Shown under the feature name in the admin matrix.">
-            </div>
-
-            <p class="ft-help">
-                <strong>Gate a module</strong> makes this feature control access to that admin section
-                (the same keys the Roles matrix uses, so entitlements and permissions can't drift).
-                <strong>Cap a usage meter</strong> turns a numeric value into an enforced quota.
-                Neither is required — a feature with both blank is display-only marketing copy.
-            </p>
-
-            <div style="display:flex;justify-content:flex-end;margin-top:8px">
-                <button type="submit" class="ft-btn ft-btn--primary">
-                    <i data-lucide="plus" class="w-4 h-4"></i> Add feature
-                </button>
             </div>
         </form>
-    </div>
 
-    {{-- ── Catalogue ──────────────────────────────────────────────── --}}
-    @if ($features->isNotEmpty())
-        <div class="ft-card">
-            <div class="ft-card__title"><i data-lucide="list" class="w-4 h-4"></i> Feature catalogue</div>
-
-            <div class="ft-scroll">
-                <table class="ft-matrix" style="min-width:640px">
-                    <thead>
-                        <tr>
-                            <th>Feature</th><th>Type</th><th>Module</th><th>Metric</th><th>Shown</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($features as $feature)
-                            <tr>
-                                <td>
-                                    <div class="ft-name">{{ $feature->name }}</div>
-                                    <div class="ft-key">{{ $feature->key }}</div>
-                                </td>
-                                <td>{{ $valueTypes[$feature->value_type] ?? $feature->value_type }}</td>
-                                <td>{{ $feature->module_key ?: '—' }}</td>
-                                <td>{{ $feature->metric_key ?: '—' }}</td>
-                                <td>
-                                    {{ $feature->is_visible ? 'table' : '' }}
-                                    {{ $feature->is_headline ? ' + card' : '' }}
-                                    {{ ! $feature->is_visible && ! $feature->is_headline ? 'hidden' : '' }}
-                                </td>
-                                <td style="text-align:right">
-                                    <form method="POST" action="{{ route('ops.billing.features.destroy', ['id' => $feature->id]) }}"
-                                          onsubmit="return confirm('Delete “{{ $feature->name }}” and remove it from every plan?\n\nAny code checking this feature key will start returning “not granted”.');">
-                                        @csrf @method('DELETE')
-                                        <button type="submit" class="ft-btn ft-btn--danger">
-                                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+        {{-- ── Add a feature ─────────────────────────────────────────── --}}
+        <div class="ob-card">
+            <div class="ob-card__head">
+                <i data-lucide="plus-circle" class="w-4 h-4" style="color:#c97a00"></i>
+                <div>
+                    <div class="ob-card__title">Add a feature</div>
+                    <div class="ob-card__sub">Defines what a plan <em>can</em> grant. Set the per-plan value in the matrix above.</div>
+                </div>
             </div>
 
-            <p class="ft-help">
-                A feature's <code>key</code> can't be renamed — application code and the entitlement cache
-                reference it. Change the display name instead.
-            </p>
+            <form method="POST" action="{{ route('ops.billing.features.store') }}">
+                @csrf
+
+                <div class="ob-grid3">
+                    <div class="ob-field">
+                        <label for="f-name">Display name</label>
+                        <input class="ob-input" id="f-name" name="name" required maxlength="150" placeholder="AI conversations">
+                    </div>
+                    <div class="ob-field">
+                        <label for="f-type">Value type</label>
+                        <select class="ob-select" id="f-type" name="value_type">
+                            @foreach ($valueTypes as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="ob-field">
+                        <label for="f-unit">Unit <span class="hint">optional</span></label>
+                        <input class="ob-input" id="f-unit" name="unit" maxlength="40" placeholder="per month">
+                    </div>
+                </div>
+
+                <div class="ob-grid3">
+                    <div class="ob-field">
+                        <label for="f-group">Group heading</label>
+                        <input class="ob-input" id="f-group" name="group" maxlength="80" placeholder="Volume">
+                    </div>
+                    <div class="ob-field">
+                        <label for="f-module">Gate a module <span class="hint">optional</span></label>
+                        <select class="ob-select" id="f-module" name="module_key">
+                            <option value="">— none —</option>
+                            @foreach ($moduleKeys as $key => $cfg)
+                                <option value="{{ $key }}">{{ $cfg['label'] ?? $key }} ({{ $key }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="ob-field">
+                        <label for="f-metric">Cap a usage meter <span class="hint">optional</span></label>
+                        <select class="ob-select" id="f-metric" name="metric_key">
+                            <option value="">— none —</option>
+                            @foreach ($metricKeys as $key => $meta)
+                                <option value="{{ $key }}">{{ $meta['label'] ?? $key }} ({{ $key }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div class="ob-grid3">
+                    <div class="ob-field" style="grid-column:span 2">
+                        <label for="f-desc">Description</label>
+                        <input class="ob-input" id="f-desc" name="description" maxlength="500"
+                               placeholder="Shown under the feature name in this matrix.">
+                    </div>
+                    <div class="ob-field">
+                        <label for="f-sort">Sort order</label>
+                        <input class="ob-input ob-input--num" id="f-sort" name="sort_order" type="number" min="0" max="9999" value="0">
+                    </div>
+                </div>
+
+                <div class="ob-grid2" style="align-items:end">
+                    <div class="ob-field ob-field--checks" style="margin:0">
+                        <label class="ob-check">
+                            <input type="hidden" name="is_visible" value="0">
+                            <input type="checkbox" name="is_visible" value="1" checked>
+                            <span><b>Show in the comparison table</b>
+                                <span class="sub">The full grid on the pricing page.</span></span>
+                        </label>
+                        <label class="ob-check">
+                            <input type="hidden" name="is_headline" value="0">
+                            <input type="checkbox" name="is_headline" value="1">
+                            <span><b>Bullet on the plan card</b>
+                                <span class="sub">The short list customers read first.</span></span>
+                        </label>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end">
+                        <button type="submit" class="ob-btn ob-btn--primary">
+                            <i data-lucide="plus" class="w-4 h-4"></i> Add feature
+                        </button>
+                    </div>
+                </div>
+
+                <p class="ob-help" style="margin-top:14px">
+                    <strong>Gate a module</strong> makes this feature control access to that admin section —
+                    the same keys the Roles matrix uses, so entitlements and permissions can’t drift.
+                    <strong>Cap a usage meter</strong> turns a numeric value into an enforced quota.
+                    A feature with neither is display-only marketing copy.
+                </p>
+            </form>
         </div>
-    @endif
+
+        {{-- ── Catalogue ─────────────────────────────────────────────── --}}
+        @if ($features->isNotEmpty())
+            <div class="ob-card">
+                <div class="ob-card__head">
+                    <i data-lucide="list" class="w-4 h-4" style="color:#c97a00"></i>
+                    <div class="ob-card__title">Feature catalogue</div>
+                    <div class="ob-card__actions" style="font-size:12px;color:#94a3b8">
+                        {{ $features->count() }} features
+                    </div>
+                </div>
+
+                <div class="ob-tablewrap">
+                    <table class="ob-table">
+                        <thead>
+                            <tr>
+                                <th>Feature</th><th style="width:130px">Type</th>
+                                <th style="width:120px">Module</th><th style="width:130px">Metric</th>
+                                <th style="width:110px">Shown</th><th style="width:60px"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($features as $feature)
+                                <tr>
+                                    <td>
+                                        <div class="fm-name">{{ $feature->name }}</div>
+                                        <div class="fm-key">{{ $feature->key }}</div>
+                                    </td>
+                                    <td>{{ $valueTypes[$feature->value_type] ?? $feature->value_type }}</td>
+                                    <td>{{ $feature->module_key ?: '—' }}</td>
+                                    <td>{{ $feature->metric_key ?: '—' }}</td>
+                                    <td>
+                                        @if ($feature->is_visible)<span class="ob-pill ob-pill--muted">table</span>@endif
+                                        @if ($feature->is_headline)<span class="ob-pill ob-pill--accent">card</span>@endif
+                                        @if (! $feature->is_visible && ! $feature->is_headline)
+                                            <span class="ob-pill ob-pill--off">hidden</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        <div class="ob-rowactions">
+                                            <form method="POST" action="{{ route('ops.billing.features.destroy', ['id' => $feature->id]) }}" class="ob-inline"
+                                                  onsubmit="return confirm('Delete “{{ $feature->name }}” and remove it from every plan?\n\nAny code checking this feature key will start returning “not granted”.');">
+                                                @csrf @method('DELETE')
+                                                <button type="submit" class="ob-btn ob-btn--danger ob-btn--icon" title="Delete">
+                                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="ob-help">
+                    A feature’s <code>key</code> can’t be renamed — application code and the entitlement cache
+                    reference it. Change the display name instead.
+                </p>
+            </div>
+        @endif
+    </div>
 </div>
 @endsection

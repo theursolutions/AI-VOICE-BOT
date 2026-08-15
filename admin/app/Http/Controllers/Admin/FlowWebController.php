@@ -262,6 +262,9 @@ class FlowWebController extends Controller
             'brief'      => 'required|string|min:10|max:4000',
             'channel'    => 'nullable|in:voice,chat',
             'flow_id'    => 'nullable|integer',
+            // The graph currently on the editor canvas, which may hold
+            // unsaved edits.
+            'definition' => 'nullable|array',
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
@@ -269,8 +272,15 @@ class FlowWebController extends Controller
 
         // Revising: hand the planner the current graph so it edits rather
         // than replaces, and the customer keeps the work already done.
+        //
+        // The canvas wins over the stored row when both are available. In the
+        // editor the two routinely differ — the customer has dragged nodes and
+        // typed prompts without saving — and revising the saved version would
+        // silently throw that work away.
         $existing = null;
-        if (! empty($data['flow_id'])) {
+        if (is_array($data['definition'] ?? null) && ! empty($data['definition']['nodes'])) {
+            $existing = $data['definition'];
+        } elseif (! empty($data['flow_id'])) {
             $flow = Flow::where('id', (int) $data['flow_id'])
                 ->where('project_id', $project->id)
                 ->first();

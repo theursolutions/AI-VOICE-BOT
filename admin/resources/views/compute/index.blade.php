@@ -2,15 +2,15 @@
 
 @section('content')
 <style>
-    .cm-wrap { color:#e2e8f0; }
+    .cm-wrap { color:var(--tva-text-2); }
     .cm-cards { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:12px; margin:14px 0 16px; }
     @media (max-width:1100px){ .cm-cards { grid-template-columns:repeat(2,minmax(0,1fr)); } }
-    .cm-card { background:#0f172a; border:1px solid #1e293b; border-radius:13px; padding:14px 16px; }
+    .cm-card { background:var(--tva-surface); border:1px solid var(--tva-border); border-radius:13px; padding:14px 16px; }
     .cm-card__label { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:#64748b; font-weight:700; }
-    .cm-card__val { font-size:26px; font-weight:800; color:#f1f5f9; line-height:1.1; margin-top:4px; }
+    .cm-card__val { font-size:26px; font-weight:800; color:var(--tva-text); line-height:1.1; margin-top:4px; }
     .cm-card__val small { font-size:13px; font-weight:600; color:#94a3b8; }
     .cm-card__sub { font-size:11px; color:#64748b; margin-top:3px; }
-    .cm-stage { background:radial-gradient(circle at 50% 40%, #131c33 0%, #0b1220 70%); border:1px solid #1e293b; border-radius:16px; padding:8px; position:relative; overflow:hidden; }
+    .cm-stage { background:radial-gradient(circle at 50% 40%, #131c33 0%, #0b1220 70%); border:1px solid var(--tva-border); border-radius:16px; padding:8px; position:relative; overflow:hidden; }
     .cm-stage__head { display:flex; align-items:center; gap:10px; padding:10px 12px 4px; }
     .cm-badge { font-size:11px; font-weight:700; padding:3px 10px; border-radius:999px; }
     .cm-badge--on { background:#052e1b; color:#4ade80; border:1px solid #16653433; }
@@ -43,7 +43,7 @@
 
 <div class="content cm-wrap">
     <div class="flex items-center gap-3 mt-4">
-        <h2 class="text-lg font-semibold" style="color:#f1f5f9;">Compute Mesh</h2>
+        <h2 class="text-lg font-semibold" style="color:var(--tva-text);">Compute Mesh</h2>
         <span id="cmPulse" class="cm-badge cm-badge--off">connecting…</span>
         <form method="GET" class="ml-auto">
             <select name="project_id" class="form-select form-select-sm" onchange="this.form.submit()">
@@ -68,7 +68,7 @@
     <div class="cm-stage">
         <div class="cm-stage__head">
             <i data-lucide="cpu" class="w-4 h-4" style="color:#818cf8;"></i>
-            <b style="color:#f1f5f9;">Live fleet topology</b>
+            <b style="color:var(--tva-text);">Live fleet topology</b>
             <span class="cm-note" style="margin:0;">nodes scale with live load</span>
         </div>
         <svg id="cmSvg" class="cm-svg" viewBox="0 0 1000 540" preserveAspectRatio="xMidYMid meet"></svg>

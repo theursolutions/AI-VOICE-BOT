@@ -36,20 +36,20 @@
            file and in every page that uses this layout keeps working with no
            edit. That is the whole reason the site was tokenised. */
         :root {
-            --bg:        #ffffff;
-            --bg-2:      #f6f8fb;
-            --panel:     rgba(255, 255, 255, .82);
-            --panel-2:   #ffffff;
-            --line:      rgba(16, 32, 56, .10);
-            --line-hot:  rgba(37, 99, 235, .30);
-            --text:      #101828;
-            --text-dim:  #475467;
-            --text-dim2: #667085;
+            --bg:        #eef3f9;
+            --bg-2:      #f6f9fc;
+            --panel:     #ffffff;
+            --panel-2:   #f8fafd;
+            --line:      rgba(27, 57, 98, .14);
+            --line-hot:  rgba(27, 57, 98, .32);
+            --text:      #1b3962;
+            --text-dim:  #46587a;
+            --text-dim2: #6b7c9c;
             /* On white, the old #3b82f6 gives 3.1:1 — below AA. Darkened to
                hold 4.6:1 for text while staying recognisably the same blue. */
-            --neon:      #1d4ed8;
-            --neon-btn:  #1d4ed8;
-            --neon-2:    #2563eb;
+            --neon:      #1b3962;
+            --neon-btn:  #1b3962;
+            --neon-2:    #2f6fb5;
             --radius:    14px;
             /* Light needs real shadows; dark leans on borders and glow. */
             --shadow:    0 1px 2px rgba(16,24,40,.05);
@@ -83,7 +83,7 @@
                vignette. Light pages want the paper to stay paper — a heavy
                gradient on white reads as a rendering artefact. */
             background:
-                linear-gradient(180deg, #f4f7fc 0%, #ffffff 46%) fixed;
+                linear-gradient(180deg, #e7eef7 0%, var(--bg) 52%) fixed;
             color: var(--text);
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             line-height: 1.65; -webkit-font-smoothing: antialiased;
@@ -103,7 +103,7 @@
             position: sticky; top: 0; z-index: 50;
             padding: 14px 28px; display: flex; align-items: center; gap: 18px;
             backdrop-filter: blur(8px);
-            background: rgba(255, 255, 255, .78); border-bottom: 1px solid var(--line);
+            background: rgba(238, 243, 249, .82); border-bottom: 1px solid var(--line);
         }
         html.dark .nav { background: rgba(5, 6, 9, .6); }
         .nav__brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 17px; }
@@ -242,6 +242,7 @@
             <a href="{{ route('login') }}">Sign in</a>
             <a href="{{ url('/register') }}" class="nav__cta">Get started free</a>
         @endauth
+        @include('partials.theme-toggle-public')
     </div>
 </nav>
 
@@ -281,5 +282,6 @@
 
 @include('partials.site-footer')
 
+@include('partials.cookie-consent')
 </body>
 </html>

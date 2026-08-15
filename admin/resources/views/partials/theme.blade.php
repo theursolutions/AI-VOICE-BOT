@@ -79,6 +79,42 @@
         --tva-shadow-lg:   0 14px 36px -10px rgba(0,0,0,.55);
     }
 
+    /* ── Chrome ────────────────────────────────────────────────────────
+       Deep navy sidebar and top bar with a light working area. The Midone
+       shell already works this way — the chrome is simply the <html>
+       background showing through, with `.content` covering the rest — so
+       setting two colours does the whole job.
+
+       This is also the pattern that stops a light admin looking like a blank
+       document: the navy gives the eye an anchor and a clear hierarchy
+       between navigation and work, which a flat all-white app never has. */
+    html:not(.dark) {
+        background: #1b3962;
+    }
+    html:not(.dark) .content {
+        background: var(--tva-bg);
+    }
+
+    /* The chrome is dark in BOTH themes, so its contents must not follow the
+       light text tokens — white-on-navy is correct in light mode too. */
+    html:not(.dark) .top-bar .search__input {
+        background: rgba(255,255,255,.08);
+        border-color: rgba(255,255,255,.14);
+        color: #eaf0f8;
+    }
+    html:not(.dark) .top-bar .search__input::placeholder { color: rgba(234,240,248,.55); }
+    html:not(.dark) .top-bar .search__input:focus {
+        background: rgba(255,255,255,.14);
+        box-shadow: 0 0 0 3px rgba(255,255,255,.10);
+    }
+    /* The theme switch sits on the navy, not on paper. */
+    html:not(.dark) .tva-theme {
+        background: rgba(255,255,255,.08);
+        border-color: rgba(255,255,255,.16);
+        color: #eaf0f8;
+    }
+    html:not(.dark) .tva-theme:hover { background: rgba(255,255,255,.16); color:#fff; }
+
     /* ── Light-mode safety net ─────────────────────────────────────────
        Every rule below fixes a real gap found by auditing all 596 `.dark`
        selectors in the app against their light counterparts: places where a

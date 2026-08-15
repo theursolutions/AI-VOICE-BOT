@@ -3,57 +3,41 @@
 @section('content')
 @php $isNew = ! $plan->exists; @endphp
 
+@include('ops.billing._styles')
+
 <style>
-    .pe-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:22px; margin-bottom:16px; }
-    .pe-card__title {
-        font-size:12px; font-weight:800; color:#0f172a; text-transform:uppercase; letter-spacing:.07em;
-        display:flex; align-items:center; gap:8px; margin-bottom:16px;
-        padding-bottom:12px; border-bottom:1px solid #e2e8f0;
-    }
-    .pe-grid { display:grid; gap:16px; grid-template-columns:1fr; }
-    @media (min-width:800px){ .pe-grid--2 { grid-template-columns:1fr 1fr; } .pe-grid--3 { grid-template-columns:repeat(3,1fr); } }
-
-    .pe-group { margin-bottom:0; }
-    .pe-label { font-size:10.5px; color:#64748b; text-transform:uppercase; letter-spacing:.06em; font-weight:700; margin-bottom:6px; display:block; }
-    .pe-help  { font-size:11px; color:#94a3b8; margin-top:5px; line-height:1.5; }
-    .pe-input, .pe-select, .pe-textarea {
-        width:100%; border:1px solid #e2e8f0; border-radius:9px; padding:9px 11px;
-        font-size:13.5px; background:#fff; color:#0f172a;
-    }
-    .pe-textarea { min-height:76px; resize:vertical; }
-    .pe-check { display:flex; align-items:flex-start; gap:9px; font-size:13px; color:#334155; }
-    .pe-check input { margin-top:3px; }
-
+    /* Feature editor: three fixed tracks so the name, the control and the
+       wiring tags form clean columns instead of each row sizing itself. */
     .pe-feat { width:100%; border-collapse:collapse; font-size:13px; }
-    .pe-feat th, .pe-feat td { text-align:left; padding:9px 10px; border-bottom:1px solid #f1f5f9; }
-    .pe-feat th { font-size:10.5px; text-transform:uppercase; letter-spacing:.05em; color:#94a3b8; font-weight:700; }
+    .pe-feat th, .pe-feat td { padding:10px 12px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }
+    .pe-feat th { font-size:10.5px; text-transform:uppercase; letter-spacing:.06em; color:#94a3b8; font-weight:800; text-align:left; }
+    .pe-feat td:first-child, .pe-feat th:first-child { padding-left:0; }
+    .pe-feat tbody tr:hover { background:#fcfcfd; }
     .pe-feat__name { font-weight:600; color:#0f172a; }
-    .pe-feat__key { font-family:ui-monospace,monospace; font-size:10.5px; color:#94a3b8; }
+    .pe-feat__key { font-family:ui-monospace,monospace; font-size:10.5px; color:#94a3b8; margin-top:2px; }
     .pe-feat__grp td {
-        background:#f8fafc; font-size:10.5px; font-weight:800; letter-spacing:.08em;
-        text-transform:uppercase; color:#6366f1;
+        background:#fffbeb; border-bottom:1px solid #fde68a;
+        font-size:10.5px; font-weight:800; letter-spacing:.09em; text-transform:uppercase; color:#b45309;
     }
-    .pe-feat input[type=text], .pe-feat input[type=number] {
-        width:150px; border:1px solid #e2e8f0; border-radius:8px; padding:6px 9px; font-size:12.5px;
-        background:#fff; color:#0f172a;
-    }
-    .pe-tag { font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px; background:#f1f5f9; color:#475569; }
+    .pe-feat input[type=text] { max-width:170px; }
 
-    .pe-btn {
-        display:inline-flex; align-items:center; gap:7px; cursor:pointer; text-decoration:none;
-        font-size:13.5px; font-weight:600; padding:10px 18px; border-radius:10px;
-        border:1px solid #e2e8f0; background:#fff; color:#334155;
+    .pe-tag {
+        font-size:9.5px; font-weight:700; padding:2px 6px; border-radius:5px;
+        background:#f1f5f9; color:#475569; display:inline-flex; align-items:center; gap:3px; margin-right:4px;
     }
-    .pe-btn--primary { background:var(--tva-gradient, linear-gradient(135deg,#6366f1,#8b5cf6)); color:#fff; border-color:transparent; }
-    .pe-bar { display:flex; gap:10px; justify-content:flex-end; margin-top:4px; }
+    .pe-tag--mod { background:#eef2ff; color:#4338ca; }
+    .pe-tag--met { background:#ecfdf3; color:#067647; }
 
-    html.dark .pe-card { background:#1e293b; border-color:#334155; }
-    html.dark .pe-card__title, html.dark .pe-feat__name { color:#f1f5f9; }
-    html.dark .pe-input, html.dark .pe-select, html.dark .pe-textarea,
-    html.dark .pe-feat input { background:#0f172a; border-color:#334155; color:#e2e8f0; }
+    .pe-bar {
+        display:flex; gap:10px; justify-content:flex-end; align-items:center;
+        position:sticky; bottom:0; background:#fff; border-top:1px solid #e2e8f0;
+        padding:14px 0; margin-top:4px; z-index:3;
+    }
+    html.dark .pe-bar { background:#1e293b; border-color:#334155; }
     html.dark .pe-feat th, html.dark .pe-feat td { border-color:#334155; }
-    html.dark .pe-feat__grp td { background:#172033; }
-    html.dark .pe-btn { background:#0f172a; border-color:#334155; color:#cbd5e1; }
+    html.dark .pe-feat tbody tr:hover { background:#0f172a; }
+    html.dark .pe-feat__name { color:#f1f5f9; }
+    html.dark .pe-feat__grp td { background:rgba(180,83,9,.15); border-color:rgba(253,230,138,.3); color:#fbbf24; }
 </style>
 
 <div class="content">
@@ -65,15 +49,16 @@
                 @if ($isNew)
                     Create the plan first, then add its prices and set its limits.
                 @else
-                    Name, copy, trial and limits. Prices are managed on the
-                    <a href="{{ route('ops.billing.plans.index') }}" style="color:#fff;text-decoration:underline">Plans list</a>
-                    so price versioning stays in one place.
+                    Name, copy, trial and limits. Prices are managed on the Plans list, so price
+                    versioning stays in one place.
                 @endif
             </div>
         </div>
-        <a href="{{ route('ops.billing.plans.index') }}" class="pe-btn">
-            <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Back
-        </a>
+        <div class="ob-card__actions">
+            <a href="{{ route('ops.billing.plans.index') }}" class="ob-btn">
+                <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Back
+            </a>
+        </div>
     </div>
 
     <form method="POST"
@@ -82,124 +67,139 @@
         @csrf
         @unless ($isNew) @method('PATCH') @endunless
 
-        {{-- ── Identity ───────────────────────────────────────────── --}}
-        <div class="pe-card">
-            <div class="pe-card__title"><i data-lucide="tag" class="w-4 h-4"></i> Identity</div>
+        @if ($errors->any())
+            <div class="ob-note ob-note--err">
+                <i data-lucide="alert-octagon" class="w-5 h-5"></i>
+                <div>
+                    <strong>Please fix the following:</strong>
+                    <ul style="margin:6px 0 0;padding-left:18px">
+                        @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
+                    </ul>
+                </div>
+            </div>
+        @endif
 
-            <div class="pe-grid pe-grid--2">
-                <div class="pe-group">
-                    <label class="pe-label" for="name">Plan name</label>
-                    <input class="pe-input" id="name" name="name" required maxlength="100"
+        {{-- ── Identity ───────────────────────────────────────────── --}}
+        <div class="ob-card">
+            <div class="ob-card__head">
+                <i data-lucide="tag" class="w-4 h-4" style="color:#c97a00"></i>
+                <div class="ob-card__title">Identity</div>
+            </div>
+
+            <div class="ob-grid2">
+                <div class="ob-field">
+                    <label for="name">Plan name</label>
+                    <input class="ob-input" id="name" name="name" required maxlength="100"
                            value="{{ old('name', $plan->name) }}" placeholder="Growth">
                 </div>
 
-                <div class="pe-group">
-                    <label class="pe-label" for="type">Type</label>
-                    <select class="pe-select" id="type" name="type">
-                        @foreach (['standard' => 'Standard (paid, self-serve)',
-                                   'free' => 'Free (no Stripe price)',
-                                   'enterprise' => 'Enterprise (contact-us CTA)',
-                                   'custom' => 'Custom (private, negotiated)'] as $value => $label)
+                <div class="ob-field">
+                    <label for="type">Type</label>
+                    <select class="ob-select" id="type" name="type">
+                        @foreach ([
+                            'standard'   => 'Standard — paid, self-serve',
+                            'free'       => 'Free — no Stripe price',
+                            'enterprise' => 'Enterprise — contact-us CTA',
+                            'custom'     => 'Custom — private, negotiated',
+                        ] as $value => $label)
                             <option value="{{ $value }}" @selected(old('type', $plan->type) === $value)>{{ $label }}</option>
                         @endforeach
                     </select>
-                    <p class="pe-help">
+                    <p class="ob-help">
                         <strong>Free</strong> can never have a price and is the only type that uses the free
-                        window. <strong>Enterprise</strong> renders as a CTA band rather than a price card.
+                        window. <strong>Enterprise</strong> renders as a CTA band, not a price card.
                     </p>
                 </div>
             </div>
 
             @if ($isNew)
-                <div class="pe-group" style="margin-top:16px">
-                    <label class="pe-label" for="slug">Slug <span style="text-transform:none">(optional — generated from the name)</span></label>
-                    <input class="pe-input" id="slug" name="slug" maxlength="100"
-                           value="{{ old('slug') }}" placeholder="growth">
-                    <p class="pe-help">
-                        Permanent. It's the identifier checkout forms submit and it's stamped into Stripe
-                        metadata, so it can't be changed later without breaking in-flight sessions.
+                <div class="ob-field">
+                    <label for="slug">Slug <span class="hint">optional — generated from the name</span></label>
+                    <input class="ob-input" id="slug" name="slug" maxlength="100" value="{{ old('slug') }}" placeholder="growth">
+                    <p class="ob-help">
+                        Permanent. It’s the identifier checkout submits and it’s stamped into Stripe metadata,
+                        so it can’t be changed later without breaking in-flight sessions.
                     </p>
                 </div>
             @endif
 
-            <div class="pe-group" style="margin-top:16px">
-                <label class="pe-label" for="tagline">Tagline</label>
-                <input class="pe-input" id="tagline" name="tagline" maxlength="255"
+            <div class="ob-field">
+                <label for="tagline">Tagline</label>
+                <input class="ob-input" id="tagline" name="tagline" maxlength="255"
                        value="{{ old('tagline', $plan->tagline) }}"
                        placeholder="Everything in one place, for a growing business">
-                <p class="pe-help">One line under the plan name on the pricing card.</p>
+                <p class="ob-help">One line under the plan name on the pricing card.</p>
             </div>
 
-            <div class="pe-group" style="margin-top:16px">
-                <label class="pe-label" for="description">Description</label>
-                <textarea class="pe-textarea" id="description" name="description" maxlength="2000">{{ old('description', $plan->description) }}</textarea>
+            <div class="ob-field" style="margin-bottom:0">
+                <label for="description">Description</label>
+                <textarea class="ob-textarea" id="description" name="description" maxlength="2000">{{ old('description', $plan->description) }}</textarea>
             </div>
         </div>
 
         {{-- ── Presentation ───────────────────────────────────────── --}}
-        <div class="pe-card">
-            <div class="pe-card__title"><i data-lucide="eye" class="w-4 h-4"></i> Presentation</div>
+        <div class="ob-card">
+            <div class="ob-card__head">
+                <i data-lucide="eye" class="w-4 h-4" style="color:#c97a00"></i>
+                <div class="ob-card__title">Presentation</div>
+            </div>
 
-            <div class="pe-grid pe-grid--3">
-                <div class="pe-group">
-                    <label class="pe-label" for="badge">Badge</label>
-                    <input class="pe-input" id="badge" name="badge" maxlength="40"
+            <div class="ob-grid3">
+                <div class="ob-field">
+                    <label for="badge">Badge</label>
+                    <input class="ob-input" id="badge" name="badge" maxlength="40"
                            value="{{ old('badge', $plan->badge) }}" placeholder="Most popular">
                 </div>
-                <div class="pe-group">
-                    <label class="pe-label" for="cta_label">Button label</label>
-                    <input class="pe-input" id="cta_label" name="cta_label" maxlength="60"
+                <div class="ob-field">
+                    <label for="cta_label">Button label</label>
+                    <input class="ob-input" id="cta_label" name="cta_label" maxlength="60"
                            value="{{ old('cta_label', $plan->cta_label) }}" placeholder="Get started">
                 </div>
-                <div class="pe-group">
-                    <label class="pe-label" for="sort_order">Display order</label>
-                    <input class="pe-input" id="sort_order" name="sort_order" type="number" min="0" max="9999"
-                           value="{{ old('sort_order', $plan->sort_order ?? 0) }}">
+                <div class="ob-field">
+                    <label for="sort_order">Display order</label>
+                    <input class="ob-input ob-input--num" id="sort_order" name="sort_order" type="number"
+                           min="0" max="9999" value="{{ old('sort_order', $plan->sort_order ?? 0) }}">
                 </div>
             </div>
 
-            <div class="pe-group" style="margin-top:16px">
-                <label class="pe-label" for="cta_url">Button URL <span style="text-transform:none">(enterprise / custom only)</span></label>
-                <input class="pe-input" id="cta_url" name="cta_url" maxlength="255"
+            <div class="ob-field">
+                <label for="cta_url">Button URL <span class="hint">enterprise / custom only</span></label>
+                <input class="ob-input" id="cta_url" name="cta_url" maxlength="255"
                        value="{{ old('cta_url', $plan->cta_url) }}" placeholder="/contact">
             </div>
 
-            <div class="pe-grid pe-grid--2" style="margin-top:18px">
-                <label class="pe-check">
+            <div class="ob-grid2" style="margin-bottom:0">
+                <label class="ob-check">
                     <input type="hidden" name="is_active" value="0">
                     <input type="checkbox" name="is_active" value="1" @checked(old('is_active', $plan->is_active ?? true))>
-                    <span>
-                        <strong>On sale</strong>
-                        <span class="pe-help" style="display:block;margin-top:2px">
-                            Off hides it from new signups. Existing subscribers keep their subscription and
-                            keep being billed.
-                        </span>
-                    </span>
+                    <span><b>On sale</b>
+                        <span class="sub">Off hides it from new signups. Existing subscribers keep their
+                        subscription and keep being billed.</span></span>
                 </label>
 
-                <label class="pe-check">
+                <label class="ob-check">
                     <input type="hidden" name="is_public" value="0">
                     <input type="checkbox" name="is_public" value="1" @checked(old('is_public', $plan->is_public ?? true))>
-                    <span>
-                        <strong>Show on the public pricing page</strong>
-                        <span class="pe-help" style="display:block;margin-top:2px">
-                            Off makes it link-only — the way to run a negotiated deal without listing it.
-                        </span>
-                    </span>
+                    <span><b>Show on the public pricing page</b>
+                        <span class="sub">Off makes it link-only — how to run a negotiated deal without
+                        listing it.</span></span>
                 </label>
             </div>
         </div>
 
         {{-- ── Free window & trial ────────────────────────────────── --}}
-        <div class="pe-card">
-            <div class="pe-card__title"><i data-lucide="clock" class="w-4 h-4"></i> Free window &amp; trial</div>
+        <div class="ob-card">
+            <div class="ob-card__head">
+                <i data-lucide="clock" class="w-4 h-4" style="color:#c97a00"></i>
+                <div class="ob-card__title">Free window &amp; trial</div>
+            </div>
 
-            <div class="pe-grid pe-grid--2">
-                <div class="pe-group">
-                    <label class="pe-label" for="free_window_days">Free window (days) — free plans only</label>
-                    <input class="pe-input" id="free_window_days" name="free_window_days" type="number" min="0" max="365"
-                           value="{{ old('free_window_days', $plan->free_window_days) }}" placeholder="7">
-                    <p class="pe-help">
+            <div class="ob-grid2">
+                <div class="ob-field">
+                    <label for="free_window_days">Free window <span class="hint">days · free plans only</span></label>
+                    <input class="ob-input ob-input--num" id="free_window_days" name="free_window_days" type="number"
+                           min="0" max="365" value="{{ old('free_window_days', $plan->free_window_days) }}" placeholder="7">
+                    <p class="ob-help">
                         Days of no-card access before the workspace degrades to
                         <strong>{{ config('billing.free.on_expiry') }}</strong>.
                         <strong>Leave blank for a permanent free tier.</strong>
@@ -207,27 +207,23 @@
                     </p>
                 </div>
 
-                <div class="pe-group">
-                    <label class="pe-label" for="trial_days">Trial (days) — paid plans only</label>
-                    <input class="pe-input" id="trial_days" name="trial_days" type="number" min="0" max="365"
-                           value="{{ old('trial_days', $plan->trial_days ?? 0) }}">
-                    <p class="pe-help">
-                        0 under the approved model — the 7-day free window is the trial. Set a number here to
+                <div class="ob-field">
+                    <label for="trial_days">Trial <span class="hint">days · paid plans only</span></label>
+                    <input class="ob-input ob-input--num" id="trial_days" name="trial_days" type="number"
+                           min="0" max="365" value="{{ old('trial_days', $plan->trial_days ?? 0) }}">
+                    <p class="ob-help">
+                        0 under the approved model — the 7-day free window is the trial. Set a number to
                         switch a Stripe trial back on for this plan; no deploy needed.
                     </p>
 
-                    <label class="pe-check" style="margin-top:12px">
+                    <label class="ob-check" style="margin-top:12px">
                         <input type="hidden" name="trial_requires_payment_method" value="0">
                         <input type="checkbox" name="trial_requires_payment_method" value="1"
                                @checked(old('trial_requires_payment_method', $plan->trial_requires_payment_method ?? true))>
-                        <span>
-                            <strong>Require a card to start the trial</strong>
-                            <span class="pe-help" style="display:block;margin-top:2px">
-                                Recommended when a trial gives away real cost (voice minutes). The card is also
-                                the strongest abuse control — Stripe's card fingerprint is stable across
-                                customers.
-                            </span>
-                        </span>
+                        <span><b>Require a card to start the trial</b>
+                            <span class="sub">Recommended when a trial gives away real cost. The card is also
+                            the strongest abuse control — Stripe’s fingerprint is stable across
+                            customers.</span></span>
                     </label>
                 </div>
             </div>
@@ -235,92 +231,107 @@
 
         {{-- ── Features & limits ──────────────────────────────────── --}}
         @unless ($isNew)
-            <div class="pe-card">
-                <div class="pe-card__title"><i data-lucide="sliders" class="w-4 h-4"></i> Features &amp; limits</div>
+            <div class="ob-card">
+                <div class="ob-card__head">
+                    <i data-lucide="sliders" class="w-4 h-4" style="color:#c97a00"></i>
+                    <div>
+                        <div class="ob-card__title">Features &amp; limits</div>
+                        <div class="ob-card__sub">What this plan grants. Blank means not included.</div>
+                    </div>
+                    <div class="ob-card__actions">
+                        <a href="{{ route('ops.billing.features.index') }}" class="ob-btn ob-btn--sm">
+                            <i data-lucide="grid" class="w-3.5 h-3.5"></i> All plans matrix
+                        </a>
+                    </div>
+                </div>
 
-                <table class="pe-feat">
-                    <thead>
-                        <tr><th>Feature</th><th style="width:190px">Value for this plan</th><th style="width:160px">Wiring</th></tr>
-                    </thead>
-                    <tbody>
-                        @php $group = null; @endphp
-                        @foreach ($features as $feature)
-                            @if ($feature->group !== $group)
-                                @php $group = $feature->group; @endphp
-                                <tr class="pe-feat__grp"><td colspan="3">{{ $group ?: 'General' }}</td></tr>
-                            @endif
-
-                            @php $current = $values[$feature->id] ?? null; @endphp
+                <div class="ob-tablewrap">
+                    <table class="pe-feat">
+                        <thead>
                             <tr>
-                                <td>
-                                    <div class="pe-feat__name">{{ $feature->name }}</div>
-                                    <div class="pe-feat__key">{{ $feature->key }}</div>
-                                    @if ($feature->description)
-                                        <div class="pe-help">{{ $feature->description }}</div>
-                                    @endif
-                                </td>
-                                <td>
-                                    @if ($feature->value_type === 'boolean')
-                                        {{-- Hidden 0 + checkbox: an unchecked box submits "0", which
-                                             syncFeatures() deletes, and a missing row means NOT granted. --}}
-                                        <input type="hidden" name="features[{{ $feature->id }}]" value="0">
-                                        <label class="pe-check">
-                                            <input type="checkbox" name="features[{{ $feature->id }}]" value="1"
-                                                   @checked(filter_var($current, FILTER_VALIDATE_BOOLEAN))>
-                                            <span>Included</span>
-                                        </label>
-                                    @elseif ($feature->value_type === 'numeric')
-                                        <input type="text" name="features[{{ $feature->id }}]"
-                                               value="{{ $current }}" placeholder="e.g. 5000 or -1">
-                                        <div class="pe-help">Blank = not included · <code>-1</code> = unlimited</div>
-                                    @elseif ($feature->value_type === 'unlimited')
-                                        <input type="hidden" name="features[{{ $feature->id }}]" value="0">
-                                        <label class="pe-check">
-                                            <input type="checkbox" name="features[{{ $feature->id }}]" value="1"
-                                                   @checked($current !== null)>
-                                            <span>Unlimited</span>
-                                        </label>
-                                    @else
-                                        <input type="text" name="features[{{ $feature->id }}]"
-                                               value="{{ $current }}" placeholder="Priority email">
-                                    @endif
-                                </td>
-                                <td>
-                                    @if ($feature->module_key)
-                                        <span class="pe-tag" title="Gates this admin module">
-                                            <i data-lucide="lock" style="width:10px;height:10px;display:inline"></i>
-                                            {{ $feature->module_key }}
-                                        </span>
-                                    @endif
-                                    @if ($feature->metric_key)
-                                        <span class="pe-tag" title="Enforced as a usage quota">
-                                            <i data-lucide="gauge" style="width:10px;height:10px;display:inline"></i>
-                                            {{ $feature->metric_key }}
-                                        </span>
-                                    @endif
-                                    @if (! $feature->module_key && ! $feature->metric_key)
-                                        <span class="pe-help">display only</span>
-                                    @endif
-                                </td>
+                                <th>Feature</th>
+                                <th style="width:210px">Value for this plan</th>
+                                <th style="width:190px">Wiring</th>
                             </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            @php $group = null; @endphp
+                            @foreach ($features as $feature)
+                                @if ($feature->group !== $group)
+                                    @php $group = $feature->group; @endphp
+                                    <tr class="pe-feat__grp"><td colspan="3">{{ $group ?: 'General' }}</td></tr>
+                                @endif
 
-                <p class="pe-help" style="margin-top:14px">
-                    A blank value means the plan does <strong>not</strong> include the feature — that's why adding a
-                    new feature never silently grants it to every existing plan. Features flagged
-                    <em>module</em> gate the matching admin section; features flagged <em>metric</em> become an
-                    enforced usage cap.
-                    Manage the catalogue itself in
-                    <a href="{{ route('ops.billing.features.index') }}" style="color:#6366f1">Features &amp; limits</a>.
+                                @php $current = $values[$feature->id] ?? null; @endphp
+                                <tr>
+                                    <td>
+                                        <div class="pe-feat__name">{{ $feature->name }}</div>
+                                        <div class="pe-feat__key">{{ $feature->key }}</div>
+                                        @if ($feature->description)
+                                            <div class="ob-help" style="margin-top:3px">{{ $feature->description }}</div>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($feature->value_type === 'boolean')
+                                            {{-- Hidden 0 + checkbox: an unchecked box submits "0", which
+                                                 syncFeatures() deletes, and a missing row means NOT granted. --}}
+                                            <input type="hidden" name="features[{{ $feature->id }}]" value="0">
+                                            <label class="ob-check">
+                                                <input type="checkbox" name="features[{{ $feature->id }}]" value="1"
+                                                       @checked(filter_var($current, FILTER_VALIDATE_BOOLEAN))>
+                                                <span>Included</span>
+                                            </label>
+                                        @elseif ($feature->value_type === 'numeric')
+                                            <input type="text" class="ob-input ob-input--sm ob-input--num"
+                                                   name="features[{{ $feature->id }}]"
+                                                   value="{{ $current }}" placeholder="e.g. 5000 or -1">
+                                            <div class="ob-help">blank = not included · <code>-1</code> = unlimited</div>
+                                        @elseif ($feature->value_type === 'unlimited')
+                                            <input type="hidden" name="features[{{ $feature->id }}]" value="0">
+                                            <label class="ob-check">
+                                                <input type="checkbox" name="features[{{ $feature->id }}]" value="1"
+                                                       @checked($current !== null)>
+                                                <span>Unlimited</span>
+                                            </label>
+                                        @else
+                                            <input type="text" class="ob-input ob-input--sm"
+                                                   name="features[{{ $feature->id }}]"
+                                                   value="{{ $current }}" placeholder="Priority email">
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($feature->module_key)
+                                            <span class="pe-tag pe-tag--mod" title="Gates this admin module">
+                                                <i data-lucide="lock" style="width:9px;height:9px"></i>{{ $feature->module_key }}
+                                            </span>
+                                        @endif
+                                        @if ($feature->metric_key)
+                                            <span class="pe-tag pe-tag--met" title="Enforced as a usage quota">
+                                                <i data-lucide="gauge" style="width:9px;height:9px"></i>{{ $feature->metric_key }}
+                                            </span>
+                                        @endif
+                                        @if (! $feature->module_key && ! $feature->metric_key)
+                                            <span class="ob-help">display only</span>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="ob-help" style="margin-top:14px">
+                    A blank value means the plan does <strong>not</strong> include the feature — that’s why
+                    adding a new feature never silently grants it to every existing plan. Features flagged
+                    <em>module</em> gate the matching admin section; features flagged <em>metric</em> become
+                    an enforced usage cap.
                 </p>
             </div>
         @endunless
 
         <div class="pe-bar">
-            <a href="{{ route('ops.billing.plans.index') }}" class="pe-btn">Cancel</a>
-            <button type="submit" class="pe-btn pe-btn--primary">
+            <a href="{{ route('ops.billing.plans.index') }}" class="ob-btn">Cancel</a>
+            <button type="submit" class="ob-btn ob-btn--primary">
                 <i data-lucide="save" class="w-4 h-4"></i>
                 {{ $isNew ? 'Create plan' : 'Save changes' }}
             </button>

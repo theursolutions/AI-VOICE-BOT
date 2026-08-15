@@ -692,7 +692,7 @@ function PropertiesPanel({ node, updateNode, deleteNode, onClose, dataSources = 
                 return (
                     <div className="fb-props__body">
                         {fields.map((f, i) => (
-                            <div key={i} style={{ border: '1px solid #1e293b', borderRadius: 8, padding: 10, marginBottom: 10 }}>
+                            <div key={i} style={{ border: '1px solid var(--fb-line)', borderRadius: 8, padding: 10, marginBottom: 10 }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                                     <strong style={{ fontSize: 12, color: '#94a3b8' }}>Question {i + 1}</strong>
                                     {fields.length > 1 && (
@@ -894,6 +894,7 @@ function LanguageField({ value, onChange }) {
 function Toolbar({
     onSave, saving, dirty, lastSavedAt, settings, onSettingsChange, onTestToggle, testOpen,
     status, publishing, publishError, activationErrors, onSetStatus,
+    aiOpen, onAiToggle,
 }) {
     const [open, setOpen] = useState(false);
     const isActive = status === 'active';
@@ -937,6 +938,16 @@ function Toolbar({
                 title="Run this flow in a sandboxed test session — nodes light up as they fire."
             >
                 {testOpen ? '◼ Stop test' : '▶ Test flow'}
+            </button>
+            {/* Opens the AI chat dock on the right. Describe the flow in
+                plain language and it lands on the canvas; keep typing to
+                change it. */}
+            <button
+                className={`fb-ai-btn ${aiOpen ? 'is-active' : ''}`}
+                onClick={onAiToggle}
+                title="Build or change this flow by describing it in plain language"
+            >
+                ✦ Build with AI
             </button>
             <div className="fb-settings">
                 <button className="fb-settings__btn" onClick={() => setOpen((o) => !o)}>
@@ -991,6 +1002,163 @@ function Toolbar({
 // and animates the highlight through the returned execution_path via
 // FlowCanvas's animatePath().
 // ────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────
+// AI panel — describe the flow, watch it appear on the canvas.
+//
+// A conversation, not a one-shot generator: each message is applied to the
+// live canvas immediately, and the next message refines what is already
+// there ("add option 4 for careers"). Nothing is saved automatically — the
+// canvas goes dirty and the normal Save button commits it, so an AI edit is
+// exactly as reversible as a hand edit.
+//
+// Every applied change keeps the graph it replaced, so Undo is one click.
+// A generator you cannot back out of is a generator people are afraid to use.
+// ────────────────────────────────────────────────────────────────────
+function AiPanel({ messages, busy, channel, onChannelChange, onSend, onUndo, onClose }) {
+    const [draft, setDraft] = useState('');
+    const scrollRef = useRef(null);
+
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+    }, [messages.length, busy]);
+
+    const submit = () => {
+        const t = draft.trim();
+        if (!t || busy) return;
+        setDraft('');
+        onSend(t);
+    };
+
+    const EXAMPLES = messages.length === 0
+        ? [
+            'Greet the caller, then a menu: 1 for sales, 2 for support, 3 for opening hours. Sales and support go to the AI agent; opening hours are read out and the call ends. If nothing is pressed, repeat once then say goodbye.',
+            'Say hello, ask for their name and WhatsApp number, then send them our brochure on WhatsApp and confirm it has been sent.',
+            'Tell the caller we are closed and give our hours. Offer: 1 to leave a callback number, 2 to talk to the AI assistant.',
+        ]
+        : [];
+
+    return (
+        <div className="fb-ai">
+            <div className="fb-ai__head">
+                <div className="fb-ai__title">✦ Build with AI</div>
+                <button className="fb-props__close" onClick={onClose} title="Close">✕</button>
+            </div>
+
+            <div className="fb-ai__channel">
+                <span>This flow runs on</span>
+                <select value={channel} onChange={(e) => onChannelChange(e.target.value)} disabled={busy}>
+                    <option value="chat">Chat / WhatsApp</option>
+                    <option value="voice">Phone calls</option>
+                </select>
+            </div>
+
+            <div className="fb-ai__log" ref={scrollRef}>
+                {messages.length === 0 && (
+                    <div className="fb-ai__intro">
+                        Describe the flow you want and it will appear on the canvas.
+                        Then keep talking to change it — “add an option 4 for careers”,
+                        “make the greeting shorter”.
+                    </div>
+                )}
+
+                {messages.map((m, i) => (
+                    <div key={i} className={`fb-ai__msg is-${m.role}`}>
+                        {m.text && <div className="fb-ai__bubble">{m.text}</div>}
+
+                        {m.steps?.length > 0 && (
+                            <ol className="fb-ai__steps">
+                                {m.steps.map((s, j) => <li key={j}>{s}</li>)}
+                            </ol>
+                        )}
+
+                        {/* The part that stops this being a black box: what it
+                            could not do, and what to do instead. */}
+                        {m.gaps?.length > 0 && (
+                            <div className="fb-ai__note is-gap">
+                                <b>Couldn’t do everything you asked</b>
+                                {m.gaps.map((g, j) => (
+                                    <div key={j} className="fb-ai__gap">
+                                        <span className="t">{g.cannot}</span>
+                                        {g.because && <span className="w">{g.because}</span>}
+                                        {g.instead && <span className="i"><b>Instead:</b> {g.instead}</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {m.assumptions?.length > 0 && (
+                            <div className="fb-ai__note is-info">
+                                <b>Assumed</b>
+                                <ul>{m.assumptions.map((a, j) => <li key={j}>{a}</li>)}</ul>
+                            </div>
+                        )}
+
+                        {m.warnings?.length > 0 && (
+                            <div className="fb-ai__note is-warn">
+                                <b>Worth checking</b>
+                                <ul>{m.warnings.map((w, j) => <li key={j}>{w}</li>)}</ul>
+                            </div>
+                        )}
+
+                        {m.errors?.length > 0 && (
+                            <div className="fb-ai__note is-err">
+                                <b>Couldn’t build that</b>
+                                <ul>{m.errors.map((e, j) => <li key={j}>{e}</li>)}</ul>
+                            </div>
+                        )}
+
+                        {m.canUndo && (
+                            <button className="fb-ai__undo" onClick={() => onUndo(i)}>
+                                ↩ Undo this change
+                            </button>
+                        )}
+                    </div>
+                ))}
+
+                {busy && (
+                    <div className="fb-ai__msg is-assistant">
+                        <div className="fb-ai__bubble is-thinking">
+                            <span className="fb-ai__dots"><i /><i /><i /></span>
+                            Designing the flow…
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {EXAMPLES.length > 0 && (
+                <div className="fb-ai__examples">
+                    {EXAMPLES.map((ex, i) => (
+                        <button key={i} onClick={() => setDraft(ex)} title={ex}>
+                            {['Phone menu', 'Capture a lead', 'Out of hours'][i]}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            <div className="fb-ai__composer">
+                <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                        // Enter sends; Shift+Enter is a newline. Briefs are
+                        // often several sentences, so both need to work.
+                        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+                    }}
+                    placeholder={messages.length === 0
+                        ? 'Describe the flow you want…'
+                        : 'What should change?'}
+                    rows={3}
+                    disabled={busy}
+                />
+                <button onClick={submit} disabled={busy || !draft.trim()}>
+                    {busy ? '…' : 'Send'}
+                </button>
+            </div>
+        </div>
+    );
+}
+
 function TestPanel({ messages, expecting, running, sessionId, onStart, onChoice, onText, onReset, onClose }) {
     const [draft, setDraft] = useState('');
     const scrollRef = useRef(null);
@@ -1114,8 +1282,18 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
     // ReactFlow nodes with classNames so CSS can pulse/tint them.
     const [runStatus, setRunStatus]             = useState({});
 
+    // AI dock — describe the flow, it lands on the canvas, keep talking to
+    // refine it. Shares the right column with the properties panel.
+    const [aiOpen, setAiOpen]         = useState(false);
+    const [aiMessages, setAiMessages] = useState([]);
+    const [aiBusy, setAiBusy]         = useState(false);
+    const [aiChannel, setAiChannel]   = useState('chat');
+    // Graph that each applied AI change replaced, keyed by its message index,
+    // so any step can be reverted without re-asking the model.
+    const aiUndoRef = useRef({});
+
     const wrapperRef = useRef(null);
-    const { screenToFlowPosition } = useReactFlow();
+    const { screenToFlowPosition, fitView } = useReactFlow();
 
     // Mark dirty whenever nodes/edges/settings change AFTER initial load.
     const initialLoadDone = useRef(false);
@@ -1386,6 +1564,91 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
         setNodes((nds) => nds.concat(newNode));
     }, [screenToFlowPosition, setNodes]);
 
+    // ── AI dock ───────────────────────────────────────────────────────
+    // Sends the brief plus the CURRENT canvas (not the last save, which may
+    // be stale) and drops the returned graph straight onto the canvas.
+    // Deliberately does not save: the flow goes dirty and the customer
+    // commits it with the same Save button as any hand edit.
+    const aiSend = useCallback(async (brief) => {
+        if (aiBusy) return;
+
+        setAiMessages((m) => [...m, { role: 'user', text: brief }]);
+        setAiBusy(true);
+
+        // Snapshot before we touch anything, so this step can be undone.
+        const before = { nodes, edges, settings };
+
+        try {
+            const res = await fetch(`${baseUrl}/c/${clientSlug}/flows/ai/plan`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    Accept: 'application/json',
+                },
+                body: JSON.stringify({
+                    project_id: projectId,
+                    flow_id: flowId,
+                    brief,
+                    channel: aiChannel,
+                    // Only send a graph once there is something to revise —
+                    // an empty canvas should read as "build from scratch".
+                    definition: nodes.length ? { nodes, edges, settings } : null,
+                }),
+            });
+            const body = await res.json().catch(() => ({}));
+
+            const applied = Boolean(body.ok && body.definition && Array.isArray(body.definition.nodes));
+
+            if (applied) {
+                setNodes(body.definition.nodes || []);
+                setEdges(body.definition.edges || []);
+                if (body.definition.settings) setSettings(body.definition.settings);
+                // Let React commit the new graph before framing it.
+                setTimeout(() => { try { fitView({ padding: 0.2, duration: 400 }); } catch (_) {} }, 60);
+            }
+
+            setAiMessages((m) => {
+                const next = [...m, {
+                    role: 'assistant',
+                    text: body.summary || (applied ? 'Done — the flow is on the canvas.' : ''),
+                    steps: body.steps || [],
+                    gaps: body.gaps || [],
+                    assumptions: body.assumptions || [],
+                    warnings: body.warnings || [],
+                    errors: body.errors || (res.ok ? [] : ['The server rejected that request.']),
+                    canUndo: applied,
+                }];
+                if (applied) aiUndoRef.current[next.length - 1] = before;
+                return next;
+            });
+        } catch (err) {
+            console.error('ai plan failed', err);
+            setAiMessages((m) => [...m, {
+                role: 'assistant',
+                errors: ['Could not reach the AI service. Please try again.'],
+            }]);
+        } finally {
+            setAiBusy(false);
+        }
+    }, [aiBusy, aiChannel, nodes, edges, settings, baseUrl, clientSlug, flowId, projectId, csrf,
+        setNodes, setEdges, fitView]);
+
+    const aiUndo = useCallback((index) => {
+        const before = aiUndoRef.current[index];
+        if (!before) return;
+        setNodes(before.nodes || []);
+        setEdges(before.edges || []);
+        if (before.settings) setSettings(before.settings);
+        delete aiUndoRef.current[index];
+        setAiMessages((m) => m.map((msg, i) => (
+            i === index ? { ...msg, canUndo: false, text: (msg.text || '') + ' (undone)' } : msg
+        )));
+        setTimeout(() => { try { fitView({ padding: 0.2, duration: 300 }); } catch (_) {} }, 60);
+    }, [setNodes, setEdges, fitView]);
+
     const updateNode = useCallback((id, newData) => {
         setNodes((nds) => nds.map((n) => (n.id === id ? { ...n, data: newData } : n)));
     }, [setNodes]);
@@ -1421,7 +1684,10 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
     }
 
     return (
-        <div className={`fb-shell ${propsOpen ? 'props-open' : 'props-closed'}`} ref={wrapperRef}>
+        // The right column is shared: AI dock takes it when open, otherwise
+        // the properties panel. Two docked panels at once would leave the
+        // canvas — the thing you are meant to be watching — too narrow to read.
+        <div className={`fb-shell ${(propsOpen || aiOpen) ? 'props-open' : 'props-closed'}`} ref={wrapperRef}>
             <Toolbox />
 
             <div className="fb-canvas-wrap" onDrop={onDrop} onDragOver={onDragOver}>
@@ -1437,6 +1703,14 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
                     publishError={publishError}
                     activationErrors={activationErrors}
                     onSetStatus={setFlowStatus}
+                    aiOpen={aiOpen}
+                    onAiToggle={() => {
+                        setAiOpen((o) => {
+                            const next = !o;
+                            if (next) setPropsOpen(false);   // one right-hand panel at a time
+                            return next;
+                        });
+                    }}
                     testOpen={testOpen}
                     onTestToggle={() => {
                         setTestOpen((o) => {
@@ -1458,13 +1732,13 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
                     onEdgesChange={onEdgesChange}
                     onConnect={onConnect}
                     onNodeClick={(_, n) => setSelectedId(n.id)}
-                    onNodeDoubleClick={(_, n) => { setSelectedId(n.id); setPropsOpen(true); }}
+                    onNodeDoubleClick={(_, n) => { setSelectedId(n.id); setAiOpen(false); setPropsOpen(true); }}
                     onPaneClick={() => setSelectedId(null)}
                     nodeTypes={nodeTypes}
                     fitView
                     proOptions={{ hideAttribution: true }}
                 >
-                    <Background gap={24} size={1} color="#1e293b" />
+                    <Background gap={24} size={1} color={getComputedStyle(document.documentElement).getPropertyValue('--fb-grid').trim() || '#1e293b'} />
                     <Controls position="bottom-right" />
                     <MiniMap
                         position="bottom-left"
@@ -1481,7 +1755,7 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
                 {!propsOpen && selectedId && (
                     <button
                         className="fb-props-tab"
-                        onClick={() => setPropsOpen(true)}
+                        onClick={() => { setAiOpen(false); setPropsOpen(true); }}
                         title="Open properties (or double-click any node)"
                     >
                         ✎ Edit “{selectedNode?.data?.label || NODE_TYPES[selectedNode?.type]?.label || 'node'}”
@@ -1506,7 +1780,17 @@ function FlowCanvas({ flowId, projectId, csrf, clientSlug, baseUrl = '', dataSou
                 )}
             </div>
 
-            {propsOpen && (
+            {aiOpen ? (
+                <AiPanel
+                    messages={aiMessages}
+                    busy={aiBusy}
+                    channel={aiChannel}
+                    onChannelChange={setAiChannel}
+                    onSend={aiSend}
+                    onUndo={aiUndo}
+                    onClose={() => setAiOpen(false)}
+                />
+            ) : propsOpen && (
                 <PropertiesPanel
                     node={selectedNode}
                     updateNode={updateNode}
