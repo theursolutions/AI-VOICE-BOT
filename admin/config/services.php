@@ -154,6 +154,15 @@ return [
     'landing' => [
         'demo_key'   => env('LANDING_DEMO_KEY', null),
         'widget_url' => env('LANDING_WIDGET_URL', null),
+
+        // Origin the homepage loads loader.js from. Normally left blank: the
+        // script tag is built from the request host, so the page always loads
+        // the widget from whatever domain the visitor is already on — no
+        // cross-origin hop, correct on localhost and in production alike.
+        //
+        // Set it only when the widget is deliberately served from somewhere
+        // else (a CDN, or a staging page pointing at production).
+        'loader_origin' => env('LANDING_LOADER_ORIGIN', null),
     ],
 
     // Base URL of the public widget folder (the directory that contains

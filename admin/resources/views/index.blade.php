@@ -1378,6 +1378,150 @@
             border-color: #1b3962;
             color: #ffffff;
         }
+
+        /* ── Dark hero band on a light page ─────────────────────────────
+           Reverting the flat navy treatment: nav, hero and footer now keep
+           the ORIGINAL dark palette in light mode — the starfield, the deep
+           radial and the gradient headline that the design was actually
+           built around. A dark hero over a light body is a deliberate,
+           well-worn pattern, and it is the one thing on this page that
+           already looked finished.
+
+           The starfield is the piece that needed real work. It is a FIXED,
+           full-screen canvas, so simply un-hiding it would lay a night sky
+           over the white sections below. Switching it to absolute with the
+           height of the band keeps it behind the hero and lets it scroll
+           away, which is what it looks like it is doing anyway. */
+        html:not(.dark) #stars {
+            display: block;
+            position: absolute; top: 0; left: 0; right: 0; height: 100vh; inset: auto;
+            background: radial-gradient(ellipse at 50% 0%, #0d1a2e 0%, #050609 55%, #000 100%);
+        }
+
+        html:not(.dark) .hero {
+            background: transparent;   /* the canvas behind it is the band */
+            border-bottom: 1px solid rgba(59,130,246,.22);
+        }
+        html:not(.dark) .nav {
+            background: rgba(5, 6, 9, .55);
+            border-bottom-color: rgba(120,180,220,.12);
+            box-shadow: none;
+        }
+        html:not(.dark) .nav.is-open { background: rgba(5, 6, 9, .97); }
+
+        /* Original dark tokens inside the three bands, so every rule in
+           them renders exactly as it does in dark mode. */
+        html:not(.dark) .nav,
+        html:not(.dark) .hero,
+        html:not(.dark) .site-footer {
+            --text:      #e6edf3;
+            --text-dim:  #8b96a8;
+            --text-dim2: #727e93;
+            --line:      rgba(120, 180, 220, .12);
+            --line-hot:  rgba(59, 130, 246, .35);
+            --panel:     rgba(15, 21, 35, .55);
+            --panel-2:   rgba(20, 28, 46, .85);
+            --neon:      #3b82f6;
+            --neon-btn:  #2563eb;
+            --neon-2:    #60a5fa;
+            color: var(--text);
+        }
+
+        /* The gradient headline works again — it has depth to fade into. */
+        html:not(.dark) .hero h1 { color: var(--text); }
+        html:not(.dark) .hero h1 .accent {
+            background: linear-gradient(90deg, var(--neon), var(--neon-2) 60%, #dbeafe);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        html:not(.dark) .hero p.sub { color: var(--text-dim); }
+        html:not(.dark) .hero__eyebrow {
+            background: rgba(59,130,246,.08);
+            border-color: rgba(59,130,246,.25);
+            color: var(--neon);
+        }
+        html:not(.dark) .hero__eyebrow::before { background: var(--neon); box-shadow: 0 0 10px var(--neon); }
+        html:not(.dark) .hero__meta-item { color: var(--text-dim); }
+        html:not(.dark) .hero__meta-item svg { color: var(--neon); }
+
+        /* Call bar back to the glass panel it was designed as. */
+        html:not(.dark) .callbar {
+            background: var(--panel-2); border: 1px solid var(--line);
+            box-shadow: 0 18px 44px -22px rgba(0,0,0,.7);
+        }
+        html:not(.dark) .callbar__icon { background: rgba(59,130,246,.12); color: var(--neon); }
+        html:not(.dark) .callbar input { color: var(--text); }
+        html:not(.dark) .callbar input::placeholder { color: var(--text-dim2); }
+        html:not(.dark) .callbar button {
+            background: var(--neon-btn); color: #fff;
+            box-shadow: 0 0 24px rgba(59,130,246,.45);
+        }
+        html:not(.dark) .callbar button:hover { background: #1d4ed8; }
+        html:not(.dark) .callbar__msg { color: var(--text-dim2); }
+
+        html:not(.dark) .nav .nav__cta {
+            background: var(--neon-btn); color: #fff;
+            box-shadow: 0 0 22px rgba(59,130,246,.45);
+        }
+        html:not(.dark) .nav .nav__cta:hover { background: #1d4ed8; }
+        html:not(.dark) .nav__links a { color: var(--text-dim); }
+        html:not(.dark) .nav__links a:hover { color: var(--text); }
+        html:not(.dark) .nav .nav__brand-mark { filter: drop-shadow(0 0 10px rgba(59,130,246,.45)); }
+
+        /* ── Hero: the last 10% ─────────────────────────────────────────
+           Small, cheap things that separate a hero that works from one
+           that looks finished. All of them apply in BOTH themes, because
+           none is about colour. */
+
+        /* 1. A horizon. The band met the white page as a hard rule; a
+              short fade at the base makes the dark resolve into the light
+              instead of stopping dead. This is the single change that
+              stops the join reading as a seam. */
+        .hero::after {
+            content: ''; position: absolute; left: 0; right: 0; bottom: 0;
+            height: 140px; pointer-events: none; z-index: 1;
+            background: linear-gradient(180deg, transparent, rgba(255,255,255,.10) 55%, rgba(255,255,255,.30));
+        }
+        html.dark .hero::after { display: none; }
+
+        /* 2. Balanced line breaks. A headline that wraps to a lone orphan
+              word looks accidental at any size. */
+        .hero h1 { text-wrap: balance; }
+        .hero p.sub { text-wrap: pretty; }
+
+        /* 3. A settle on load, not a bounce. 420ms with a gentle ease
+              reads as the page arriving; anything springier reads as a
+              template. Suppressed for reduced-motion. */
+        .hero__grid > .reveal { animation: heroSettle .42s cubic-bezier(.22,1,.36,1) both; }
+        .hero__scene { animation: heroSettle .52s cubic-bezier(.22,1,.36,1) .08s both; }
+        @keyframes heroSettle { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
+        @media (prefers-reduced-motion: reduce) {
+            .hero__grid > .reveal, .hero__scene { animation: none; }
+        }
+
+        /* 4. The call bar is the conversion point, so it gets a focus ring
+              worth the name — currently focus lands with no visible change
+              at all on the wrapper. */
+        .callbar:focus-within {
+            border-color: var(--line-hot);
+            box-shadow: 0 0 0 4px rgba(59,130,246,.16), 0 18px 44px -22px rgba(0,0,0,.7);
+        }
+        .callbar button { transition: transform .14s, background .14s, box-shadow .14s; }
+        .callbar button:hover { transform: translateY(-1px); }
+        .callbar button:active { transform: translateY(0); }
+
+        /* 5. The meta ticks were three equal grey lines. Separating them
+              with a hairline turns a list into a row of claims. */
+        .hero__meta { gap: 0; flex-wrap: wrap; }
+        .hero__meta-item { padding: 0 16px; position: relative; }
+        .hero__meta-item:first-child { padding-left: 0; }
+        .hero__meta-item + .hero__meta-item::before {
+            content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+            width: 1px; height: 14px; background: var(--line);
+        }
+        @media (max-width: 540px) {
+            .hero__meta-item { padding: 4px 0; }
+            .hero__meta-item + .hero__meta-item::before { display: none; }
+        }
 </style>
 </head>
 <body>
@@ -1926,9 +2070,22 @@
     // paste on their sites). Set LANDING_DEMO_KEY in admin/.env to the
     // project_api_key of whichever project drives the marketing demo.
     $tvaDemoKey   = (string) config('services.landing.demo_key', '');
-    $tvaLoaderSrc = request()->getSchemeAndHttpHost() .
-                    rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/') .
-                    '/widget/loader.js';
+
+    // Same-origin by default: on serveai.com.pk the tag resolves to
+    // https://serveai.com.pk/widget/loader.js, on a dev box to localhost.
+    // Hardcoding the production domain would break local development and
+    // force every visitor into a cross-origin request for no benefit.
+    // LANDING_LOADER_ORIGIN overrides it when the widget really is hosted
+    // elsewhere.
+    $tvaLoaderOrigin = rtrim((string) config('services.landing.loader_origin', ''), '/');
+    $tvaLoaderSrc = $tvaLoaderOrigin !== ''
+        // Explicit origin is taken literally — it already includes whatever
+        // path prefix that host needs, so appending this box's local subpath
+        // (Laragon's /AI-CRM-AGENT/admin/public) would corrupt it.
+        ? $tvaLoaderOrigin . '/widget/loader.js'
+        : request()->getSchemeAndHttpHost()
+          . rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/')
+          . '/widget/loader.js';
     // Fallback to the old manual iframe if LANDING_WIDGET_URL is set
     // and no demo key — keeps backward compat for anyone with the
     // older env var still in place.

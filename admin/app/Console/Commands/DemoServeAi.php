@@ -160,6 +160,31 @@ class DemoServeAi extends Command
         return $client;
     }
 
+    /**
+     * Origins allowed to embed the widget: the site itself, its www/bare
+     * counterpart, plus localhost so the same project still works while
+     * developing. Left empty (= allow all) only when the site URL is itself
+     * localhost, since locking a dev box to itself achieves nothing.
+     *
+     * @return array<int,string>
+     */
+    private function allowedOrigins(string $siteUrl): array
+    {
+        $host = parse_url($siteUrl, PHP_URL_HOST);
+        if (! $host || in_array($host, ['localhost', '127.0.0.1'], true)) {
+            return [];
+        }
+
+        $scheme = parse_url($siteUrl, PHP_URL_SCHEME) ?: 'https';
+        $bare   = preg_replace('/^www\./i', '', $host);
+
+        return array_values(array_unique([
+            $scheme . '://' . $bare,
+            $scheme . '://www.' . $bare,
+            'http://localhost',
+        ]));
+    }
+
     private function uniqueClientSlug(string $name): string
     {
         $base = Str::slug($name) ?: 'client';
@@ -199,8 +224,12 @@ class DemoServeAi extends Command
             $this->line("  project      reused (#{$project->id})");
         }
 
-        // Profile + widget settings. Merged, not replaced: anything tuned by
-        // hand in the admin UI survives a re-run.
+        // Profile + widget settings. Merged rather than replaced, but note the
+        // keys listed in the final array below are FORCED on every run — this
+        // command owns the brand match, so hand-editing the colours or the
+        // welcome copy in the admin UI will be undone next time it runs.
+        // Everything else (logo, button visibility, default flow) is left
+        // exactly as the operator set it.
         $json = is_array($project->json_data) ? $project->json_data : [];
 
         $json['profile'] = array_merge((array) ($json['profile'] ?? []), [
@@ -215,12 +244,24 @@ class DemoServeAi extends Command
             \App\Http\Controllers\Admin\WidgetSettingsController::DEFAULTS,
             (array) ($json['widget'] ?? []),
             [
+                // Brand colours lifted straight from the public site's light
+                // palette (resources/views/index.blade.php → :root): --neon
+                // is the navy the whole site is built on, --neon-2 its lighter
+                // partner. Using the widget's stock #1a365d/#3b82f6 put a
+                // different blue on the page than everything around it.
+                'primary_color'   => '#1b3962',
+                'accent_color'    => '#2f6fb5',
                 'bot_name'        => $this->brandName(),
                 'welcome_title'   => 'Ask us anything',
                 'welcome_message' => 'Hi! 👋 I’m the ' . $this->brandName() . ' assistant — the same product this site sells. '
                     . 'Ask me what it does, what it costs, how to set it up, or how your data is handled.',
                 'placeholder'     => 'Ask about features, pricing, setup…',
                 'opening_hours'   => '24/7',
+                // Which sites may embed this widget. Empty means "any origin",
+                // which is fine in dev and wrong in production — this key is
+                // the difference between our demo widget being ours and being
+                // free chat capacity for anyone who copies the snippet.
+                'allowed_origins' => $this->allowedOrigins($siteUrl),
             ]
         );
 

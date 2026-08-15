@@ -231,8 +231,12 @@
         --text-dim2: #93aac6;
         --line:      rgba(255,255,255,.14);
         --neon:      #7db1ff;
-        background: #16304f;
-        border-top-color: rgba(255,255,255,.10);
+        /* The same deep gradient the footer was designed with, so the
+           three dark bands — nav, hero, footer — are one family rather
+           than two navies that nearly match. A near-match is worse than a
+           contrast: it reads as a mistake. */
+        background: linear-gradient(180deg, rgba(8,11,18,.94), rgba(5,6,9,.99));
+        border-top-color: rgba(120,180,220,.12);
         color: var(--text-dim);
     }
 </style>
