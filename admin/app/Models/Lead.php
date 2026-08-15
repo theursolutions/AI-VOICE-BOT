@@ -12,6 +12,14 @@ class Lead extends Model
     protected $connection = 'tenant';
     protected $table = 'leads';
 
+    /**
+     * The pipeline, in order. One kanban column per entry, and the order here
+     * is the order they appear on the board — so this is the single place that
+     * decides what the pipeline looks like, rather than the board, the filter
+     * dropdown and the update validator each carrying their own copy.
+     */
+    public const STATUSES = ['new', 'contacted', 'qualified', 'converted', 'disqualified'];
+
     protected $fillable = [
         'session_id',
         'project_id',

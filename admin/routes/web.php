@@ -449,6 +449,9 @@ Route::middleware(['auth', 'active.client'])
         Route::get   ('/leads',                            [App\Http\Controllers\Admin\LeadWebController::class, 'index'])->name('leads.index');
         Route::get   ('/leads/{id}',                       [App\Http\Controllers\Admin\LeadWebController::class, 'show'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('leads.show');
         Route::patch ('/leads/{id}',                       [App\Http\Controllers\Admin\LeadWebController::class, 'update'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('leads.update');
+        // Kanban drag-and-drop. Answers JSON, so it is its own endpoint rather
+        // than a mode of leads.update, which redirects.
+        Route::patch ('/leads/{id}/status',                [App\Http\Controllers\Admin\LeadWebController::class, 'updateStatus'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('leads.status');
 
         }); // end workspace.provisioned group
     });

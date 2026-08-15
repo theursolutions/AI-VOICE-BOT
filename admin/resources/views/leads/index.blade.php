@@ -71,6 +71,23 @@
     .tva-dt-table tbody tr:hover { background:#fafbff; }
     .tva-dt-table tbody tr:last-child td { border-bottom:none; }
 
+    /* Board / table switch. A segmented control rather than two buttons, so it
+       reads as one choice with two states instead of two separate actions. */
+    .tva-viewtog {
+        display: inline-flex; align-items: center;
+        border: 1px solid var(--tva-border); border-radius: 9px;
+        overflow: hidden; background: var(--tva-surface);
+    }
+    .tva-viewtog a {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 11px; font-size: 12px; font-weight: 600;
+        color: var(--tva-text-3); text-decoration: none;
+        transition: background .14s, color .14s;
+    }
+    .tva-viewtog a + a { border-left: 1px solid var(--tva-border); }
+    .tva-viewtog a:hover { background: var(--tva-hover); color: var(--tva-text); }
+    .tva-viewtog a.is-on { background: var(--tva-info-bg); color: var(--tva-info); }
+
     .tva-status {
         display:inline-flex; align-items:center; gap:6px;
         padding:3px 10px; border-radius:999px;
@@ -150,10 +167,15 @@
     {{-- Status pills as stat cards (clickable filters) --}}
     @php
         $base = ['project_id' => $projectId, 'q' => $search, 'per_page' => $perPage];
-        $linkAll        = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base);
-        $linkNew        = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['status' => 'new']);
-        $linkQualified  = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['status' => 'qualified']);
-        $linkConverted  = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['status' => 'converted']);
+        // A status filter and the board contradict each other — the board is
+        // already the status view, and filtering it would leave four empty
+        // columns. So the three status cards open the table; only "Total"
+        // keeps whichever view you are in.
+        $toList = $base + ['view' => 'table'];
+        $linkAll        = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['view' => $view]);
+        $linkNew        = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($toList + ['status' => 'new']);
+        $linkQualified  = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($toList + ['status' => 'qualified']);
+        $linkConverted  = route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($toList + ['status' => 'converted']);
     @endphp
     <div class="tva-stat-grid">
         <a href="{{ $linkAll }}" class="tva-stat {{ !$status ? 'is-active' : '' }}" style="text-decoration:none;">
@@ -161,7 +183,7 @@
             <div><div class="tva-stat__label">Total leads</div><div class="tva-stat__value">{{ number_format($counts['total']) }}</div></div>
         </a>
         <a href="{{ $linkNew }}" class="tva-stat {{ $status === 'new' ? 'is-active' : '' }}" style="text-decoration:none;">
-            <div class="tva-stat__icon" style="background:#dbeafe; color:#1e40af;"><i data-lucide="sparkles" class="w-4 h-4"></i></div>
+            <div class="tva-stat__icon" style="background:#dbeafe; color:#1e40af;"><i data-lucide="wand" class="w-4 h-4"></i></div>
             <div><div class="tva-stat__label">New</div><div class="tva-stat__value">{{ number_format($counts['new']) }}</div></div>
         </a>
         <a href="{{ $linkQualified }}" class="tva-stat {{ $status === 'qualified' ? 'is-active' : '' }}" style="text-decoration:none;">
@@ -169,7 +191,7 @@
             <div><div class="tva-stat__label">Qualified</div><div class="tva-stat__value">{{ number_format($counts['qualified']) }}</div></div>
         </a>
         <a href="{{ $linkConverted }}" class="tva-stat {{ $status === 'converted' ? 'is-active' : '' }}" style="text-decoration:none;">
-            <div class="tva-stat__icon" style="background:#dcfce7; color:#15803d;"><i data-lucide="trophy" class="w-4 h-4"></i></div>
+            <div class="tva-stat__icon" style="background:#dcfce7; color:#15803d;"><i data-lucide="award" class="w-4 h-4"></i></div>
             <div><div class="tva-stat__label">Converted</div><div class="tva-stat__value">{{ number_format($counts['converted']) }}</div></div>
         </a>
     </div>
@@ -191,24 +213,49 @@
                 @endforeach
             </select>
 
-            <select name="status" onchange="this.form.submit()">
-                <option value="">All statuses</option>
-                @foreach (['new','contacted','qualified','converted','disqualified'] as $st)
-                    <option value="{{ $st }}" @selected($status === $st)>{{ ucfirst($st) }}</option>
-                @endforeach
-            </select>
-
-            <div class="ml-auto flex items-center gap-2">
-                <label class="lbl">Show</label>
-                <select name="per_page" onchange="this.form.submit()">
-                    @foreach ([10, 25, 50, 100] as $pp)
-                        <option value="{{ $pp }}" @selected($perPage === $pp)>{{ $pp }}</option>
+            {{-- Both controls are meaningless on the board: it shows every
+                 status, and it is not paginated. Carried as hidden inputs so
+                 searching or changing project does not silently reset them. --}}
+            @if ($view === 'table')
+                <select name="status" onchange="this.form.submit()">
+                    <option value="">All statuses</option>
+                    @foreach (\App\Models\Lead::STATUSES as $st)
+                        <option value="{{ $st }}" @selected($status === $st)>{{ ucfirst($st) }}</option>
                     @endforeach
                 </select>
+            @else
+                <input type="hidden" name="status" value="{{ $status }}">
+            @endif
+
+            <input type="hidden" name="view" value="{{ $view }}">
+
+            <div class="ml-auto flex items-center gap-2">
+                <div class="tva-viewtog" role="group" aria-label="Leads layout">
+                    <a href="{{ route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['status' => $status, 'view' => 'board']) }}"
+                       class="{{ $view === 'board' ? 'is-on' : '' }}" title="Pipeline board">
+                        <i data-lucide="columns" class="w-4 h-4"></i> Board
+                    </a>
+                    <a href="{{ route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['status' => $status, 'view' => 'table']) }}"
+                       class="{{ $view === 'table' ? 'is-on' : '' }}" title="Table">
+                        <i data-lucide="list" class="w-4 h-4"></i> Table
+                    </a>
+                </div>
+
+                @if ($view === 'table')
+                    <label class="lbl">Show</label>
+                    <select name="per_page" onchange="this.form.submit()">
+                        @foreach ([10, 25, 50, 100] as $pp)
+                            <option value="{{ $pp }}" @selected($perPage === $pp)>{{ $pp }}</option>
+                        @endforeach
+                    </select>
+                @else
+                    <input type="hidden" name="per_page" value="{{ $perPage }}">
+                @endif
             </div>
         </form>
 
         {{-- Table --}}
+        @if ($view === 'table')
         <div class="overflow-x-auto">
             <table class="tva-dt-table">
                 <thead>
@@ -298,6 +345,18 @@
                     Showing <b>{{ $leads->firstItem() }}</b>–<b>{{ $leads->lastItem() }}</b> of <b>{{ number_format($leads->total()) }}</b> leads
                 </div>
                 @include('partials.pagination', ['paginator' => $leads])
+            </div>
+        @endif
+        @else
+            <div style="padding:14px;">
+                @if ($board)
+                    @include('leads._board')
+                @else
+                    <div style="text-align:center; padding:60px 20px; color:var(--tva-text-3);">
+                        <i data-lucide="inbox" class="w-10 h-10 inline mb-2"></i>
+                        <div style="font-size:14px; font-weight:500;">No leads yet.</div>
+                    </div>
+                @endif
             </div>
         @endif
     </div>
