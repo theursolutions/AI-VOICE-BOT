@@ -1013,546 +1013,237 @@
             .hud__status .dot, .hud__marker::after, .sfx-toggle::before { animation: none; }
         }
     
-        /* ── Light-mode restraint ───────────────────────────────────────
-           This page was designed to emit light: 46 zero-offset glows, neon
-           rims, and colour-bleed on almost every surface. That vocabulary
-           is right on black and wrong on paper — it is most of why the page
-           reads as machine-made at a glance.
+        /* ══ LIGHT MODE ══════════════════════════════════════════════════
+           One sheet. This page had accumulated several passes that
+           contradicted each other; everything light now lives here.
 
-           Rather than delete them (dark mode needs every one), light mode
-           substitutes a cast shadow and a hairline. Surfaces that sit on
-           paper behave like paper. */
-        html:not(.dark) .card,
-        html:not(.dark) .panel,
-        html:not(.dark) .metric,
-        html:not(.dark) .feature,
-        html:not(.dark) .step,
-        html:not(.dark) .tier {
-            box-shadow: var(--shadow-md);
-            border: 1px solid var(--line);
-            background: var(--panel);
-        }
-        html:not(.dark) .card:hover,
-        html:not(.dark) .feature:hover,
-        html:not(.dark) .tier:hover {
-            box-shadow: var(--shadow-lg);
-            border-color: rgba(29,78,216,.22);
-        }
-        /* Buttons cast, they do not radiate. */
-        html:not(.dark) .btn-primary,
-        html:not(.dark) .nav__cta,
-        html:not(.dark) .cta-primary {
-            box-shadow: 0 8px 18px -6px rgba(29,78,216,.42);
-        }
-        /* Any remaining decorative halo: an element whose only shadow is a
-           zero-offset colour bloom has nothing to cast onto white. */
-        html:not(.dark) .glow,
-        html:not(.dark) .halo,
-        html:not(.dark) .orb { box-shadow: none; filter: none; }
-        html:not(.dark) ::selection { color: #fff; }
+           The design: white paper throughout, including the hero and the
+           footer. Depth comes from typography, real shadows and a single
+           confident blue — never from glow, which is the one thing that
+           cannot be translated from a dark design to a light one.
 
-        /* ── Light mode: dark bands, light body ─────────────────────────
-           Nav, hero and footer stay navy; everything between them is white.
-           That alternation is what gives a marketing page a spine — an
-           unbroken white scroll reads as a document, not a product.
+           The dark theme is untouched: every rule below is scoped to
+           html:not(.dark). */
 
-           Implemented by REDEFINING THE TOKENS inside those three regions
-           rather than restyling their contents. Every rule inside the hero
-           already reads --text, --line, --panel; scoping new values to the
-           region means all of them follow with no further edits, and the
-           dark theme is untouched. */
-        html:not(.dark) .nav,
-        html:not(.dark) .hero,
-        html:not(.dark) .site-footer {
-            --text:      #f2f7fd;
-            --text-dim:  #b3c7de;
-            --text-dim2: #93aac6;
-            --line:      rgba(255,255,255,.14);
-            --line-hot:  rgba(120,170,240,.42);
-            --panel:     rgba(255,255,255,.06);
-            --panel-2:   rgba(255,255,255,.09);
-            --neon:      #7db1ff;
-            --neon-2:    #a9cbff;
-            color: var(--text);
-        }
-
-        html:not(.dark) .nav { background: #1b3962; border-bottom-color: rgba(255,255,255,.10); }
-        html:not(.dark) .hero {
-            /* The same navy, lifted very slightly at the top so the band has
-               depth without becoming a gradient feature. */
-            background: linear-gradient(180deg, #21456f 0%, #1b3962 62%);
-        }
-        html:not(.dark) .site-footer { background: #16304f; border-top-color: rgba(255,255,255,.10); }
-
-        /* The CTA is white-on-navy inside the bands, navy-on-white outside. */
-        html:not(.dark) .nav .nav__cta,
-        html:not(.dark) .hero .btn-primary {
-            background: #ffffff; color: #1b3962; box-shadow: 0 8px 20px -8px rgba(0,0,0,.45);
-        }
-        html:not(.dark) .nav .nav__cta:hover,
-        html:not(.dark) .hero .btn-primary:hover { background: #eaf1fa; }
-
-        /* The logo keeps its glow where there is dark to glow against. */
-        html:not(.dark) .nav .nav__brand-mark {
-            filter: drop-shadow(0 0 10px rgba(125,177,255,.45));
-        }
-        /* The starfield belongs to the hero band now, not the whole page. */
-        html:not(.dark) #stars { background: transparent; }
-
-        /* ── Light body ───────────────────────────────────────────────── */
-        /* No greys. Surfaces are white, and every tint is the brand navy at
-           low opacity — which is what makes a two-colour palette read as
-           designed rather than merely desaturated. */
-        html:not(.dark) .section { background: transparent; }
-        html:not(.dark) .section:nth-of-type(even) { background: rgba(27,57,98,.035); }
-
-        html:not(.dark) .card,
-        html:not(.dark) .cap,
-        html:not(.dark) .step,
-        html:not(.dark) .tier,
-        html:not(.dark) .feature {
-            background: #ffffff;
-            border: 1px solid rgba(27,57,98,.12);
-            box-shadow: 0 1px 2px rgba(27,57,98,.05);
-        }
-        html:not(.dark) .card:hover,
-        html:not(.dark) .cap:hover,
-        html:not(.dark) .tier:hover,
-        html:not(.dark) .feature:hover {
-            border-color: rgba(27,57,98,.28);
-            box-shadow: 0 14px 32px -14px rgba(27,57,98,.28);
-        }
-
-        /* ── Testimonials ─────────────────────────────────────────────── */
-        /* The card was a dark navy gradient, which on paper looked like a
-           hole in the page. White card, navy hairline, and the oversized
-           quote mark kept — it is the one flourish worth keeping because it
-           carries meaning rather than decoration. */
-        html:not(.dark) .tm-card {
-            background: #ffffff;
-            border-color: rgba(27,57,98,.12);
-            box-shadow: 0 2px 8px -4px rgba(27,57,98,.14);
-        }
-        html:not(.dark) .tm-card::before { color: rgba(27,57,98,.10); }
-        html:not(.dark) .tm-card:hover {
-            border-color: rgba(27,57,98,.30);
-            box-shadow: 0 22px 46px -22px rgba(27,57,98,.34);
-        }
-        html:not(.dark) .tm-card::after {
-            background: linear-gradient(90deg, transparent, #1b3962, transparent);
-        }
-        html:not(.dark) .tm-card__quote { color: #1b3962; }
-        html:not(.dark) .tm-card__name  { color: #16304f; }
-        html:not(.dark) .tm-card__role  { color: #5b7ba3; }
-        html:not(.dark) .tm-av {
-            box-shadow: 0 0 0 1px rgba(27,57,98,.10), 0 6px 16px -8px rgba(27,57,98,.4);
-        }
-
-        /* ── Light mode, second pass ────────────────────────────────────
-           The grey was not the cards. Three FIXED, FULL-SCREEN overlays sit
-           above the entire page and were still running:
-
-             .fx-depth-tint  a black radial vignette at 72% that fades in as
-                             you scroll — it was greying every surface
-                             underneath, which is why cards, sections and
-                             the CTA all looked washed at once
-             .fx-scanlines   CRT lines on `mix-blend-mode: screen`, which
-                             lightens on dark and muddies on white
-             .fx-sweep       a blue scan line down the top edge
-
-           They are the vocabulary of a dark sci-fi console. On paper they
-           are dirt on the lens, so light mode retires all three. */
+        /* ── Full-screen effect layers ─────────────────────────────────
+           .fx-depth-tint is a black radial vignette at 72% fixed over the
+           whole page; .fx-scanlines are CRT lines on mix-blend-mode:screen.
+           Both are the vocabulary of a dark console, and on paper they are
+           dirt on the lens. The starfield goes too — a night sky behind
+           white content is simply an image of nothing. */
         html:not(.dark) .fx-depth-tint,
         html:not(.dark) .fx-scanlines,
-        html:not(.dark) .fx-sweep { display: none !important; }
+        html:not(.dark) .fx-sweep,
+        html:not(.dark) #stars,
+        html:not(.dark) .hud { display: none !important; }
 
-        /* The CTA panel faded to rgba(0,0,0,.5) — literal 50% black. */
-        html:not(.dark) .cta {
-            background: linear-gradient(135deg, #ffffff 0%, #f2f6fc 100%);
-            border-color: rgba(27,57,98,.16);
-            box-shadow: 0 18px 44px -22px rgba(27,57,98,.28);
-        }
-        html:not(.dark) .cta h2 { color: #16304f; }
-        html:not(.dark) .cta p  { color: #4a6285; }
-        html:not(.dark) .cta .btn {
-            background: #1b3962; color: #fff;
-            box-shadow: 0 10px 24px -10px rgba(27,57,98,.55);
-        }
-        html:not(.dark) .cta .btn:hover { background: #16304f; }
-
-        /* Mobile nav drawer was near-black over a navy bar. */
-        html:not(.dark) .nav.is-open { background: #1b3962; }
-
-        /* Seam dividers and the depth HUD are dark-console furniture. The
-           HUD in particular labels sections LAYER 01..09 in mono caps — it
-           reads as a spaceship readout, not a business site. */
-        html:not(.dark) .hud { display: none; }
-        html:not(.dark) .seam { opacity: .35; }
-
-        /* Body: white, not tinted. Depth comes from the navy bands at the
-           top and bottom, so the middle can stay clean paper. */
+        /* ── Page ──────────────────────────────────────────────────────── */
         html:not(.dark), html:not(.dark) body { background: #ffffff; }
-        html:not(.dark) .section:nth-of-type(even) { background: #f7fafd; }
 
-        /* Panels: white on white needs a real edge, not a glow. */
+        /* ── Hero ───────────────────────────────────────────────────────
+           A light hero has to earn its presence without a dark slab to sit
+           on. Three things do that here: a very soft tinted wash so the band
+           is not flat white, a hairline grid for texture at 3% opacity, and
+           a single blue glow low enough to read as light falling on paper
+           rather than as neon. */
+        html:not(.dark) .hero {
+            background:
+                radial-gradient(900px 460px at 18% 8%, rgba(29,78,216,.07), transparent 60%),
+                radial-gradient(760px 420px at 88% 30%, rgba(37,99,235,.06), transparent 62%),
+                linear-gradient(180deg, #f4f8fd 0%, #ffffff 72%);
+            border-bottom: 1px solid rgba(16,32,56,.07);
+        }
+        /* Texture. A 40px grid at 3% is invisible as a pattern and stops the
+           band reading as an empty rectangle. */
+        html:not(.dark) .hero::before {
+            content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 0;
+            background-image:
+                linear-gradient(rgba(16,32,56,.030) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(16,32,56,.030) 1px, transparent 1px);
+            background-size: 40px 40px;
+            mask-image: radial-gradient(ellipse at 50% 30%, #000 35%, transparent 78%);
+            -webkit-mask-image: radial-gradient(ellipse at 50% 30%, #000 35%, transparent 78%);
+        }
+        html:not(.dark) .hero::after { display: none; }
+
+        html:not(.dark) .hero h1 {
+            color: #0b1b33; letter-spacing: -.032em; font-weight: 800;
+        }
+        html:not(.dark) .hero h1 .accent {
+            background: none; -webkit-background-clip: initial; background-clip: initial;
+            color: #1d4ed8;
+        }
+        html:not(.dark) .hero p.sub { color: #46586f; }
+        html:not(.dark) .hero__eyebrow {
+            background: #eaf1fe; border: 1px solid rgba(29,78,216,.20); color: #1d4ed8;
+        }
+        html:not(.dark) .hero__eyebrow::before { background: #16a34a; box-shadow: 0 0 8px rgba(22,163,74,.55); }
+        html:not(.dark) .hero__meta-item { color: #46586f; }
+        html:not(.dark) .hero__meta-item svg { color: #1d4ed8; }
+
+        /* The call bar is the conversion point, so it is the most solid
+           object on the band: white, a real border, and a shadow with
+           direction rather than a halo. */
+        html:not(.dark) .callbar {
+            background: #ffffff;
+            border: 1px solid rgba(16,32,56,.12);
+            box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 14px 34px -16px rgba(16,32,56,.28);
+        }
+        html:not(.dark) .callbar:focus-within {
+            border-color: rgba(29,78,216,.45);
+            box-shadow: 0 0 0 4px rgba(29,78,216,.12), 0 16px 38px -18px rgba(16,32,56,.32);
+        }
+        html:not(.dark) .callbar__icon { background: #eaf1fe; color: #1d4ed8; }
+        html:not(.dark) .callbar input { color: #0b1b33; }
+        html:not(.dark) .callbar input::placeholder { color: #8695ab; }
+        html:not(.dark) .callbar button {
+            background: #1d4ed8; color: #fff;
+            box-shadow: 0 8px 18px -8px rgba(29,78,216,.55);
+        }
+        html:not(.dark) .callbar button:hover { background: #1743bd; }
+        html:not(.dark) .callbar__msg { color: #6b7c93; }
+
+        /* ── Nav ────────────────────────────────────────────────────────
+           Opaque: at any transparency it would grey as white sections
+           scrolled under it. */
+        html:not(.dark) .nav {
+            background: rgba(255,255,255,.88);
+            border-bottom: 1px solid rgba(16,32,56,.08);
+            box-shadow: 0 1px 2px rgba(16,24,40,.04);
+        }
+        html:not(.dark) .nav.is-open { background: #ffffff; }
+        html:not(.dark) .nav__brand { color: #0b1b33; }
+        html:not(.dark) .nav__brand-mark { filter: none; }
+        html:not(.dark) .nav__links a { color: #46586f; }
+        html:not(.dark) .nav__links a:hover { color: #0b1b33; }
+        html:not(.dark) .nav__cta {
+            background: #1d4ed8; color: #fff;
+            box-shadow: 0 6px 16px -7px rgba(29,78,216,.55);
+        }
+        html:not(.dark) .nav__cta:hover { background: #1743bd; }
+        html:not(.dark) .nav__theme { border-color: rgba(16,32,56,.14); color: #46586f; }
+        html:not(.dark) .nav__theme:hover { color: #0b1b33; border-color: rgba(29,78,216,.35); }
+
+        /* ── Sections ───────────────────────────────────────────────────
+           Alternating bands in the brand blue at 2.5% — enough to separate
+           one section from the next, never enough to read as grey. */
+        html:not(.dark) .section { background: transparent; }
+        html:not(.dark) .section:nth-of-type(even) { background: #f7fafd; }
+        html:not(.dark) .section__eyebrow { color: #1d4ed8; }
+        html:not(.dark) .section h2 { color: #0b1b33; }
+        html:not(.dark) .section p.lead { color: #46586f; }
+
+        /* ── Panels ─────────────────────────────────────────────────────
+           White on white needs a real edge and a directional shadow. */
         html:not(.dark) .console,
         html:not(.dark) .step,
         html:not(.dark) .cap,
+        html:not(.dark) .tier,
+        html:not(.dark) .feature,
+        html:not(.dark) .card,
         html:not(.dark) .mock-call,
         html:not(.dark) .mock-trans,
         html:not(.dark) .mock-lead {
             background: #ffffff;
-            border-color: rgba(27,57,98,.13);
-            box-shadow: 0 1px 2px rgba(27,57,98,.05), 0 10px 26px -18px rgba(27,57,98,.22);
+            border: 1px solid rgba(16,32,56,.11);
+            box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 10px 26px -18px rgba(16,32,56,.22);
         }
         html:not(.dark) .console:hover,
         html:not(.dark) .cap:hover,
-        html:not(.dark) .step:hover {
-            border-color: rgba(27,57,98,.28);
-            box-shadow: 0 18px 38px -18px rgba(27,57,98,.28);
+        html:not(.dark) .step:hover,
+        html:not(.dark) .tier:hover,
+        html:not(.dark) .feature:hover,
+        html:not(.dark) .card:hover {
+            border-color: rgba(29,78,216,.30);
+            box-shadow: 0 1px 2px rgba(16,24,40,.05), 0 20px 40px -20px rgba(16,32,56,.28);
         }
-        html:not(.dark) .console__head { color: #5b7ba3; border-bottom-color: rgba(27,57,98,.10); }
+        html:not(.dark) .console__head { color: #6b7c93; border-bottom-color: rgba(16,32,56,.08); }
         html:not(.dark) .trust { background: transparent; }
 
-        /* ── Hero polish ───────────────────────────────────────────────
-           The band was a flat navy rectangle butted against white — the
-           join is what read as rough. Three changes: a soft radial lift
-           behind the headline so the band has a centre, a hairline of
-           brand blue along the bottom edge so the transition is intentional
-           rather than abrupt, and the eyebrow given a real chip. */
-        html:not(.dark) .hero {
-            background:
-                radial-gradient(1100px 520px at 26% 18%, rgba(125,177,255,.16), transparent 62%),
-                linear-gradient(180deg, #224975 0%, #1b3962 58%, #17334f 100%);
-            border-bottom: 1px solid rgba(125,177,255,.22);
+        /* Launch sequence: one tile colour for all four — the numbers
+           01..04 already carry the order. */
+        html:not(.dark) .step__icon {
+            background: #1d4ed8; color: #ffffff;
+            box-shadow: 0 6px 14px -6px rgba(29,78,216,.45);
         }
-        html:not(.dark) .hero__eyebrow {
-            background: rgba(255,255,255,.10);
-            border: 1px solid rgba(255,255,255,.20);
-            color: #cfe1fb;
+        html:not(.dark) .step__num {
+            background: #1d4ed8; border-color: #1d4ed8; color: #ffffff;
         }
-        html:not(.dark) .hero__meta-item { color: #b3c7de; }
-        html:not(.dark) .hero h1 .accent { color: #8fbcff; }
 
-        /* Nav: a hairline and a shadow once scrolled, so it separates from
-           the hero instead of merging into one navy slab. */
-        html:not(.dark) .nav {
-            border-bottom: 1px solid rgba(255,255,255,.10);
-            box-shadow: 0 1px 0 rgba(255,255,255,.04);
-        }
-        html:not(.dark) .nav__links a { color: #c5d7ee; }
-        html:not(.dark) .nav__links a:hover { color: #ffffff; }
-
-        /* ── Live transcript, light mode ────────────────────────────────
-           Every layer here was built to be seen on black:
-             the panel   rgba(0,0,0,.3)      → a grey wash on paper
-             the bubble  rgba(255,255,255,.04) → invisible on white
-             bot text    #dbeafe             → near-white on near-white
-           The last one is why the messages could not be read at all. */
-        html:not(.dark) .mock-trans {
-            background: #f7fafd;
-            border-color: rgba(27,57,98,.12);
-        }
+        /* ── Live transcript ────────────────────────────────────────────
+           Every layer was designed for black: an rgba(0,0,0,.3) panel, a 4%
+           white bubble, and #dbeafe bot text — near-white on near-white,
+           which is why it could not be read at all. */
+        html:not(.dark) .mock-trans { background: #f7fafd; border-color: rgba(16,32,56,.10); }
         html:not(.dark) .mock-trans__bubble {
-            background: #ffffff;
-            border: 1px solid rgba(27,57,98,.10);
-            color: #1b3962;
+            background: #ffffff; border: 1px solid rgba(16,32,56,.10); color: #0b1b33;
         }
         html:not(.dark) .mock-trans__bubble.is-bot {
-            background: #eaf1fb;
-            border-color: rgba(27,57,98,.18);
-            color: #16304f;
+            background: #eaf1fe; border-color: rgba(29,78,216,.18); color: #16305c;
         }
-        html:not(.dark) .mock-trans__who    { color: #6f88a8; }
-        html:not(.dark) .mock-trans__who.is-bot { color: #1b3962; }
-        html:not(.dark) .mock-trans__cursor { background: #1b3962; }
+        html:not(.dark) .mock-trans__who { color: #7a8ba3; }
+        html:not(.dark) .mock-trans__who.is-bot { color: #1d4ed8; }
+        html:not(.dark) .mock-trans__cursor { background: #1d4ed8; }
+        html:not(.dark) .mock-lead__row { border-bottom-color: rgba(16,32,56,.07); }
+        html:not(.dark) .mock-call__num { color: #0b1b33; }
+        html:not(.dark) .mock-call__label { color: #7a8ba3; }
 
-        /* The lead card and call panel share the same problem. */
-        html:not(.dark) .mock-lead__row     { border-bottom-color: rgba(27,57,98,.08); }
-        html:not(.dark) .mock-call__num     { color: #16304f; }
-        html:not(.dark) .mock-call__label   { color: #6f88a8; }
-        html:not(.dark) .console__head      { color: #5b7ba3; }
-
-        /* ── Hero, light mode: craft pass ───────────────────────────────
-           The band was correct but flat. Four things were actually wrong,
-           and none of them was the colour:
-
-             1. The call bar — the single most important control on the
-                page — used --panel-2, which in light resolves to a pale
-                surface. On navy it vanished. It now sits on white and
-                reads as the object you are meant to use.
-             2. The headline sat at the same weight as everything else.
-                Tighter tracking and a heavier cut give the band a subject.
-             3. The accent was a mid blue on navy: 2.4:1, effectively
-                unreadable. Raised to a light blue that carries.
-             4. The meta ticks were dim text; they are proof points and
-                should read like them. */
-
-        html:not(.dark) .hero h1 {
-            letter-spacing: -.03em;
-            font-weight: 800;
-            color: #ffffff;
-            text-wrap: balance;
-        }
-        html:not(.dark) .hero h1 .accent { color: #8fbcff; }
-        html:not(.dark) .hero p.sub {
-            color: #c2d5ea; font-size: 17.5px; max-width: 560px; line-height: 1.62;
-        }
-
-        /* The call bar: white, lifted, with a real shadow. It is the
-           conversion point — on a navy band it has to be the brightest
-           thing present, not a tinted panel that blends in. */
-        html:not(.dark) .callbar {
-            background: #ffffff;
-            border: 1px solid rgba(255,255,255,.65);
-            box-shadow: 0 18px 40px -18px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.16);
-        }
-        html:not(.dark) .callbar__icon { background: rgba(27,57,98,.09); color: #1b3962; }
-        html:not(.dark) .callbar input { color: #16304f; }
-        html:not(.dark) .callbar input::placeholder { color: #7a8fab; }
-        html:not(.dark) .callbar button {
-            background: #1b3962; color: #fff;
-            box-shadow: 0 6px 16px -8px rgba(0,0,0,.6);
-        }
-        html:not(.dark) .callbar button:hover { background: #16304f; }
-        html:not(.dark) .callbar__msg { color: #a8c0dc; }
-
-        /* Proof points, not footnotes: a tinted tick in a disc reads as a
-           checked item at a glance, where dim grey text does not. */
-        html:not(.dark) .hero__meta-item {
-            color: #dbe7f6; font-weight: 500;
-        }
-        html:not(.dark) .hero__meta-item svg {
-            color: #8fbcff;
-        }
-
-        /* Eyebrow: a live dot on a glass chip. The pulse earns its place
-           here because the claim is literally that it is live. */
-        html:not(.dark) .hero__eyebrow {
-            background: rgba(255,255,255,.12);
-            border-color: rgba(255,255,255,.24);
-            color: #e2edfb;
-        }
-        html:not(.dark) .hero__eyebrow::before {
-            background: #7ee2a8; box-shadow: 0 0 10px rgba(126,226,168,.9);
-        }
-
-        /* ── Seam labels ────────────────────────────────────────────────
-           I had dimmed the whole seam to .35 opacity, which turned the
-           LAYER 02 — LAUNCH SEQUENCE labels into pale ghosts on white.
-           Wrong instinct: they are the section markers, so they should be
-           quiet but LEGIBLE. Full opacity, navy ink on a white chip, and
-           the neon rule reduced to a hairline instead of a glowing wire. */
+        /* ── Section seams ──────────────────────────────────────────────
+           Quiet but LEGIBLE. Dimming these to a ghost was the wrong
+           instinct: they are the section markers. */
         html:not(.dark) .seam { opacity: 1; }
         html:not(.dark) .seam__label {
-            color: #1b3962;
-            background: #ffffff;
-            border-color: rgba(27,57,98,.20);
-            font-weight: 700;
+            color: #1d4ed8; background: #ffffff;
+            border-color: rgba(29,78,216,.22); font-weight: 700;
         }
         html:not(.dark) .seam__line {
-            background: linear-gradient(90deg, transparent, rgba(27,57,98,.18) 30%, rgba(27,57,98,.28) 50%, rgba(27,57,98,.18) 70%, transparent);
+            background: linear-gradient(90deg, transparent, rgba(16,32,56,.14) 30%, rgba(16,32,56,.22) 50%, rgba(16,32,56,.14) 70%, transparent);
             box-shadow: none;
         }
-        /* The travelling scan dot is a dark-console flourish. */
         html:not(.dark) .seam__scan { display: none; }
 
-        /* ── Launch-sequence cards ──────────────────────────────────────
-           The icon tiles were rgba(59,130,246,.08) — an 8% blue on white is
-           barely a tint, so the icons floated with no container. Each step
-           now gets its own solid tile, which also makes the four read as a
-           SEQUENCE rather than four copies of the same card. */
-        html:not(.dark) .step__icon {
-            background: #1b3962;
-            color: #ffffff;
-            box-shadow: 0 6px 14px -6px rgba(27,57,98,.45);
+        /* ── Testimonials ───────────────────────────────────────────────
+           The card was a dark navy gradient — a hole punched in the page. */
+        html:not(.dark) .tm-card {
+            background: #ffffff; border-color: rgba(16,32,56,.11);
+            box-shadow: 0 1px 2px rgba(16,24,40,.04), 0 12px 30px -18px rgba(16,32,56,.22);
         }
-        /* One colour for all four. The ramp I tried — each tile a step
-           lighter — was meant to imply sequence, but the numbers 01..04
-           already say that, and four different blues just read as four
-           unrelated cards. The numbering carries the order; the tiles carry
-           the family. */
+        html:not(.dark) .tm-card::before { color: rgba(29,78,216,.09); }
+        html:not(.dark) .tm-card::after {
+            background: linear-gradient(90deg, transparent, #1d4ed8, transparent);
+        }
+        html:not(.dark) .tm-card:hover {
+            border-color: rgba(29,78,216,.28);
+            box-shadow: 0 22px 46px -22px rgba(16,32,56,.30);
+        }
+        html:not(.dark) .tm-card__quote { color: #16305c; }
+        html:not(.dark) .tm-card__name  { color: #0b1b33; }
+        html:not(.dark) .tm-card__role  { color: #6b7c93; }
+        html:not(.dark) .tm-av { box-shadow: 0 0 0 1px rgba(16,32,56,.08), 0 6px 16px -8px rgba(16,32,56,.35); }
 
-        /* The step number sat on --bg with a neon border; on white that was
-           a pale outline around pale text. */
-        html:not(.dark) .step__num {
-            background: #1b3962;
-            border-color: #1b3962;
-            color: #ffffff;
+        /* ── Final CTA ──────────────────────────────────────────────────
+           It faded to rgba(0,0,0,.5) — literal 50% black. Now the one
+           deliberately saturated block on the page, which is what a closing
+           call to action should be. */
+        html:not(.dark) .cta {
+            background: linear-gradient(135deg, #1d4ed8 0%, #1743bd 100%);
+            border-color: transparent;
+            box-shadow: 0 24px 54px -24px rgba(29,78,216,.55);
         }
-
-        /* ── Dark hero band on a light page ─────────────────────────────
-           Reverting the flat navy treatment: nav, hero and footer now keep
-           the ORIGINAL dark palette in light mode — the starfield, the deep
-           radial and the gradient headline that the design was actually
-           built around. A dark hero over a light body is a deliberate,
-           well-worn pattern, and it is the one thing on this page that
-           already looked finished.
-
-           The starfield is the piece that needed real work. It is a FIXED,
-           full-screen canvas, so simply un-hiding it would lay a night sky
-           over the white sections below. Switching it to absolute with the
-           height of the band keeps it behind the hero and lets it scroll
-           away, which is what it looks like it is doing anyway. */
-        html:not(.dark) #stars {
-            display: block;
-            position: absolute; top: 0; left: 0; right: 0; height: 100vh; inset: auto;
-            background: radial-gradient(ellipse at 50% 0%, #0d1a2e 0%, #050609 55%, #000 100%);
+        html:not(.dark) .cta h2 { color: #ffffff; }
+        html:not(.dark) .cta p  { color: rgba(255,255,255,.86); }
+        html:not(.dark) .cta .btn {
+            background: #ffffff; color: #1d4ed8;
+            box-shadow: 0 10px 24px -10px rgba(0,0,0,.35);
         }
-
-        html:not(.dark) .hero {
-            background: transparent;   /* the canvas behind it is the band */
-            border-bottom: 1px solid rgba(59,130,246,.22);
-        }
-        html:not(.dark) .nav {
-            /* OPAQUE in light mode. At 55% it was dark over the hero and
-               grey the moment a white section scrolled underneath —
-               translucency only works when everything behind it is the
-               same colour. The blur stays for the frosted edge. */
-            background: #070c17;
-            border-bottom-color: rgba(120,180,220,.12);
-            box-shadow: none;
-        }
-        html:not(.dark) .nav.is-open { background: rgba(5, 6, 9, .97); }
-
-        /* Original dark tokens inside the three bands, so every rule in
-           them renders exactly as it does in dark mode. */
-        html:not(.dark) .nav,
-        html:not(.dark) .hero,
-        html:not(.dark) .site-footer {
-            --text:      #e6edf3;
-            --text-dim:  #8b96a8;
-            --text-dim2: #727e93;
-            --line:      rgba(120, 180, 220, .12);
-            --line-hot:  rgba(59, 130, 246, .35);
-            --panel:     rgba(15, 21, 35, .55);
-            --panel-2:   rgba(20, 28, 46, .85);
-            --neon:      #3b82f6;
-            --neon-btn:  #2563eb;
-            --neon-2:    #60a5fa;
-            color: var(--text);
-        }
-
-        /* The gradient headline works again — it has depth to fade into. */
-        html:not(.dark) .hero h1 { color: var(--text); }
-        html:not(.dark) .hero h1 .accent {
-            background: linear-gradient(90deg, var(--neon), var(--neon-2) 60%, #dbeafe);
-            -webkit-background-clip: text; background-clip: text; color: transparent;
-        }
-        html:not(.dark) .hero p.sub { color: var(--text-dim); }
-        html:not(.dark) .hero__eyebrow {
-            background: rgba(59,130,246,.08);
-            border-color: rgba(59,130,246,.25);
-            color: var(--neon);
-        }
-        html:not(.dark) .hero__eyebrow::before { background: var(--neon); box-shadow: 0 0 10px var(--neon); }
-        html:not(.dark) .hero__meta-item { color: var(--text-dim); }
-        html:not(.dark) .hero__meta-item svg { color: var(--neon); }
-
-        /* Call bar back to the glass panel it was designed as. */
-        html:not(.dark) .callbar {
-            background: var(--panel-2); border: 1px solid var(--line);
-            box-shadow: 0 18px 44px -22px rgba(0,0,0,.7);
-        }
-        html:not(.dark) .callbar__icon { background: rgba(59,130,246,.12); color: var(--neon); }
-        html:not(.dark) .callbar input { color: var(--text); }
-        html:not(.dark) .callbar input::placeholder { color: var(--text-dim2); }
-        html:not(.dark) .callbar button {
-            background: var(--neon-btn); color: #fff;
-            box-shadow: 0 0 24px rgba(59,130,246,.45);
-        }
-        html:not(.dark) .callbar button:hover { background: #1d4ed8; }
-        html:not(.dark) .callbar__msg { color: var(--text-dim2); }
-
-        html:not(.dark) .nav .nav__cta {
-            background: var(--neon-btn); color: #fff;
-            box-shadow: 0 0 22px rgba(59,130,246,.45);
-        }
-        html:not(.dark) .nav .nav__cta:hover { background: #1d4ed8; }
-        html:not(.dark) .nav__links a { color: var(--text-dim); }
-        html:not(.dark) .nav__links a:hover { color: var(--text); }
-        html:not(.dark) .nav .nav__brand-mark { filter: drop-shadow(0 0 10px rgba(59,130,246,.45)); }
-
-        /* ── Hero: the last 10% ─────────────────────────────────────────
-           Small, cheap things that separate a hero that works from one
-           that looks finished. All of them apply in BOTH themes, because
-           none is about colour. */
-
-        /* 1. A horizon. The band met the white page as a hard rule; a
-              short fade at the base makes the dark resolve into the light
-              instead of stopping dead. This is the single change that
-              stops the join reading as a seam. */
-        .hero::after {
-            content: ''; position: absolute; left: 0; right: 0; bottom: 0;
-            height: 140px; pointer-events: none; z-index: 1;
-            background: linear-gradient(180deg, transparent, rgba(255,255,255,.10) 55%, rgba(255,255,255,.30));
-        }
-        html.dark .hero::after { display: none; }
-
-        /* 2. Balanced line breaks. A headline that wraps to a lone orphan
-              word looks accidental at any size. */
-        .hero h1 { text-wrap: balance; }
-        .hero p.sub { text-wrap: pretty; }
-
-        /* 3. A settle on load, not a bounce. 420ms with a gentle ease
-              reads as the page arriving; anything springier reads as a
-              template. Suppressed for reduced-motion. */
-        .hero__grid > .reveal { animation: heroSettle .42s cubic-bezier(.22,1,.36,1) both; }
-        .hero__scene { animation: heroSettle .52s cubic-bezier(.22,1,.36,1) .08s both; }
-        @keyframes heroSettle { from { opacity:0; transform: translateY(14px); } to { opacity:1; transform:none; } }
-        @media (prefers-reduced-motion: reduce) {
-            .hero__grid > .reveal, .hero__scene { animation: none; }
-        }
-
-        /* 4. The call bar is the conversion point, so it gets a focus ring
-              worth the name — currently focus lands with no visible change
-              at all on the wrapper. */
-        .callbar:focus-within {
-            border-color: var(--line-hot);
-            box-shadow: 0 0 0 4px rgba(59,130,246,.16), 0 18px 44px -22px rgba(0,0,0,.7);
-        }
-        .callbar button { transition: transform .14s, background .14s, box-shadow .14s; }
-        .callbar button:hover { transform: translateY(-1px); }
-        .callbar button:active { transform: translateY(0); }
-
-        /* 5. The meta ticks were three equal grey lines. Separating them
-              with a hairline turns a list into a row of claims. */
-        .hero__meta { gap: 0; flex-wrap: wrap; }
-        .hero__meta-item { padding: 0 16px; position: relative; }
-        .hero__meta-item:first-child { padding-left: 0; }
-        .hero__meta-item + .hero__meta-item::before {
-            content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-            width: 1px; height: 14px; background: var(--line);
-        }
-        @media (max-width: 540px) {
-            .hero__meta-item { padding: 4px 0; }
-            .hero__meta-item + .hero__meta-item::before { display: none; }
-        }
-
-        /* ── Band coverage ──────────────────────────────────────────────
-           The dark came from #stars, a canvas fixed at 100vh. The hero is
-           min-height:100vh PLUS 130px/80px of padding, so it is always
-           taller than the canvas — and the overflow showed white behind the
-           bottom of the section, which is exactly where the
-           'No credit card / 90 seconds' row sits.
-
-           The gradient now lives on .hero itself, so it covers the section
-           whatever its height, and the canvas is just the moving dots on
-           top of it. */
-        html:not(.dark) .hero {
-            background: radial-gradient(ellipse at 50% -8%, #0d1a2e 0%, #050609 58%, #000 100%);
-        }
-        html:not(.dark) #stars { background: transparent; height: 100vh; }
+        html:not(.dark) .cta .btn:hover { background: #eaf1fe; }
 
         /* ── Nav alignment ──────────────────────────────────────────────
-           .nav centres its children, but .nav__links is a flex row whose
-           own items were not centred, so the theme switch and the CTA sat
-           on the text baseline instead of the row axis. */
+           Scoped to real controls: a universal child selector also matched
+           the <style> and <script> the theme-toggle partial carries, which
+           overrode their display:none and printed their source in the
+           header. */
         .nav__links { align-items: center; }
-        /* Only real controls. A universal child selector here also hit
-           the <style> and <script> the theme-toggle partial brings with
-           it, overriding their default display:none — so the browser
-           laid out their SOURCE as visible text in the header. */
         .nav__links > a,
         .nav__links > button { display: inline-flex; align-items: center; }
         .nav__cta { line-height: 1; }

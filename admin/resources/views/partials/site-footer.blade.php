@@ -218,25 +218,22 @@
         .site-footer__bottom { flex-direction: column; align-items: flex-start; }
     }
 
-    /* Light mode keeps a DARK footer. Placed here rather than on the
-       homepage because this partial is shared — the blog, pricing and legal
-       pages include it too, and a navy footer on one page and a white one
-       on the next reads as two different sites.
+    /* Light footer. Not a dark band: a page that is white throughout and
+       then ends in black reads as two documents stapled together.
 
-       Tokens are redefined on the element, so every rule below that reads
-       --text-dim / --line follows without being touched. */
+       What gives it weight instead of colour: a hairline top rule, a very
+       faint tint so it separates from the last section, and real hierarchy
+       between the brand block and the link columns. */
     html:not(.dark) .site-footer {
-        --text:      #f2f7fd;
-        --text-dim:  #b3c7de;
-        --text-dim2: #93aac6;
-        --line:      rgba(255,255,255,.14);
-        --neon:      #7db1ff;
-        /* The same deep gradient the footer was designed with, so the
-           three dark bands — nav, hero, footer — are one family rather
-           than two navies that nearly match. A near-match is worse than a
-           contrast: it reads as a mistake. */
-        background: linear-gradient(180deg, rgba(8,11,18,.94), rgba(5,6,9,.99));
-        border-top-color: rgba(120,180,220,.12);
+        --text:      #0b1b33;
+        --text-dim:  #46586f;
+        --text-dim2: #6b7c93;
+        --line:      rgba(16,32,56,.10);
+        --neon:      #1d4ed8;
+        background: linear-gradient(180deg, #ffffff 0%, #f5f8fc 100%);
+        border-top: 1px solid rgba(16,32,56,.10);
         color: var(--text-dim);
     }
+    html:not(.dark) .site-footer a:hover { color: #1d4ed8; }
+    html:not(.dark) .site-footer__bottom { border-top-color: rgba(16,32,56,.08); }
 </style>

@@ -223,20 +223,20 @@
         /* Navy nav on the inner pages too, matching the homepage. A light
            header here and a navy one there would look like two sites. */
         html:not(.dark) .nav {
-            --text:     #e6edf3;
-            --text-dim: #8b96a8;
-            --line:     rgba(120,180,220,.12);
-            --line-hot: rgba(59,130,246,.35);
-            background: #070c17;   /* opaque: white sections scroll under it */
-            border-bottom-color: rgba(120,180,220,.12);
+            --text:     #0b1b33;
+            --text-dim: #46586f;
+            --line:     rgba(16,32,56,.10);
+            --line-hot: rgba(29,78,216,.30);
+            background: rgba(255,255,255,.88);
+            border-bottom-color: rgba(16,32,56,.08);
             color: var(--text);
         }
         html:not(.dark) .nav .nav__cta {
-            background: #2563eb; color: #fff;
-            box-shadow: 0 0 22px rgba(59,130,246,.45);
+            background: #1d4ed8; color: #fff;
+            box-shadow: 0 6px 16px -7px rgba(29,78,216,.55);
         }
-        html:not(.dark) .nav .nav__cta:hover { background: #1d4ed8; }
-        html:not(.dark) .nav .nav__brand-mark { filter: drop-shadow(0 0 10px rgba(59,130,246,.45)); }
+        html:not(.dark) .nav .nav__cta:hover { background: #1743bd; }
+        html:not(.dark) .nav .nav__brand-mark { filter: none; }
 </style>
     @stack('head')
     @include('partials.sweet-alert')
