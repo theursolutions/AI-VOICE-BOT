@@ -60,9 +60,14 @@ class BotAgentWebController extends Controller
         // Team users selectable as human agents.
         $users = $client->users()->get(['users.id', 'users.name', 'users.email']);
 
+        // Channels and capabilities are configured by the workspace owner
+        // only. The view hides those fields for everyone else, and
+        // metadataFor() refuses to write them regardless of what is posted.
+        $isOwner = (bool) auth()->user()?->isOwnerOf($client->id);
+
         return view('bot-agents.index', compact(
             'client', 'projects', 'project', 'projectId',
-            'agents', 'skills', 'voices', 'users'
+            'agents', 'skills', 'voices', 'users', 'isOwner'
         ));
     }
 
@@ -89,6 +94,7 @@ class BotAgentWebController extends Controller
             'persona'          => $type === BotAgent::TYPE_HUMAN ? null : ($data['persona'] ?? null),
             'is_default'       => !empty($data['is_default']),
             'status'           => BotAgent::STATUS_ACTIVE,
+            'metadata'         => $this->metadataFor($request, $data, $client, null),
             'created_at'       => $now,
             'update_at'        => $now,
         ]);
@@ -127,6 +133,7 @@ class BotAgentWebController extends Controller
             'persona'          => $type === BotAgent::TYPE_HUMAN ? null : ($data['persona'] ?? null),
             'is_default'       => !empty($data['is_default']),
             'status'           => $data['status'] ?? BotAgent::STATUS_ACTIVE,
+            'metadata'         => $this->metadataFor($request, $data, $client, $agent),
             'update_at'        => time(),
         ]);
 
@@ -167,11 +174,55 @@ class BotAgentWebController extends Controller
             'skill_ids'        => 'nullable|array',
             'skill_ids.*'      => 'integer',
             'is_default'       => 'nullable|boolean',
+            'channels'         => 'nullable|array',
+            'channels.*'       => 'string|in:' . implode(',', array_keys(BotAgent::CHANNELS)),
+            'capabilities'     => 'nullable|array',
         ];
         if ($forUpdate) {
             $rules['status'] = 'required|in:active,archived';
         }
         return $request->validate($rules);
+    }
+
+    /**
+     * Build the metadata blob holding channels and capabilities.
+     *
+     * Both are OWNER-ONLY. A non-owner editing an agent keeps whatever is
+     * already stored rather than having it wiped by a form that never
+     * rendered those fields — the classic way a permissions UI quietly
+     * escalates everyone to full access.
+     *
+     * @param BotAgent|null $existing null when creating
+     */
+    private function metadataFor(Request $request, array $data, Client $client, ?BotAgent $existing): array
+    {
+        $meta = (array) ($existing->metadata ?? []);
+
+        if (! auth()->user()?->isOwnerOf($client->id)) {
+            return $meta;
+        }
+
+        // An empty selection means "every channel", which is also what an
+        // unset value means — see BotAgent::channels(). Storing [] would be
+        // ambiguous, so it is normalised away.
+        $channels = array_values(array_filter((array) ($data['channels'] ?? [])));
+        if ($channels) {
+            $meta['channels'] = $channels;
+        } else {
+            unset($meta['channels']);
+        }
+
+        // Checkboxes only post when ticked, so every known capability is
+        // written explicitly. Reading the posted keys alone would silently
+        // grant everything the form happened not to render.
+        $posted = (array) ($data['capabilities'] ?? []);
+        $caps   = [];
+        foreach (array_keys(BotAgent::CAPABILITIES) as $key) {
+            $caps[$key] = (bool) ($posted[$key] ?? false);
+        }
+        $meta['capabilities'] = $caps;
+
+        return $meta;
     }
 
     private function guard(Client $client, int $projectId): Project

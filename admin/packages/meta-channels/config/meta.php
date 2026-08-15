@@ -43,8 +43,14 @@ return [
             // pages_manage_metadata is what allows subscribing the app to a
             // Page's webhooks. Without it a Page connects and then silently
             // never delivers a message.
+            // pages_user_profile is what returns a sender's NAME and PHOTO.
+            // Without it the inbox can only show a 16-digit PSID, and the
+            // failure is silent: Meta returns an empty profile rather than a
+            // permissions error, so it reads as our bug rather than a missing
+            // scope. It was absent here, which meant the profile lookup could
+            // never have worked even once App Review granted it.
             'facebook_page' => env('META_SCOPES_FACEBOOK',
-                'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,business_management'),
+                'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,pages_user_profile,business_management'),
 
             // Instagram messaging via Facebook Login goes through the linked
             // Page, so the Page permissions are required too. Requires the

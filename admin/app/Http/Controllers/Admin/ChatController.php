@@ -5,8 +5,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\BotAgent;
 use App\Models\Client;
+use App\Models\Contact;
 use App\Models\ConversationStatus;
 use App\Models\Lead;
+use App\Services\Crm\ContactProfile;
+use App\Services\Crm\ContactResolver;
 use App\Models\Message;
 use App\Models\Project;
 use App\Models\Session;
@@ -124,15 +127,24 @@ class ChatController extends Controller
         // Statuses keyed by id, so each row's pill costs no extra query.
         $statuses = collect($this->statusList($project))->keyBy('id');
 
-        $out = $sessions->map(function (Session $s) use ($now, $agentNames, $mine, $statuses) {
+        // Contacts for these rows, in ONE query. The contact is the source of
+        // truth for a person's name and photo — editing it in the profile
+        // panel used to change nothing in the list, because the list read the
+        // session's own copy and nothing propagated.
+        $contacts = ContactResolver::available()
+            ? Contact::whereIn('id', $sessions->pluck('contact_id')->filter()->unique())->get()->keyBy('id')
+            : collect();
+
+        $out = $sessions->map(function (Session $s) use ($now, $agentNames, $mine, $statuses, $contacts) {
+            $contact = $contacts[$s->contact_id] ?? null;
             $last = Message::where('session_id', $s->id)->orderByDesc('id')->first(['role', 'content', 'created_at']);
             $meta = (array) data_get($s->metadata, 'meta', []);
             return [
                 'id'              => $s->id,
                 'channel'         => $s->channel,
                 'channel_account' => $s->channel_account,
-                'name'            => $this->contactName($s),
-                'avatar'          => $this->avatarUrl($meta),
+                'name'            => $this->contactName($s, $contact),
+                'avatar'          => $this->avatarUrl($meta, $contact),
                 'profile_url'     => $this->profileUrl($s, $meta),
                 'last_message'    => $this->preview($last),
                 'last_at'         => $s->last_activity_at,
@@ -204,7 +216,179 @@ class ChatController extends Controller
         return ['type' => 'bot', 'name' => 'AI agent'];
     }
 
+    // ── Contact profile ──────────────────────────────────────────────
+
+    /** The person behind a conversation, across every channel. */
+    public function contact(Request $request, Client $client, int $sessionId): JsonResponse
+    {
+        $project = $this->guard($client, (int) $request->query('project_id'));
+        $session = $this->session($project, $sessionId);
+
+        if (! ContactResolver::available()) {
+            return response()->json([
+                'ok'      => false,
+                'message' => 'Contacts need a database update on this workspace. Run: php artisan tenant:migrate',
+            ], 422);
+        }
+
+        $contact = $session->contact_id ? Contact::find($session->contact_id) : null;
+
+        // A conversation that predates contacts, or one from a channel that
+        // does not create them on arrival. Resolve it now rather than showing
+        // an empty panel — the data to do so is all on the session.
+        if (! $contact) {
+            $contact = app(ContactResolver::class)->resolve(
+                projectId:      $project->id,
+                channel:        (string) $session->channel,
+                externalId:     (string) ($session->external_id ?: $session->id),
+                channelAccount: $session->channel_account,
+                details:        array_filter([
+                    'name'  => $session->customer_name,
+                    'phone' => $session->customer_phone,
+                    'email' => $session->customer_email,
+                ]),
+            );
+
+            if ($contact) {
+                $session->contact_id = $contact->id;
+                $session->save();
+            }
+        }
+
+        if (! $contact) {
+            return response()->json(['ok' => false, 'message' => 'No contact for this conversation.'], 404);
+        }
+
+        return response()->json([
+            'ok'      => true,
+            'contact' => app(ContactProfile::class)->build($contact->load('identities')),
+        ]);
+    }
+
+    /** Edit the contact's name, photo or notes. */
+    public function updateContact(Request $request, Client $client, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'name'       => 'nullable|string|max:191',
+            'email'      => 'nullable|email|max:191',
+            'phone'      => 'nullable|string|max:32',
+            'notes'      => 'nullable|string|max:4000',
+            'avatar'     => 'nullable|image|max:4096',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+        $contact = Contact::where('project_id', $project->id)->findOrFail($id);
+
+        // Explicit nulls are honoured here, unlike the resolver's fill-gaps
+        // behaviour: this is a person deliberately correcting the record, and
+        // their edit must not be undone by the next extraction.
+        foreach (['name', 'email', 'phone', 'notes'] as $field) {
+            if ($request->has($field)) {
+                $contact->{$field} = $data[$field] ?: null;
+            }
+        }
+
+        if ($request->hasFile('avatar')) {
+            $path = $request->file('avatar')->store('avatars/manual', 'public');
+            $contact->avatar = \Illuminate\Support\Facades\Storage::disk('public')->url($path);
+        }
+
+        $contact->update_at = time();
+        $contact->save();
+
+        return response()->json([
+            'ok'      => true,
+            'contact' => app(ContactProfile::class)->build($contact->load('identities')),
+        ]);
+    }
+
+    /** Fold one contact into another after a human has confirmed it. */
+    public function mergeContact(Request $request, Client $client, int $id): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'other'      => 'required|integer',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        // Owner-only. A merge is not reversible and it exposes one
+        // customer's history under another's profile if it is wrong.
+        if (! $this->isOwner($client)) {
+            return response()->json([
+                'error'   => 'not_permitted',
+                'message' => 'Only the workspace owner can merge contacts.',
+            ], 403);
+        }
+
+        $keep  = Contact::where('project_id', $project->id)->findOrFail($id);
+        $drop  = Contact::where('project_id', $project->id)->findOrFail((int) $data['other']);
+
+        if ($keep->id === $drop->id) {
+            return response()->json(['ok' => false, 'message' => 'That is the same contact.'], 422);
+        }
+
+        \Illuminate\Support\Facades\DB::connection('tenant')->transaction(fn () => $keep->absorb($drop));
+
+        return response()->json([
+            'ok'      => true,
+            'contact' => app(ContactProfile::class)->build($keep->fresh()->load('identities')),
+        ]);
+    }
+
     // ── Who is looking, and what may they do ─────────────────────────
+
+    /**
+     * Refuse an action the signed-in agent is not permitted to perform.
+     *
+     * Enforced here rather than only in the UI, because a hidden button is
+     * not a permission — it is a suggestion. Anyone can re-issue the request.
+     *
+     * The owner is exempt: they configure these limits, and locking the
+     * person who sets the rules out of their own inbox helps nobody.
+     */
+    private function denyUnlessCan(Client $client, Project $project, string $capability): ?JsonResponse
+    {
+        if ($this->isOwner($client)) {
+            return null;
+        }
+
+        $agent = $this->myAgent($project);
+        if (! $agent || $agent->can($capability)) {
+            // No agent record means this is an admin using the console
+            // directly — governed by the RBAC module gate, not by agent
+            // capabilities.
+            return null;
+        }
+
+        $label = BotAgent::CAPABILITIES[$capability][0] ?? $capability;
+
+        return response()->json([
+            'error'   => 'not_permitted',
+            'message' => "Your agent profile does not allow: {$label}. Ask the workspace owner to enable it.",
+        ], 403);
+    }
+
+    /**
+     * The signed-in user's capability map for this project.
+     *
+     * Owners, and admins with no agent record, get everything — the same
+     * rule denyUnlessCan() applies, expressed once so the UI and the gate
+     * cannot drift apart.
+     *
+     * @return array<string,bool>
+     */
+    private function myCapabilities(Client $client, Project $project): array
+    {
+        $agent = $this->isOwner($client) ? null : $this->myAgent($project);
+
+        if (! $agent) {
+            return array_fill_keys(array_keys(BotAgent::CAPABILITIES), true);
+        }
+
+        return $agent->capabilities();
+    }
 
     /**
      * Is the signed-in user the workspace owner?
@@ -333,6 +517,10 @@ class ChatController extends Controller
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'transfer')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
 
         $mine  = $this->myAgent($project);
@@ -460,6 +648,10 @@ class ChatController extends Controller
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'set_status')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
 
         if (! ConversationStatus::available()) {
@@ -512,6 +704,10 @@ class ChatController extends Controller
         $data = $this->validateStatus($request);
         $project = $this->guard($client, (int) $data['project_id']);
 
+        if ($deny = $this->denyUnlessCan($client, $project, 'manage_statuses')) {
+            return $deny;
+        }
+
         // Without this the insert hits a missing table and returns a 500 HTML
         // error page, which the browser reports only as "not ok" — the most
         // likely reason adding a status appears to do nothing at all.
@@ -541,6 +737,10 @@ class ChatController extends Controller
     {
         $data = $this->validateStatus($request);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'manage_statuses')) {
+            return $deny;
+        }
 
         if ($error = $this->statusesUnavailable()) {
             return $error;
@@ -574,6 +774,10 @@ class ChatController extends Controller
     public function destroyStatus(Request $request, Client $client, int $id): JsonResponse
     {
         $project = $this->guard($client, (int) $request->input('project_id'));
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'manage_statuses')) {
+            return $deny;
+        }
 
         if ($error = $this->statusesUnavailable()) {
             return $error;
@@ -980,6 +1184,10 @@ class ChatController extends Controller
         // Mark read.
         $this->mergeMeta($session, ['read_at' => time()]);
 
+        $threadContact = ($session->contact_id && ContactResolver::available())
+            ? Contact::find($session->contact_id)
+            : null;
+
         return response()->json([
             'messages' => $msgs->map(fn (Message $m) => $this->shapeMessage($m, $sessionId))->values(),
             'window_open'    => $this->meta->serviceWindowOpen($session->last_inbound_at),
@@ -989,6 +1197,10 @@ class ChatController extends Controller
             'assigned_to'    => $session->assigned_agent_id ? (BotAgent::find($session->assigned_agent_id)->name ?? 'Agent') : null,
             'is_human_agent' => (bool) $this->myAgent($project),
             'is_owner'       => $this->isOwner($client),
+            // What this user may do here, so the console can hide controls it
+            // knows will be refused. The gate above is the real enforcement;
+            // this only spares the agent from clicking into a 403.
+            'can'            => $this->myCapabilities($client, $project),
             'reply_policy'   => $this->replyPolicy($session),
             'agents'         => $this->agentOptions($project, $session),
             'statuses'       => $this->statusList($project),
@@ -998,9 +1210,9 @@ class ChatController extends Controller
             'status_id'      => ($sid = $session->getAttribute('conversation_status_id')) ? (int) $sid : null,
             'metrics'        => $this->conversationMetrics($session, $project),
             'contact'        => [
-                'name'        => $this->contactName($session),
+                'name'        => $this->contactName($session, $threadContact),
                 'channel'     => $session->channel,
-                'avatar'      => $this->avatarUrl((array) data_get($session->metadata, 'meta', [])),
+                'avatar'      => $this->avatarUrl((array) data_get($session->metadata, 'meta', []), $threadContact),
                 'profile_url' => $this->profileUrl($session, (array) data_get($session->metadata, 'meta', [])),
                 // Which of your Pages/numbers this conversation arrived on.
                 // With several connected channels, "who is this?" is only half
@@ -1021,6 +1233,10 @@ class ChatController extends Controller
             'reply_to'   => 'nullable|integer',
         ]);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_text')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
 
         [$conn, $provider] = $this->connectionFor($session);
@@ -1046,6 +1262,17 @@ class ChatController extends Controller
         $graph = GraphClient::forConnection($conn);
         $open  = $this->meta->serviceWindowOpen($session->last_inbound_at);
         $to    = $session->external_id;
+
+        // An opt-out binds people too, not just the bot. Messaging someone
+        // who asked you to stop is a policy violation regardless of who
+        // typed it, and it is the single fastest way to get a customer's
+        // number blocked.
+        if (data_get($session->metadata, 'meta.opted_out')) {
+            return response()->json([
+                'error'   => 'opted_out',
+                'message' => 'This contact asked to stop receiving messages. They must message you first before you can reply.',
+            ], 409);
+        }
 
         // One gate for every channel, from the same rules the UI renders — so
         // a disabled composer and a rejected send can never disagree. Blocks
@@ -1120,6 +1347,10 @@ class ChatController extends Controller
             'caption'    => 'nullable|string|max:1024',
         ]);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_media')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         [$conn, $provider] = $this->connectionFor($session);
         if (!$conn) {
@@ -1129,6 +1360,15 @@ class ChatController extends Controller
         $file = $request->file('file');
         $mime = $file->getMimeType() ?: 'application/octet-stream';
         $type = $this->mediaType($mime);
+
+        // Voice notes are their own permission. They arrive through the same
+        // upload endpoint as any other file, so the distinction can only be
+        // made once the mime is known — an agent may be trusted to send a
+        // price list and still not to speak on the business's behalf.
+        if ($type === 'audio' && ($deny = $this->denyUnlessCan($client, $project, 'send_voice'))) {
+            return $deny;
+        }
+
         $graph = GraphClient::forConnection($conn);
 
         $bytes    = $file->get();
@@ -1204,6 +1444,10 @@ class ChatController extends Controller
             'params'     => 'nullable|array',
         ]);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_template')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         [$conn, $provider] = $this->connectionFor($session);
         if (!$conn || $provider !== ChannelConnection::PROVIDER_WHATSAPP) {
@@ -1238,6 +1482,10 @@ class ChatController extends Controller
             'buttons.*.title' => 'required|string|max:20',
         ]);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'quick_replies')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         [$conn, $provider] = $this->connectionFor($session);
         if (!$conn || $provider !== ChannelConnection::PROVIDER_WHATSAPP) {
@@ -1295,6 +1543,10 @@ class ChatController extends Controller
             'header'     => 'nullable|string|max:60',
         ]);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_flow')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         [$conn, $provider] = $this->connectionFor($session);
         if (!$conn || $provider !== ChannelConnection::PROVIDER_WHATSAPP) {
@@ -1327,6 +1579,10 @@ class ChatController extends Controller
             'header'       => 'nullable|string|max:60',
         ]);
         $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_catalog')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         [$conn, $provider] = $this->connectionFor($session);
         if (!$conn || $provider !== ChannelConnection::PROVIDER_WHATSAPP) {
@@ -1355,6 +1611,10 @@ class ChatController extends Controller
     public function toggleBot(Request $request, Client $client, int $sessionId): JsonResponse
     {
         $project = $this->guard($client, (int) $request->input('project_id'));
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'toggle_bot')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         $paused = !data_get($session->metadata, 'meta.bot_paused', false);
         $this->mergeMeta($session, ['bot_paused' => $paused]);
@@ -1370,14 +1630,95 @@ class ChatController extends Controller
         $att = data_get($msg->metadata, 'attachments.' . $index);
         abort_unless($att, 404);
 
-        [$conn] = $this->connectionFor($session);
-        $graph = new GraphClient($conn->access_token ?? null);
-        $media = !empty($att['media_id'])
-            ? $graph->downloadWhatsAppMedia($att['media_id'])
-            : (!empty($att['url']) ? $graph->downloadUrl($att['url'], $att['mime'] ?? null) : null);
+        // Served from a local cache after the first fetch. Two reasons, and
+        // the second is why voice notes eventually stop working entirely:
+        // re-downloading on every play is slow, and WhatsApp media ids EXPIRE
+        // (~30 days) after which Graph 404s and the player goes silently
+        // dead. Outbound media has been persisted since day one for exactly
+        // this reason — inbound never was.
+        $cacheKey = 'chat/inbound/' . $session->id . '/' . $msg->id . '-' . $index;
+        $disk     = \Illuminate\Support\Facades\Storage::disk('local');
 
-        abort_unless($media && !empty($media['bytes']), 404);
-        return response($media['bytes'], 200)->header('Content-Type', $media['mime'] ?? 'application/octet-stream');
+        $mime = $att['mime'] ?? null;
+
+        if ($disk->exists($cacheKey)) {
+            $bytes = $disk->get($cacheKey);
+        } else {
+            [$conn] = $this->connectionFor($session);
+            $graph = GraphClient::forConnection($conn);
+            $media = !empty($att['media_id'])
+                ? $graph->downloadWhatsAppMedia($att['media_id'])
+                : (!empty($att['url']) ? $graph->downloadUrl($att['url'], $mime) : null);
+
+            abort_unless($media && !empty($media['bytes']), 404);
+
+            $bytes = $media['bytes'];
+            $mime  = $media['mime'] ?: $mime;
+
+            try {
+                $disk->put($cacheKey, $bytes);
+                // Remember the resolved mime — Meta reports it on the
+                // download, not on the webhook payload, so a cache hit would
+                // otherwise lose it.
+                $this->rememberAttachmentMime($msg, $index, $mime);
+            } catch (\Throwable $e) {
+                Log::warning('Chat: could not cache inbound media: ' . $e->getMessage());
+            }
+        }
+
+        return $this->rangeResponse($request, $bytes, $mime ?: 'application/octet-stream');
+    }
+
+    /** Persist the mime Graph reported so cached bytes keep their type. */
+    private function rememberAttachmentMime(Message $msg, int $index, ?string $mime): void
+    {
+        if (! $mime || data_get($msg->metadata, "attachments.{$index}.mime") === $mime) {
+            return;
+        }
+        $meta = (array) $msg->metadata;
+        $meta['attachments'][$index]['mime'] = $mime;
+        $msg->metadata = $meta;
+        $msg->save();
+    }
+
+    /**
+     * Serve bytes with range support.
+     *
+     * This is what makes audio actually play. Without `Accept-Ranges` and
+     * `Content-Length`, Safari refuses to begin playback at all, and Chrome
+     * cannot compute `duration` — so the seek bar sits at zero and the clip
+     * looks broken even when the bytes are fine. A plain response() sent
+     * neither header.
+     */
+    private function rangeResponse(Request $request, string $bytes, string $mime): Response
+    {
+        $size    = strlen($bytes);
+        $headers = [
+            'Content-Type'  => $mime,
+            'Accept-Ranges' => 'bytes',
+            'Cache-Control' => 'private, max-age=86400',
+        ];
+
+        $range = (string) $request->header('Range', '');
+
+        if ($range === '' || ! preg_match('/bytes=(\d*)-(\d*)/', $range, $m)) {
+            return response($bytes, 200, $headers + ['Content-Length' => $size]);
+        }
+
+        $start = $m[1] === '' ? 0 : (int) $m[1];
+        $end   = $m[2] === '' ? $size - 1 : min((int) $m[2], $size - 1);
+
+        if ($start > $end || $start >= $size) {
+            // Required by the spec, and Safari does send unsatisfiable ranges.
+            return response('', 416, $headers + ['Content-Range' => "bytes */{$size}"]);
+        }
+
+        $slice = substr($bytes, $start, $end - $start + 1);
+
+        return response($slice, 206, $headers + [
+            'Content-Length' => strlen($slice),
+            'Content-Range'  => "bytes {$start}-{$end}/{$size}",
+        ]);
     }
 
     /** Set the logged-in human agent's presence (online/away/offline). */
@@ -1419,6 +1760,10 @@ class ChatController extends Controller
     public function resolve(Request $request, Client $client, int $sessionId): JsonResponse
     {
         $project = $this->guard($client, (int) $request->input('project_id'));
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'resolve')) {
+            return $deny;
+        }
         $session = $this->session($project, $sessionId);
         $session->handoff_status = 'resolved';
         $session->update_at = time();
@@ -1555,6 +1900,9 @@ class ChatController extends Controller
             'note'        => data_get($m->metadata, 'note'),
             'content'     => $m->content,
             'reply'       => data_get($m->metadata, 'reply_to'),
+            // sent | delivered | read | failed — only ever set on outbound.
+            'delivery'    => data_get($m->metadata, 'delivery'),
+            'delivery_error' => data_get($m->metadata, 'delivery_error'),
             'edited'      => (bool) data_get($m->metadata, 'edited'),
             'attachments' => array_map(function ($a, $i) use ($sessionId, $m) {
                 // Public URLs (Messenger CDN, demo assets) render directly;
@@ -1591,8 +1939,14 @@ class ChatController extends Controller
      * A WhatsApp id is the exception: it IS the phone number, so it is
      * genuinely useful and gets formatted rather than hidden.
      */
-    private function contactName(Session $session): string
+    private function contactName(Session $session, ?Contact $contact = null): string
     {
+        // The contact record wins. It is the only name a person can edit, so
+        // reading the session's copy first would mean a correction typed in
+        // the profile panel silently did nothing to the inbox.
+        if ($contact && ($name = trim((string) $contact->name))) {
+            return $name;
+        }
         if ($name = trim((string) $session->customer_name)) {
             return $name;
         }
@@ -1620,9 +1974,11 @@ class ChatController extends Controller
      * before ContactAvatars existed is now a broken image, and rendering it
      * looks worse than rendering the placeholder.
      */
-    private function avatarUrl(array $meta): ?string
+    private function avatarUrl(array $meta, ?Contact $contact = null): ?string
     {
-        return $meta['avatar'] ?? null;
+        // Same precedence as the name: an uploaded photo is a deliberate
+        // choice and must outrank whatever Meta last supplied.
+        return ($contact && $contact->avatar) ? $contact->avatar : ($meta['avatar'] ?? null);
     }
 
     /** Display name of the Page / number this conversation arrived on. */

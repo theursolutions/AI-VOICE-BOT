@@ -154,17 +154,108 @@ used, and test credentials that don't work.
 
 ---
 
-## 4. Embedded Signup (after approval)
+## 4. Getting a real WhatsApp number live
 
-Requires **Tech Provider** status: App → **WhatsApp → Embedded Signup**.
+Meta's test number can only message five hard-coded recipients. Everything
+below is about a number customers can actually write to.
 
-Create a configuration, copy its id, and set:
+The order matters — each step is gated by the one above it.
+
+### 4.1 Add the number to the WABA
+
+**WhatsApp Manager → Phone numbers → Add phone number.**
+
+The number must NOT be registered on WhatsApp anywhere else. A number in use
+on the WhatsApp Business *app* has to be deleted from that app first, which
+loses its chat history. There is no way around this without **Coexistence**,
+which needs Tech Provider status (see 4.5).
+
+### 4.2 Verify it
+
+Meta sends an SMS or places a voice call. The number has to be able to
+receive one at the moment you click — this is not a code you can request
+later.
+
+### 4.3 Set two-step verification
+
+**WhatsApp Manager → the number → Two-step verification.** Pick a 6-digit
+PIN and *record it*. It is required by the next step and there is no way to
+read it back.
+
+### 4.4 Register the number for Cloud API
+
+**This is the step everyone misses.** Verified is not the same as
+registered: an unregistered number appears in Graph, shows up in our Channels
+page, and silently cannot send a single message.
+
+`OAuthService::registerPhoneNumber($phoneNumberId, $pin, $token)` performs
+it. **It is not wired to any UI yet** — see §5b. Until it is, register with:
+
+```bash
+curl -X POST "https://graph.facebook.com/v21.0/<PHONE_NUMBER_ID>/register" \
+  -H "Authorization: Bearer <ACCESS_TOKEN>" \
+  -d "messaging_product=whatsapp" \
+  -d "pin=<6-DIGIT-PIN>"
+```
+
+### 4.5 The rest, in order of how long they take
+
+| | Why it blocks you |
+|---|---|
+| **Business Verification** | Gates everything below. Start it first — it is measured in weeks. |
+| **Display name approval** | The name customers see. Rejected names block sending. |
+| **Payment method on the WABA** | Beyond the free tier, sends fail without one. |
+| **App Review → Advanced Access** | Until granted, only people with a role on the app can be messaged. |
+| **Tech Provider status** | Unlocks Embedded Signup *and* Coexistence. |
+
+---
+
+## 4a. Embedded Signup
+
+Requires **Tech Provider** or Solution Partner status. Note the config does
+NOT live under the WhatsApp product, which is where the old version of this
+doc sent people.
+
+**App Dashboard → Facebook Login for Business → Configurations → Create
+configuration:**
+
+| Field | Value |
+|---|---|
+| Login method | **WhatsApp Embedded Signup** |
+| Access token | 60 days |
+| Assets | WhatsApp Account |
+| Permissions | `whatsapp_business_management`, `whatsapp_business_messaging` |
+
+Then **Facebook Login for Business → Settings → Client OAuth Settings** —
+both toggles to Yes, and add the site to BOTH:
+
+- Valid OAuth Redirect URIs
+- **Allowed Domains for the JavaScript SDK** ← omit this and `FB.login()`
+  fails silently in the browser with nothing in the console worth reading
+
+Copy the configuration id and set:
 ```dotenv
 META_WA_CONFIG_ID=<configuration id>
 ```
 
 That single variable switches `Connect WhatsApp` from the redirect flow to
-the popup. Nothing else changes — no deploy of code, no UI work.
+the popup. No code change, no UI work — the launcher already falls back when
+it is absent.
+
+> **Deadline:** Embedded Signup **v2 is deprecated 15 October 2026**. Our
+> launcher sends `sessionInfoVersion: '3'`; re-check the parameter list
+> against Meta's docs before relying on it past that date.
+
+### Coexistence — worth knowing before you sell it
+
+Coexistence lets a customer keep their WhatsApp Business *app* AND the Cloud
+API on one number, syncing contacts and ~180 days of history. For SMEs who
+all run the Business app, this removes the single biggest objection.
+
+It also **disables features we already support**: WhatsApp calling (our
+`answerCall` path) and catalogs/orders (`sendProduct`, `sendProductList`).
+Throughput is capped at 20 messages/second. Decide which matters more per
+customer before enabling it.
 
 ---
 

@@ -341,6 +341,12 @@ Route::middleware(['auth', 'active.client'])
         Route::post('/chat/{sessionId}/toggle-bot',     [App\Http\Controllers\Admin\ChatController::class, 'toggleBot'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.toggle-bot');
         Route::post('/chat/presence',                   [App\Http\Controllers\Admin\ChatController::class, 'presence'])->name('chat.presence');
 
+        // Contact profile — the person behind the conversation, across every
+        // channel they have ever used.
+        Route::get  ('/chat/{sessionId}/contact', [App\Http\Controllers\Admin\ChatController::class, 'contact'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.contact');
+        Route::post ('/chat/contacts/{id}',       [App\Http\Controllers\Admin\ChatController::class, 'updateContact'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.contact.update');
+        Route::post ('/chat/contacts/{id}/merge', [App\Http\Controllers\Admin\ChatController::class, 'mergeContact'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.contact.merge');
+
         // Conversation statuses — customer-defined labels, managed from the
         // inbox itself rather than a separate settings page: they are only
         // ever edited while looking at the conversations they describe.
@@ -377,6 +383,10 @@ Route::middleware(['auth', 'active.client'])
         // Conversation Flow builder (per-project)
         Route::get   ('/flows',                            [App\Http\Controllers\Admin\FlowWebController::class, 'index'])->name('flows.index');
         Route::post  ('/flows',                            [App\Http\Controllers\Admin\FlowWebController::class, 'store'])->name('flows.store');
+        // AI flow builder. Declared before /flows/{id} so "ai" is never
+        // swallowed by the id pattern.
+        Route::post  ('/flows/ai/plan',                    [App\Http\Controllers\Admin\FlowWebController::class, 'aiPlan'])->name('flows.ai-plan');
+        Route::post  ('/flows/ai/create',                  [App\Http\Controllers\Admin\FlowWebController::class, 'aiCreate'])->name('flows.ai-create');
         Route::get   ('/flows/{id}/editor',                [App\Http\Controllers\Admin\FlowWebController::class, 'editor'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('flows.editor');
         Route::get   ('/flows/{id}/definition',            [App\Http\Controllers\Admin\FlowWebController::class, 'definition'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('flows.definition');
         Route::put   ('/flows/{id}/definition',            [App\Http\Controllers\Admin\FlowWebController::class, 'saveDefinition'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('flows.save-definition');
@@ -423,6 +433,17 @@ Route::middleware(['auth', 'active.client'])
         // Conversations (sessions + messages)
         Route::get   ('/sessions',                         [App\Http\Controllers\Admin\SessionWebController::class, 'index'])->name('sessions.index');
         Route::get   ('/sessions/{id}',                    [App\Http\Controllers\Admin\SessionWebController::class, 'show'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('sessions.show');
+
+        // Contacts — one row per PERSON, across every channel they use.
+        // Distinct from Leads, which is one row per captured opportunity.
+        Route::get   ('/contacts',                         [App\Http\Controllers\Admin\ContactWebController::class, 'index'])->name('contacts.index');
+        // The common detail page — opened from the contacts list, from a
+        // lead, and from the inbox.
+        // Hashid::ROUTE_PATTERN, not [0-9]+ — ids are hashid-encoded in URLs
+        // and DecodeHashids turns them back into integers before the
+        // controller sees them. A numeric-only constraint simply never
+        // matched, which is a 404 rather than an error.
+        Route::get   ('/contacts/{id}',                    [App\Http\Controllers\Admin\ContactWebController::class, 'show'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('contacts.show');
 
         // Leads (extracted from conversations)
         Route::get   ('/leads',                            [App\Http\Controllers\Admin\LeadWebController::class, 'index'])->name('leads.index');

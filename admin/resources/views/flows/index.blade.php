@@ -113,8 +113,11 @@
                 <i data-lucide="git-branch" class="w-4 h-4 inline -mt-0.5 mr-1"></i>
                 Flows · {{ $project->name }}
             </h2>
-            <button type="button" class="btn btn-primary ml-auto" data-tva-modal-open="flow-create">
+            <button type="button" class="btn btn-secondary ml-auto" data-tva-modal-open="flow-create">
                 <i data-lucide="plus" class="w-4 h-4 mr-1 inline"></i> New flow
+            </button>
+            <button type="button" class="btn btn-primary ml-2" data-tva-modal-open="flow-ai">
+                <i data-lucide="wand" class="w-4 h-4 mr-1 inline"></i> Build with AI
             </button>
         </div>
 
@@ -156,6 +159,15 @@
                     </div>
                 </div>
                 <div class="flex items-center gap-1">
+                    {{-- Change an existing flow in plain language: "add option 4
+                         for careers". The current graph is sent along, so the AI
+                         edits it rather than starting over. --}}
+                    <button type="button" class="btn btn-secondary btn-sm"
+                            data-ai-edit="{{ $flow->id }}"
+                            data-ai-name="{{ $flow->name }}"
+                            data-ai-language="{{ $flow->language }}">
+                        <i data-lucide="wand" class="w-3 h-3 inline mr-1"></i> Edit with AI
+                    </button>
                     <a href="{{ route('flows.editor', ['client' => $client->slug, 'id' => $flow->id]) }}?project_id={{ hashid($project->id) }}"
                        class="btn btn-primary btn-sm">
                         <i data-lucide="pencil" class="w-3 h-3 inline mr-1"></i> Open editor
@@ -219,6 +231,103 @@
     </form>
 </div>
 
+{{-- ── Build with AI ────────────────────────────────────────────────
+     Two steps on purpose: generate → review → create. The customer sees
+     the summary, the assumptions and (critically) what could NOT be built
+     before anything is written. Creating sends back the exact graph that
+     was previewed, so the flow they approved is the flow they get. --}}
+<div id="flow-ai" class="tva-modal" hidden>
+    <div class="tva-modal__backdrop" data-tva-modal-close></div>
+    <div class="tva-modal__panel" style="max-width:720px;">
+        <div class="tva-modal__head">
+            <i data-lucide="wand" class="w-4 h-4 mr-2 inline" style="color:#6366f1;"></i>
+            <span id="ai-title">Build a flow with AI</span>
+            <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+        <div class="tva-modal__body">
+            <div class="aiv aiv--info" id="ai-editing-note" hidden>
+                <i data-lucide="pencil" class="w-3.5 h-3.5 inline -mt-0.5"></i>
+                Editing <b id="ai-editing-name"></b>. Describe only what should change — everything
+                else stays as it is.
+            </div>
+
+            <div class="mb-3" id="ai-name-row">
+                <label class="form-label">Flow name <span class="text-danger">*</span></label>
+                <input type="text" id="ai-name" required maxlength="160" class="form-control"
+                       placeholder="After-hours support">
+            </div>
+
+            <div class="mb-3" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div>
+                    <label class="form-label">Where does this run? <span class="text-danger">*</span></label>
+                    <select id="ai-channel" class="form-select">
+                        <option value="chat">Chat — website widget, WhatsApp, Messenger, Instagram</option>
+                        <option value="voice">Voice — inbound phone calls</option>
+                    </select>
+                    <small class="text-slate-500 text-xs">
+                        Phone calls support fewer step types. Choosing correctly is what lets the AI
+                        warn you instead of building something that would drop the call.
+                    </small>
+                </div>
+                <div id="ai-language-row">
+                    <label class="form-label">Primary language</label>
+                    <select id="ai-language" class="form-select">
+                        <option value="en">English</option>
+                        <option value="ur">Urdu</option>
+                        <option value="hi">Hindi</option>
+                        <option value="es">Spanish</option>
+                        <option value="ar">Arabic</option>
+                        <option value="fr">French</option>
+                        <option value="de">German</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label class="form-label" id="ai-brief-label">Describe the flow <span class="text-danger">*</span></label>
+                <textarea id="ai-brief" class="form-control" rows="6" maxlength="4000"></textarea>
+                <small class="text-slate-500 text-xs" id="ai-brief-hint">
+                    Write it the way you'd explain it to a new receptionist. Say what should happen
+                    when someone picks nothing or goes quiet.
+                </small>
+            </div>
+
+            {{-- One click fills the box with a worked example. Staring at an
+                 empty textarea is the main reason this kind of feature goes
+                 unused. --}}
+            <div class="mb-3" id="ai-examples" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+            <div id="ai-result" hidden></div>
+        </div>
+        <div class="tva-modal__foot">
+            <button type="button" class="btn btn-secondary" data-tva-modal-close>Cancel</button>
+            <button type="button" class="btn btn-secondary" id="ai-generate">
+                <i data-lucide="wand" class="w-4 h-4 mr-1 inline"></i> Generate
+            </button>
+            <button type="button" class="btn btn-primary" id="ai-create" hidden></button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .aiv { border-radius:10px; padding:12px 14px; margin-bottom:10px; font-size:12.5px; line-height:1.55; }
+    .aiv--ok   { background:#f0fdf4; border:1px solid #bbf7d0; color:#14532d; }
+    .aiv--warn { background:#fffbeb; border:1px solid #fde68a; color:#78350f; }
+    .aiv--err  { background:#fef2f2; border:1px solid #fecaca; color:#7f1d1d; }
+    .aiv--info { background:#f8fafc; border:1px solid #e2e8f0; color:#334155; }
+    .aiv h4 { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; margin:0 0 6px; }
+    .aiv ol, .aiv ul { margin:0; padding-left:18px; }
+    .aiv li { margin-bottom:3px; }
+    .aiv__gap { padding:8px 0; border-bottom:1px dashed rgba(0,0,0,.12); }
+    .aiv__gap:last-child { border-bottom:none; }
+    .aiv__gap b { display:block; }
+    .aiv__gap span { display:block; opacity:.85; }
+    html.dark .aiv--ok   { background:#052e16; border-color:#166534; color:#bbf7d0; }
+    html.dark .aiv--warn { background:#3b2503; border-color:#92400e; color:#fde68a; }
+    html.dark .aiv--err  { background:#450a0a; border-color:#991b1b; color:#fecaca; }
+    html.dark .aiv--info { background:#0f172a; border-color:#334155; color:#cbd5e1; }
+</style>
+
 @include('skills._modal_css')
 
 <script>
@@ -230,4 +339,299 @@
         if (close) { var modal = close.closest('.tva-modal'); if (modal) modal.setAttribute('hidden',''); }
     });
 </script>
+
+@if ($project)
+<script>
+/* ── AI flow builder ──────────────────────────────────────────────────
+   Two modes through one modal:
+     create — describe a flow → preview → save as a new draft
+     revise — "add option 4 for careers" → preview → overwrite the graph
+   Both go: generate, show what was built AND what could not be, then
+   write. Nothing is saved until the customer has read the report. */
+(function () {
+    var CSRF      = '{{ csrf_token() }}';
+    var PROJECT   = '{{ hashid($project->id) }}';
+    var PLAN_URL  = '{{ route('flows.ai-plan',   ['client' => $client->slug]) }}';
+    var CREATE_URL= '{{ route('flows.ai-create', ['client' => $client->slug]) }}';
+    var SAVE_TPL  = '{{ route('flows.save-definition', ['client' => $client->slug, 'id' => 'FLOWID']) }}';
+    var EDITOR_TPL= '{{ route('flows.editor', ['client' => $client->slug, 'id' => 'FLOWID']) }}?project_id=' + PROJECT;
+
+    var modal   = document.getElementById('flow-ai');
+    if (!modal) return;
+
+    var elTitle = document.getElementById('ai-title');
+    var elNote  = document.getElementById('ai-editing-note');
+    var elNoteNm= document.getElementById('ai-editing-name');
+    var elNameRow = document.getElementById('ai-name-row');
+    var elLangRow = document.getElementById('ai-language-row');
+    var elName  = document.getElementById('ai-name');
+    var elChan  = document.getElementById('ai-channel');
+    var elLang  = document.getElementById('ai-language');
+    var elBrief = document.getElementById('ai-brief');
+    var elLabel = document.getElementById('ai-brief-label');
+    var elHint  = document.getElementById('ai-brief-hint');
+    var elEx    = document.getElementById('ai-examples');
+    var elResult= document.getElementById('ai-result');
+    var btnGen  = document.getElementById('ai-generate');
+    var btnGo   = document.getElementById('ai-create');
+
+    var mode = 'create';        // 'create' | 'revise'
+    var flowId = null;
+    var plan = null;            // last previewed plan — what gets saved
+
+    /* Re-render icons after injecting markup. Icons only exist as <i
+       data-lucide="…"> until createIcons() swaps them for <svg>, so anything
+       written with innerHTML after page load needs this call.
+
+       Passing the icon set explicitly rather than calling createIcons() bare:
+       the UMD global loaded by the theme defaults it, but lucide's ESM entry
+       throws without it, so this works either way.
+
+       NOTE: the icon name must exist in the theme's compiled bundle
+       (public/assets/dist/js/app.js — 585 icons, NOT the full lucide set).
+       A missing name silently leaves an empty <i>, which is how `sparkles`
+       rendered as nothing here. Check before using a new one:
+         grep -o -E 'icons/[a-z0-9-]+\.js' public/assets/dist/js/app.js */
+    function ricons() {
+        try {
+            var L = window.lucide;
+            if (L && L.createIcons) L.createIcons({ icons: (L.icons || {}), nameAttr: 'data-lucide' });
+        } catch (_) {}
+    }
+
+    var EXAMPLES = {
+        create: [
+            ['Phone menu', 'Greet the caller warmly. Then offer a menu: 1 for sales, 2 for support, 3 for opening hours. Sales and support hand over to the AI agent. For opening hours, read them out and end the call politely. If they press nothing, repeat the menu once, then say goodbye.'],
+            ['Capture a lead', 'Say hello and explain we can send a brochure on WhatsApp. Ask for their name, then their WhatsApp number. Send them the brochure on WhatsApp, confirm it has been sent, and end.'],
+            ['Book a callback', 'Greet them, ask what they need help with, then take their name and phone number and tell them a member of the team will call back within one business hour.'],
+            ['Out of hours', 'Tell the caller we are closed right now and give our opening hours. Offer: press 1 to leave a callback number, or 2 to speak to the AI assistant instead.']
+        ],
+        revise: [
+            ['Add a menu option', 'Add a fourth option to the main menu: press 4 for careers, which reads out our jobs page address and ends the call.'],
+            ['Friendlier wording', 'Keep the structure exactly the same but make all the wording warmer and less formal.'],
+            ['Handle timeouts', 'If the caller presses nothing on the menu, repeat it once and then transfer to the AI agent instead of hanging up.'],
+            ['Translate', 'Keep the same structure but rewrite every message in Urdu.']
+        ]
+    };
+
+    function renderExamples() {
+        elEx.innerHTML = '';
+        EXAMPLES[mode].forEach(function (pair) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'btn btn-secondary btn-sm';
+            b.style.fontSize = '11px';
+            b.textContent = pair[0];
+            b.addEventListener('click', function () { elBrief.value = pair[1]; elBrief.focus(); });
+            elEx.appendChild(b);
+        });
+    }
+
+    function setMode(next, opts) {
+        mode = next;
+        plan = null;
+        flowId = opts && opts.flowId ? opts.flowId : null;
+        elResult.hidden = true;
+        elResult.innerHTML = '';
+        btnGo.hidden = true;
+        elBrief.value = '';
+
+        var revising = mode === 'revise';
+        elTitle.textContent = revising ? 'Edit this flow with AI' : 'Build a flow with AI';
+        elNote.hidden       = !revising;
+        elNameRow.hidden    = revising;   // renaming is a separate action
+        elLangRow.hidden    = revising;
+        elLabel.innerHTML   = revising
+            ? 'What should change? <span class="text-danger">*</span>'
+            : 'Describe the flow <span class="text-danger">*</span>';
+        elHint.textContent  = revising
+            ? 'Plain language is fine — "add option 4 for careers", or "make the greeting shorter".'
+            : "Write it the way you'd explain it to a new receptionist. Say what should happen when someone picks nothing or goes quiet.";
+        btnGen.innerHTML    = '<i data-lucide="wand" class="w-4 h-4 mr-1 inline"></i> '
+                            + (revising ? 'Preview changes' : 'Generate');
+        // innerHTML, not textContent — textContent would strip the icon markup
+        // before ricons() ever saw it.
+        btnGo.innerHTML     = revising
+            ? '<i data-lucide="check" class="w-4 h-4 mr-1 inline"></i> Apply changes'
+            : '<i data-lucide="arrow-right" class="w-4 h-4 mr-1 inline"></i> Create flow + open editor';
+
+        if (revising && opts) {
+            elNoteNm.textContent = opts.name || 'this flow';
+            if (opts.language) elLang.value = opts.language;
+        }
+
+        renderExamples();
+        ricons();
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+        });
+    }
+
+    function block(kind, title, inner) {
+        return '<div class="aiv aiv--' + kind + '"><h4>' + esc(title) + '</h4>' + inner + '</div>';
+    }
+
+    function list(items) {
+        return '<ul>' + items.map(function (i) { return '<li>' + esc(i) + '</li>'; }).join('') + '</ul>';
+    }
+
+    /* The result panel is the whole point of the feature: it says what was
+       built, what was assumed, and — most importantly — what could NOT be
+       built and what to do instead. */
+    function render(p) {
+        var html = '';
+
+        if (p.errors && p.errors.length) {
+            html += block('err', "Couldn't build this flow", list(p.errors)
+                + '<div style="margin-top:6px;">Try describing it differently, or split it into a simpler flow.</div>');
+        }
+
+        if (p.ok) {
+            var body = p.summary ? '<div style="margin-bottom:6px;">' + esc(p.summary) + '</div>' : '';
+            if (p.steps && p.steps.length) {
+                body += '<ol>' + p.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>';
+            }
+            html += block('ok', mode === 'revise' ? 'Updated flow' : 'Flow ready', body);
+        }
+
+        if (p.gaps && p.gaps.length) {
+            html += block('warn', "What couldn't be done — and what to do instead",
+                p.gaps.map(function (g) {
+                    return '<div class="aiv__gap"><b>' + esc(g.cannot) + '</b>'
+                        + (g.because ? '<span>Why: ' + esc(g.because) + '</span>' : '')
+                        + (g.instead ? '<span><b>Instead:</b> ' + esc(g.instead) + '</span>' : '')
+                        + '</div>';
+                }).join(''));
+        }
+
+        if (p.assumptions && p.assumptions.length) {
+            html += block('info', 'Assumptions made', list(p.assumptions));
+        }
+
+        if (p.warnings && p.warnings.length) {
+            html += block('warn', 'Worth checking', list(p.warnings));
+        }
+
+        elResult.innerHTML = html || block('info', 'No result', '<div>The AI returned nothing to show.</div>');
+        elResult.hidden = false;
+        btnGo.hidden = !p.ok;
+        ricons();
+    }
+
+    function busy(btn, on, label) {
+        btn.disabled = on;
+        if (on) { btn.dataset.prev = btn.innerHTML; btn.textContent = label; }
+        else if (btn.dataset.prev) { btn.innerHTML = btn.dataset.prev; }
+    }
+
+    function post(url, payload) {
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': CSRF
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(payload)
+        }).then(function (r) {
+            return r.json().catch(function () { return {}; })
+                .then(function (b) { return { status: r.status, body: b }; });
+        });
+    }
+
+    btnGen.addEventListener('click', function () {
+        var brief = elBrief.value.trim();
+        if (brief.length < 10) {
+            elResult.innerHTML = block('err', 'Tell us a bit more',
+                '<div>Describe the flow in a sentence or two so the AI has something to work from.</div>');
+            elResult.hidden = false;
+            return;
+        }
+        if (mode === 'create' && !elName.value.trim()) {
+            elName.focus();
+            return;
+        }
+
+        busy(btnGen, true, 'Thinking… this can take a moment');
+        btnGo.hidden = true;
+        elResult.hidden = true;
+
+        post(PLAN_URL, {
+            project_id: PROJECT,
+            brief: brief,
+            channel: elChan.value,
+            flow_id: mode === 'revise' ? flowId : null
+        }).then(function (r) {
+            busy(btnGen, false);
+            plan = r.body && r.body.definition ? r.body : null;
+            render(r.body || { errors: ['No response from the server.'] });
+        }).catch(function () {
+            busy(btnGen, false);
+            render({ errors: ['Could not reach the server. Please try again.'] });
+        });
+    });
+
+    btnGo.addEventListener('click', function () {
+        if (!plan || !plan.definition) return;
+        busy(btnGo, true, 'Saving…');
+
+        if (mode === 'revise') {
+            // Same endpoint the visual editor saves through — an AI edit is
+            // just another way of producing a graph, not a separate path.
+            post(SAVE_TPL.replace('FLOWID', flowId), {
+                project_id: PROJECT,
+                definition: plan.definition
+            }).then(function (r) {
+                if (r.status === 200 && r.body && r.body.ok) {
+                    window.location = EDITOR_TPL.replace('FLOWID', flowId);
+                } else {
+                    busy(btnGo, false);
+                    render({ errors: ['Could not save the changes. Please try again.'] });
+                }
+            });
+            return;
+        }
+
+        post(CREATE_URL, {
+            project_id: PROJECT,
+            name: elName.value.trim(),
+            brief: elBrief.value.trim(),
+            channel: elChan.value,
+            language: elLang.value,
+            summary: plan.summary || '',
+            definition: plan.definition        // save exactly what was previewed
+        }).then(function (r) {
+            if (r.status === 200 && r.body && r.body.editor_url) {
+                window.location = r.body.editor_url;
+            } else {
+                busy(btnGo, false);
+                render(r.body || { errors: ['Could not create the flow.'] });
+            }
+        });
+    });
+
+    document.addEventListener('click', function (e) {
+        var edit = e.target.closest('[data-ai-edit]');
+        if (edit) {
+            setMode('revise', {
+                flowId: edit.dataset.aiEdit,
+                name: edit.dataset.aiName,
+                language: edit.dataset.aiLanguage
+            });
+            modal.removeAttribute('hidden');
+            setTimeout(function () { elBrief.focus(); }, 50);
+            return;
+        }
+        var open = e.target.closest('[data-tva-modal-open="flow-ai"]');
+        if (open) setMode('create');
+    });
+
+    setMode('create');
+})();
+</script>
+@endif
 @endsection

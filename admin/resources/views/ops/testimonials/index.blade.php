@@ -272,7 +272,7 @@
 
 <script>
 (function () {
-    if (window.lucide?.createIcons) window.lucide.createIcons();
+    if (window.lucide?.createIcons) { try { window.lucide.createIcons({ icons: (window.lucide.icons || {}), nameAttr: "data-lucide" }); } catch (_) {} }
 
     document.querySelectorAll('[data-ts-edit]').forEach(function (btn) {
         btn.addEventListener('click', function () {

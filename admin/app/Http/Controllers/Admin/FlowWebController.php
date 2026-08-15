@@ -2,11 +2,16 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Flow\NodeCatalog;
 use App\Http\Controllers\Controller;
+use App\Models\BotAgent;
 use App\Models\Client;
+use App\Models\DataSource;
 use App\Models\Flow;
 use App\Models\Project;
 use App\Models\Session;
+use App\Services\Flow\FlowPlanner;
+use App\Services\Flow\FlowValidator;
 use App\Services\Flow\WebFlowRunner;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Http\JsonResponse;
@@ -24,11 +29,18 @@ use Illuminate\View\View;
  *   PUT    /c/{slug}/flows/{id}/definition   JSON — editor saves on save
  *   PATCH  /c/{slug}/flows/{id}              rename / change status
  *   DELETE /c/{slug}/flows/{id}              soft-delete
+ *   POST   /c/{slug}/flows/ai/plan           JSON — draft a graph from a description
+ *   POST   /c/{slug}/flows/ai/create         create a flow from a description
  *
  * Definition format is the React-Flow shape (nodes[] + edges[] + settings).
  * No server-side schema validation beyond "is it an array" — the editor
  * is the source of truth for the graph shape. Reduces churn while
  * we're iterating on node types.
+ *
+ * The AI routes are the exception: anything a model writes is checked against
+ * App\Flow\NodeCatalog by FlowValidator before it can be persisted, because a
+ * generated graph has no human in the loop to notice that a branch points at
+ * a handle which doesn't exist.
  */
 class FlowWebController extends Controller
 {
@@ -231,6 +243,125 @@ class FlowWebController extends Controller
         $projects = Project::where('client_id', $client->id)->pluck('id');
 
         return $projects->count() === 1 ? (int) $projects->first() : 0;
+    }
+
+    // ── AI flow builder ──────────────────────────────────────────────
+
+    /**
+     * POST /c/{slug}/flows/ai/plan
+     *
+     * Draft a graph from a plain-language brief. Deliberately does NOT save:
+     * the customer reads the summary and the gap report first, then either
+     * creates the flow or reworks the brief. `flow_id` revises an existing
+     * flow instead of starting fresh.
+     */
+    public function aiPlan(Request $request, Client $client, FlowPlanner $planner): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'brief'      => 'required|string|min:10|max:4000',
+            'channel'    => 'nullable|in:voice,chat',
+            'flow_id'    => 'nullable|integer',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+        $channel = $data['channel'] ?? NodeCatalog::CHANNEL_CHAT;
+
+        // Revising: hand the planner the current graph so it edits rather
+        // than replaces, and the customer keeps the work already done.
+        $existing = null;
+        if (! empty($data['flow_id'])) {
+            $flow = Flow::where('id', (int) $data['flow_id'])
+                ->where('project_id', $project->id)
+                ->first();
+            $existing = is_array($flow?->definition) ? $flow->definition : null;
+        }
+
+        $plan = $planner->plan($project, $data['brief'], $channel, $existing);
+
+        return response()->json($plan, $plan['ok'] ? 200 : 422);
+    }
+
+    /**
+     * POST /c/{slug}/flows/ai/create
+     *
+     * Plan and, if the graph is valid, persist it as a draft so the customer
+     * lands in the normal editor with it on the canvas. Always a draft:
+     * activation stays a deliberate human act (see Flow::activationErrors).
+     */
+    public function aiCreate(
+        Request $request,
+        Client $client,
+        FlowPlanner $planner,
+        FlowValidator $validator,
+    ): JsonResponse {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'name'       => 'required|string|max:160',
+            'brief'      => 'required|string|min:10|max:4000',
+            'channel'    => 'nullable|in:voice,chat',
+            'language'   => 'nullable|string|max:16',
+            // The graph the customer just previewed and approved.
+            'definition' => 'nullable|array',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+        $channel = $data['channel'] ?? NodeCatalog::CHANNEL_CHAT;
+
+        if (is_array($data['definition'] ?? null)) {
+            // Save what they approved. Re-planning here would quietly produce
+            // a DIFFERENT flow from the one shown in the preview — same brief,
+            // new generation. Re-validated because it arrived over the wire.
+            $check = $validator->validate($data['definition'], [
+                'channel'    => $channel,
+                'source_ids' => DataSource::where('project_id', $project->id)->pluck('id')->all(),
+                'agent_ids'  => BotAgent::where('project_id', $project->id)->pluck('id')->all(),
+            ]);
+
+            $plan = [
+                'ok'       => $check['ok'],
+                'definition' => $check['definition'],
+                'summary'  => (string) $request->input('summary', ''),
+                'steps'    => [], 'gaps' => [], 'assumptions' => [],
+                'warnings' => $check['warnings'],
+                'errors'   => $check['errors'],
+                'repaired' => false,
+            ];
+        } else {
+            $plan = $planner->plan($project, $data['brief'], $channel);
+        }
+
+        if (! $plan['ok'] || ! is_array($plan['definition'])) {
+            return response()->json($plan, 422);
+        }
+
+        $now  = time();
+        $lang = $data['language'] ?? 'en';
+
+        $definition = $plan['definition'];
+        $definition['settings']['language'] = $lang;
+
+        $flow = Flow::create([
+            'project_id' => $project->id,
+            'name'       => $data['name'],
+            'slug'       => Flow::generateSlug($data['name'], $project->id),
+            'status'     => Flow::STATUS_DRAFT,
+            'language'   => $lang,
+            'definition' => $definition,
+            'version'    => 1,
+            'description'=> mb_substr($plan['summary'] ?: $data['brief'], 0, 500),
+            'created_at' => $now,
+            'update_at'  => $now,
+        ]);
+
+        return response()->json($plan + [
+            'flow_id'     => $flow->id,
+            'editor_url'  => route('flows.editor', [
+                'client'     => $client->slug,
+                'id'         => $flow->id,
+                'project_id' => $project->id,
+            ]),
+        ]);
     }
 
     private function guard(Client $client, int $projectId): Project

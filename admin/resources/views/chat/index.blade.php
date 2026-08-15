@@ -176,7 +176,10 @@
     .tva-search { position:relative; margin-top:9px; }
     .tva-search > i, .tva-search > svg { position:absolute; left:11px; top:50%; transform:translateY(-50%); width:15px; height:15px; color:#94a3b8; pointer-events:none; z-index:1; }
     .tva-search input { padding-left:34px !important; }
-    .tva-chat__convos { overflow-y:auto; flex:1 1 auto; min-height:0; }
+    /* overflow-x:hidden, not auto. A long row tag or customer name would
+       otherwise mint a horizontal scrollbar across the whole list — the one
+       visible under the conversations in the reported screenshot. */
+    .tva-chat__convos { overflow-y:auto; overflow-x:hidden; flex:1 1 auto; min-height:0; }
     .tva-convo { display:flex; gap:10px; padding:11px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9; align-items:center; }
     html.dark .tva-convo { border-bottom-color:#1e293b; }
     .tva-convo:hover { background:#f8fafc; } html.dark .tva-convo:hover { background:#1e293b; }
@@ -317,6 +320,13 @@
     html.dark .tva-tag { background:#0f172a; border-color:#334155; color:#94a3b8; }
 
 
+    /* Delivery ticks. Blue only on `read` — the one state the customer's own
+       WhatsApp also shows in blue, so the meaning transfers without a legend. */
+    .tva-tick { margin-left:4px; letter-spacing:-1px; opacity:.65; }
+    .tva-tick--read { color:#38bdf8; opacity:1; }
+    .tva-tick--fail { color:#dc2626; opacity:1; font-weight:700; letter-spacing:0;
+                      margin-left:5px; cursor:help; }
+
     /* ── Thread events (transfers) ─────────────────────────────────
        A rule across the full width with the event floated in the middle: it
        belongs to neither party, so it sits on neither side. */
@@ -396,11 +406,161 @@
                    border:1px solid #fecaca; border-radius:7px; padding:6px 9px; }
     html.dark .tva-sm__err { background:#450a0a; border-color:#7f1d1d; color:#fecaca; }
 
+    /* ── Contact profile column ───────────────────────────────────── */
+    .tva-cp { width:320px; flex:0 0 320px; border-left:1px solid #e2e8f0; display:flex; flex-direction:column;
+              min-height:0; background:#fff; }
+    html.dark .tva-cp { background:#0f172a; border-left-color:#334155; }
+    .tva-cp__head { padding:11px 14px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center;
+                    font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+                    color:#64748b; flex:0 0 auto; }
+    html.dark .tva-cp__head { border-bottom-color:#334155; }
+    .tva-cp__x { margin-left:auto; border:none; background:transparent; color:#94a3b8; cursor:pointer;
+                 padding:3px; border-radius:5px; line-height:0; }
+    .tva-cp__x:hover { background:#f1f5f9; color:#4f46e5; }
+    .tva-cp__x svg { width:14px !important; height:14px !important; }
+    .tva-cp__body { flex:1 1 auto; min-height:0; overflow-y:auto; padding:14px; }
+
+    .tva-cp__id { text-align:center; margin-bottom:14px; }
+    .tva-cp__av { width:66px; height:66px; border-radius:50%; margin:0 auto 9px; overflow:hidden;
+                  background:var(--tva-gradient); position:relative; cursor:pointer; }
+    .tva-cp__av img { width:100%; height:100%; object-fit:cover; }
+    /* Camera badge — only on hover, so the photo stays a photo until you
+       reach for it. */
+    .tva-cp__cam { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+                   background:rgba(15,23,42,.55); color:#fff; opacity:0; transition:opacity .14s; }
+    .tva-cp__av:hover .tva-cp__cam { opacity:1; }
+    .tva-cp__cam svg { width:20px !important; height:20px !important; }
+    .tva-cp__name { font-size:15px; font-weight:700; color:#0f172a; }
+    html.dark .tva-cp__name { color:#f1f5f9; }
+    .tva-cp__sub { font-size:11px; color:#94a3b8; margin-top:2px; }
+
+    .tva-cp__sec { margin-top:16px; }
+    .tva-cp__h { font-size:9px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+                 color:#94a3b8; margin-bottom:7px; }
+    .tva-cp__row { display:flex; align-items:center; gap:8px; font-size:12px; color:#334155;
+                   padding:5px 0; border-bottom:1px solid #f1f5f9; }
+    html.dark .tva-cp__row { color:#cbd5e1; border-bottom-color:#1e293b; }
+    .tva-cp__row b { margin-left:auto; font-variant-numeric:tabular-nums; }
+    .tva-cp__row svg { width:13px !important; height:13px !important; opacity:.6; flex-shrink:0; }
+
+    /* Engagement. The bar is the number; the reasons underneath are why —
+       a score an agent cannot interrogate gets over-trusted or ignored. */
+    .tva-cp__score { display:flex; align-items:baseline; gap:7px; margin-bottom:6px; }
+    .tva-cp__score b { font-size:22px; font-weight:800; line-height:1; }
+    .tva-cp__badge { font-size:9.5px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+                     padding:2px 7px; border-radius:999px; }
+    .tva-cp__badge--hot   { background:#fef2f2; color:#b91c1c; }
+    .tva-cp__badge--warm  { background:#fffbeb; color:#b45309; }
+    .tva-cp__badge--cold  { background:#eff6ff; color:#1d4ed8; }
+    .tva-cp__badge--unqualified { background:#f1f5f9; color:#64748b; }
+    .tva-cp__bar { height:5px; border-radius:99px; background:#e2e8f0; overflow:hidden; margin-bottom:8px; }
+    .tva-cp__bar i { display:block; height:100%; border-radius:99px; background:#4f46e5; }
+    .tva-cp__why { font-size:10.5px; color:#64748b; display:flex; gap:6px; padding:2px 0; }
+    .tva-cp__why span:first-child { font-weight:700; min-width:26px; color:#334155; }
+    html.dark .tva-cp__why span:first-child { color:#cbd5e1; }
+
+    .tva-cp__pill { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600;
+                    background:#f1f5f9; color:#475569; border-radius:999px; padding:3px 9px; margin:0 4px 4px 0; }
+    html.dark .tva-cp__pill { background:#1e293b; color:#cbd5e1; }
+    .tva-cp__merge { border:1px dashed #fde68a; background:#fffbeb; border-radius:8px; padding:8px 10px;
+                     font-size:11px; color:#92400e; margin-bottom:6px; }
+    .tva-cp__btn { border:1px solid #e2e8f0; background:#fff; color:#475569; font-size:11px; font-weight:600;
+                   border-radius:7px; padding:4px 9px; cursor:pointer; }
+    .tva-cp__btn:hover { border-color:#c7d2fe; color:#4f46e5; }
+    .tva-cp__lead { display:flex; align-items:center; gap:7px; font-size:11.5px; padding:6px 0;
+                    border-bottom:1px solid #f1f5f9; cursor:pointer; }
+    .tva-cp__lead:hover { color:#4f46e5; }
+
+    /* With the profile open the main column loses 320px, which is more than
+       the header's optional content is worth. The context metrics go; the
+       reply-window countdown stays, because it is the only one with a
+       deadline attached. Deterministic rather than a media query — what
+       matters is whether the panel is open, not how wide the screen is. */
+    .tva-chat.has-profile .tva-mx__c:not(.tva-mx__c--window) { display:none; }
+    .tva-chat.has-profile .tva-cs__btn { max-width:132px; }
+
+    @media (max-width: 1500px) {
+        /* Three columns stop fitting well before they stop fitting at all.
+           The profile floats over the thread rather than squeezing the
+           conversation into uselessness. */
+        .tva-cp { position:absolute; right:0; top:0; bottom:0; z-index:60;
+                  box-shadow:-12px 0 32px rgba(15,23,42,.14); }
+        .tva-chat { position:relative; }
+        /* Floating, so the header keeps its full width and its metrics. */
+        .tva-chat.has-profile .tva-mx__c:not(.tva-mx__c--window) { display:inline-flex; }
+    }
+    @media (max-width: 460px) {
+        .tva-cp { width:100%; flex-basis:100%; }
+    }
+
+    /* ── Mobile ───────────────────────────────────────────────────────
+       One pane at a time, the way every messaging app works: the list is
+       the page, tapping a conversation replaces it with the thread, and a
+       back arrow returns.
+
+       Entirely inside this media query, plus one class toggled on
+       `.tva-chat`. Desktop CSS is untouched — the two layouts never share a
+       rule, so nothing here can regress the three-column view. */
+    @media (max-width: 900px) {
+        /* dvh, not vh: mobile browser chrome collapses on scroll, and vh
+           measures the tallest state — so the composer sat below the fold
+           until the address bar happened to hide. */
+        .tva-chat { height: calc(100dvh - 150px); min-height:0; margin-top:10px; border-radius:12px; }
+
+        .tva-chat__list { width:100%; min-width:0; flex:1 1 auto; border-right:none; }
+        .tva-chat__main { display:none; }
+
+        /* A conversation is open: swap the panes. */
+        .tva-chat.is-thread-open .tva-chat__list { display:none; }
+        .tva-chat.is-thread-open .tva-chat__main { display:flex; flex:1 1 auto; }
+
+        .tva-chat__back { display:inline-flex; }
+
+        /* Touch targets and breathing room. 13px on a phone is a squint. */
+        .tva-chat__head { padding:10px 12px; gap:10px; }
+        .tva-chat__thread { padding:12px; }
+        .tva-msg { max-width:88%; }
+        .tva-chat__composer { padding:9px 10px; }
+        .tva-iconbtn { width:38px; height:38px; }
+        .tva-composer-row textarea { font-size:16px; }   /* <16px makes iOS zoom on focus */
+
+        /* The profile panel is already a full-width overlay below 460px;
+           make it one across the whole phone range. */
+        .tva-cp { position:absolute; inset:0; width:100%; flex-basis:100%; z-index:70; }
+
+        /* Header metrics never fit beside a name on a phone. The countdown
+           stays because it is the only one with a deadline. */
+        .tva-mx__c:not(.tva-mx__c--window) { display:none; }
+        .tva-cs__btn span { max-width:70px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    }
+
+    /* Back arrow: mobile only, and never rendered on desktop where the list
+       is always visible beside the thread. */
+    .tva-chat__back { display:none; align-items:center; justify-content:center;
+                      width:32px; height:32px; margin-right:-4px; flex-shrink:0;
+                      border:none; background:transparent; color:#64748b;
+                      border-radius:8px; cursor:pointer; }
+    .tva-chat__back:hover { background:#f1f5f9; color:#4f46e5; }
+    .tva-chat__back svg { width:19px !important; height:19px !important; }
+    html.dark .tva-chat__back:hover { background:#1e293b; }
+
     /* ── Main column ── */
     .tva-chat__main { flex:1 1 auto; display:flex; flex-direction:column; min-width:0; min-height:0; }
-    .tva-chat__head { padding:11px 16px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:12px; flex:0 0 auto; }
+    /* min-width:0 lets the identity block shrink instead of forcing the row
+       wider than the column. Without it, opening the 320px contact panel
+       pushed the header past its container: the name broke onto three lines,
+       the metrics squeezed into unreadable slivers, and a horizontal
+       scrollbar appeared under the thread. */
+    .tva-chat__head { padding:11px 16px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center;
+                      gap:12px; flex:0 0 auto; min-width:0; overflow:hidden; }
+    /* The name and channel truncate; everything else keeps its size. */
+    .tva-chat__head > .min-w-0 { flex:1 1 auto; min-width:0; }
+    #hdrName, #hdrChannel { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #hdrChannel { display:inline-flex; max-width:100%; }
+    .tva-chat__head > .ml-auto { flex:0 0 auto; }
+    .tva-convo__av#hdrAvatar { flex:0 0 auto; }
     html.dark .tva-chat__head { border-bottom-color:#334155; }
-    .tva-chat__thread { flex:1 1 auto; min-height:0; overflow-y:auto; padding:18px; background:#f6f7fb; display:flex; flex-direction:column; }
+    .tva-chat__thread { flex:1 1 auto; min-height:0; overflow-y:auto; overflow-x:hidden; padding:18px; background:#f6f7fb; display:flex; flex-direction:column; }
     html.dark .tva-chat__thread { background:#0b1220; }
 
     /* ── Bubbles: size to content, capped width ── */
@@ -740,6 +900,11 @@
 
             <div id="chatPane" style="display:none; flex:1 1 auto; min-height:0; flex-direction:column;">
                 <div class="tva-chat__head">
+                    {{-- Mobile only. Hidden on desktop, where the list never
+                         goes away and there is nothing to go back to. --}}
+                    <button type="button" class="tva-chat__back" onclick="closeThread()" aria-label="Back to conversations">
+                        <i data-lucide="arrow-left"></i>
+                    </button>
                     <div class="tva-convo__av" id="hdrAvatar"></div>
                     <div class="min-w-0">
                         <div class="tva-convo__name" id="hdrName"></div>
@@ -834,6 +999,24 @@
                 </div>
             </div>
         </div>
+
+        {{-- Contact profile. A third column rather than an overlay: an agent
+             reads the profile WHILE replying, and a modal would force them to
+             close it to type. Collapses to an overlay only on narrow screens,
+             where three columns genuinely do not fit. --}}
+        <aside class="tva-cp" id="contactPanel" hidden>
+            <div class="tva-cp__head">
+                <span>Contact</span>
+                <button type="button" class="tva-cp__x" onclick="closeContact()" title="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="tva-cp__body" id="contactBody">
+                <div class="tva-empty-sm">Loading…</div>
+            </div>
+            <input type="file" id="contactAvatarInput" accept="image/*" style="display:none"
+                   onchange="uploadContactAvatar(this.files[0])">
+        </aside>
     </div>
 
     <div class="tva-lightbox" id="lightbox">
@@ -871,6 +1054,7 @@ const CHAT = {
     projectId: '{{ hashid($projectId) }}',
     base: '{{ url('c/'.$client->slug.'/chat') }}',
     convosUrl: '{{ route('chat.conversations', ['client' => $client->slug]) }}',
+    leadsUrl:  '{{ route('leads.index', ['client' => $client->slug]) }}',
     csrf: '{{ csrf_token() }}',
 };
 const EMOJIS = '😀 😁 😂 🤣 😊 😍 😘 👍 🙏 🙌 👏 🔥 ✅ ❌ ❤️ 🎉 😎 🤔 😅 😢 😡 🙂 👌 💯 📞 📦 🛒 💳 ⏰ 📅 ✨ 🚀'.split(' ');
@@ -1304,6 +1488,9 @@ async function openThread(sid){
     document.getElementById('chatPane').style.display='flex';
     document.getElementById('chatThread').innerHTML='';
     closePops();
+    // Swaps the panes on mobile; inert on desktop, where the CSS for this
+    // class only exists inside the phone media query.
+    document.querySelector('.tva-chat').classList.add('is-thread-open');
     await loadThread(true);
     if(threadTimer) clearInterval(threadTimer);
     threadTimer=setInterval(()=>loadThread(false),4000);
@@ -1325,12 +1512,11 @@ async function loadThread(full){
 function applyHeader(d){
     const c=d.contact||{};
     var hdrName=document.getElementById('hdrName');
-    // Only WhatsApp yields a real profile URL — Messenger/Instagram ids are
-    // page-scoped and deliberately not resolvable. Render plain text there
-    // rather than a link that would 404.
-    hdrName.innerHTML = c.profile_url
-        ? '<a href="' + h(c.profile_url) + '" target="_blank" rel="noopener" title="Open profile">' + h(c.name||'') + '</a>'
-        : h(c.name||'');
+    // Clicking the name opens OUR contact profile, not the customer's social
+    // profile — the second is only resolvable on WhatsApp anyway, and the
+    // first is the thing an agent actually needs mid-conversation.
+    hdrName.innerHTML = '<a href="#" onclick="openContact();return false;" '
+        + 'title="Open contact profile">' + h(c.name||'') + '</a>';
     // Channel mark + the Page/number this conversation is on, linked where
     // Meta exposes a public URL (Page ids are public; customer PSIDs are not).
     var hdrCh=document.getElementById('hdrChannel');
@@ -1506,6 +1692,215 @@ function tickCountdown(){
 }
 
 setInterval(tickCountdown, 1000);
+
+/**
+ * Back to the conversation list (mobile).
+ *
+ * Stops the 4-second thread poll as well as swapping the panes — a phone
+ * sitting on the list should not keep refetching a thread nobody is
+ * looking at, on a connection that is usually metered.
+ */
+function closeThread(){
+    document.querySelector('.tva-chat').classList.remove('is-thread-open');
+    closeContact();
+    if (threadTimer) { clearInterval(threadTimer); threadTimer = null; }
+    activeSid = null;
+    loadConvos();
+}
+
+// ── Contact profile ──
+let CONTACT = null;
+
+/** Keep the layout class in step with the panel — the header sheds its
+ *  optional metrics while the profile is taking 320px. */
+function setContactPanel(open){
+    document.getElementById('contactPanel').hidden = !open;
+    document.querySelector('.tva-chat').classList.toggle('has-profile', open);
+}
+
+function closeContact(){ setContactPanel(false); }
+
+async function openContact(){
+    if (!activeSid) return;
+    const panel = document.getElementById('contactPanel');
+
+    // Second click closes it. The panel costs screen width, so an agent
+    // toggling it off must not have to hunt for the ✕.
+    if (!panel.hidden) { setContactPanel(false); return; }
+
+    setContactPanel(true);
+    document.getElementById('contactBody').innerHTML = '<div class="tva-empty-sm">Loading…</div>';
+
+    try {
+        const r = await api(msgUrl('contact') + '?project_id=' + CHAT.projectId);
+        const d = await r.json();
+        if (!d.ok) {
+            document.getElementById('contactBody').innerHTML =
+                '<div class="tva-empty-sm">' + h(d.message || 'No contact record for this conversation.') + '</div>';
+            return;
+        }
+        CONTACT = d.contact;
+        renderContact();
+    } catch (e) {
+        document.getElementById('contactBody').innerHTML =
+            '<div class="tva-empty-sm">Could not load the contact.</div>';
+    }
+}
+
+function renderContact(){
+    const c = CONTACT, m = c.messages, e = c.engagement;
+    const parts = [];
+
+    // Identity, editable in place.
+    parts.push('<div class="tva-cp__id">'
+        // The photo is the control. A separate "change image" button would
+        // be one more thing to find; clicking the picture is where everyone
+        // tries first anyway.
+        + '<div class="tva-cp__av" id="cpAvatar" onclick="pickContactAvatar()" title="Click to change the photo">'
+        + avatarHtml(c.avatar, c.id, c.name)
+        + '<span class="tva-cp__cam"><i data-lucide="camera"></i></span></div>'
+        + '<div class="tva-cp__name">' + h(c.name) + '</div>'
+        + (c.email ? '<div class="tva-cp__sub">' + h(c.email) + '</div>' : '')
+        + (c.phone ? '<div class="tva-cp__sub">+' + h(c.phone) + '</div>' : '')
+        + '<button class="tva-cp__btn" style="margin-top:8px" onclick="editContact()">Edit contact</button>'
+        + '</div>');
+
+    // Engagement, with its reasoning visible.
+    parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Engagement</div>'
+        + '<div class="tva-cp__score"><b>' + e.score + '</b>'
+        + '<span class="tva-cp__badge tva-cp__badge--' + e.label.toLowerCase() + '">' + h(e.label) + '</span></div>'
+        + '<div class="tva-cp__bar"><i style="width:' + e.score + '%"></i></div>'
+        + e.reasons.map(r => '<div class="tva-cp__why"><span>' + h(r[0]) + '</span><span>' + h(r[1]) + '</span></div>').join('')
+        + '</div>');
+
+    // Where they reach you, and how much they actually write.
+    parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Channels</div>'
+        + (c.identities.length
+            ? c.identities.map(i => '<span class="tva-cp__pill">' + channelIcon(i.channel) + h(i.label) + '</span>').join('')
+            : '<div class="tva-cp__sub">No linked channels yet.</div>')
+        + '</div>');
+
+    const chans = Object.entries(m.by_channel || {});
+    parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Messages</div>'
+        + '<div class="tva-cp__row"><i data-lucide="messages-square"></i>Total<b>' + m.total + '</b></div>'
+        + '<div class="tva-cp__row"><i data-lucide="arrow-down-left"></i>From customer<b>' + m.inbound + '</b></div>'
+        + '<div class="tva-cp__row"><i data-lucide="arrow-up-right"></i>From you<b>' + m.outbound + '</b></div>'
+        + chans.map(([ch, n]) => '<div class="tva-cp__row">' + channelIcon(ch) + h(channelLabel(ch)) + '<b>' + n + '</b></div>').join('')
+        + '</div>');
+
+    // Merges: what was folded in, and what a human still needs to decide.
+    if ((c.merged || []).length) {
+        parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Merged profiles</div>'
+            + c.merged.map(x => '<div class="tva-cp__row"><i data-lucide="git-merge"></i>'
+                + h(x.name || ('Contact #' + x.id)) + '</div>').join('')
+            + '</div>');
+    }
+
+    if ((c.suggested || []).length) {
+        parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Possible duplicates</div>'
+            + c.suggested.map(s => '<div class="tva-cp__merge">'
+                + '<div><b>' + h(s.name || ('Contact #' + s.id)) + '</b></div>'
+                + '<div style="margin:3px 0 6px">' + h(s.reason) + '</div>'
+                + '<button class="tva-cp__btn" onclick="mergeContact(' + s.id + ')">Merge into this contact</button>'
+                + '</div>').join('')
+            + '</div>');
+    }
+
+    // Leads roll up to the person, not the conversation.
+    parts.push('<div class="tva-cp__sec"><div class="tva-cp__h">Leads (' + c.leads.count + ')</div>'
+        + (c.leads.count
+            ? c.leads.items.map(l => '<div class="tva-cp__lead" onclick="openLead(' + l.id + ')">'
+                + '<i data-lucide="user-check"></i><span class="flex-1">' + h(l.status) + '</span>'
+                + (l.confidence !== null ? '<span class="tva-cp__sub">' + l.confidence + '%</span>' : '')
+                + '</div>').join('')
+            : '<div class="tva-cp__sub">No leads captured yet.</div>')
+        + '</div>');
+
+    document.getElementById('contactBody').innerHTML = parts.join('');
+    if (window.lucide) try { lucide.createIcons(); } catch(_){}
+}
+
+function openLead(id){ window.open(CHAT.leadsUrl + '?lead=' + id, '_blank'); }
+
+function pickContactAvatar(){
+    const input = document.getElementById('contactAvatarInput');
+    input.value = '';                 // re-picking the same file must still fire
+    input.click();
+}
+
+async function uploadContactAvatar(file){
+    if (!file || !CONTACT) return;
+
+    const body = new FormData();
+    body.append('project_id', CHAT.projectId);
+    body.append('avatar', file);
+
+    const r = await api(CHAT.base + '/contacts/' + CONTACT.id, {method:'POST', body});
+    if (!r.ok) {
+        const e = await r.json().catch(()=>({}));
+        tvaToast(e.message || 'Could not upload that image.', 'error');
+        return;
+    }
+
+    CONTACT = (await r.json()).contact;
+    renderContact();
+    // The list and the open thread both render from the contact now, so
+    // they have to refetch or the old photo stays on screen beside the new
+    // one — which reads as the upload having failed.
+    loadConvos();
+    loadThread(true);
+    tvaToast('Photo updated', 'success');
+}
+
+async function editContact(){
+    const v = await tvaPrompt({
+        title: 'Edit contact',
+        text:  'Corrections here are permanent — the AI will not overwrite them from a later conversation.',
+        fields: [
+            {name:'name',  label:'Name',  value: CONTACT.raw_name || ''},
+            {name:'email', label:'Email', value: CONTACT.email || ''},
+            {name:'phone', label:'Phone', value: CONTACT.phone || ''},
+            {name:'notes', label:'Notes', value: CONTACT.notes || ''},
+        ],
+        confirmText: 'Save',
+    });
+    if (!v) return;
+
+    const body = new FormData();
+    body.append('project_id', CHAT.projectId);
+    ['name','email','phone','notes'].forEach(k => body.append(k, v[k] || ''));
+
+    const r = await api(CHAT.base + '/contacts/' + CONTACT.id, {method:'POST', body});
+    if (!r.ok) { tvaToast('Could not save the contact.','error'); return; }
+
+    CONTACT = (await r.json()).contact;
+    renderContact();
+    loadConvos();
+    tvaToast('Contact updated','success');
+}
+
+async function mergeContact(otherId){
+    const ok = await tvaConfirm({
+        title: 'Merge these contacts?',
+        text:  'Their conversations, channels and leads move onto this contact. This cannot be undone.',
+        confirmText: 'Merge',
+    });
+    if (!ok) return;
+
+    const r = await api(CHAT.base + '/contacts/' + CONTACT.id + '/merge', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({project_id: CHAT.projectId, other: otherId}),
+    });
+    if (!r.ok) {
+        const e = await r.json().catch(()=>({}));
+        tvaToast(e.message || 'Could not merge.','error');
+        return;
+    }
+    CONTACT = (await r.json()).contact;
+    renderContact();
+    loadConvos();
+    tvaToast('Contacts merged','success');
+}
 
 // ── Reply window enforcement ──
 // The rules come from the server (ChatController::replyPolicy). Meta's
@@ -1790,6 +2185,32 @@ function renderEvent(m){
         + '</span></div>';
 }
 
+/**
+ * WhatsApp-style delivery ticks, on outbound messages only.
+ *
+ *   (nothing)  queued — we have not heard back from Meta yet
+ *   ✓          sent
+ *   ✓✓         delivered to the handset
+ *   ✓✓ blue    read
+ *   !          failed, with Meta's reason on hover
+ *
+ * Absence is meaningful and deliberately not filled in with a hopeful tick:
+ * a message we cannot confirm left the building should not claim it did.
+ */
+function ticks(m){
+    if (m.direction !== 'out' || !m.delivery) return '';
+
+    if (m.delivery === 'failed') {
+        return '<span class="tva-tick tva-tick--fail" title="'
+            + h(m.delivery_error || 'Meta could not deliver this message') + '">!</span>';
+    }
+    var cls = m.delivery === 'read' ? ' tva-tick--read' : '';
+    var mark = m.delivery === 'sent' ? '✓' : '✓✓';
+    var label = {sent:'Sent', delivered:'Delivered', read:'Read'}[m.delivery] || '';
+
+    return '<span class="tva-tick' + cls + '" title="' + label + '">' + mark + '</span>';
+}
+
 function appendMessages(msgs){
     const box=document.getElementById('chatThread'); const nearBottom = box.scrollHeight-box.scrollTop-box.clientHeight < 120;
     const tr=document.getElementById('typingRow'); if(tr) tr.remove();   // keep new content below the typing row
@@ -1823,7 +2244,7 @@ function appendMessages(msgs){
         const canEdit=(m.author==='agent' && (Date.now()/1000 - m.created_at) < 900) ? 1 : 0;
         box.insertAdjacentHTML('beforeend',`<div class="tva-row tva-row--${m.direction==='in'?'in':'out'}">
             <button class="tva-row__more" onclick="openMsgMenu(event,${m.id},${canEdit})">⋮</button>
-            <div class="tva-msg ${cls}" data-id="${m.id}">${quote}${author}${txt}${atts}<div class="tva-msg__time">${fmtTime(m.created_at)}${edited}</div></div>
+            <div class="tva-msg ${cls}" data-id="${m.id}">${quote}${author}${txt}${atts}<div class="tva-msg__time">${fmtTime(m.created_at)}${edited}${ticks(m)}</div></div>
         </div>`);
     });
     if(nearBottom) box.scrollTop=box.scrollHeight;
@@ -1863,9 +2284,29 @@ function audioEl(id){
     return a;
 }
 function audioToggle(id){
-    const a=audioEl(id), btn=document.getElementById(id).querySelector('.tva-audio__play');
+    const a=audioEl(id), wrap=document.getElementById(id), btn=wrap.querySelector('.tva-audio__play');
     Object.entries(_audios).forEach(([k,o])=>{ if(k!==id && !o.paused){ o.pause(); document.getElementById(k).querySelector('.tva-audio__play').textContent='▶'; }});
-    if(a.paused){ a.play(); btn.textContent='⏸'; } else { a.pause(); btn.textContent='▶'; }
+
+    if(!a.paused){ a.pause(); btn.textContent='▶'; return; }
+
+    btn.textContent='⏸';
+    // play() returns a promise that REJECTS on a decode failure or an
+    // autoplay block. It had no .catch(), so the button flipped to pause and
+    // absolutely nothing else happened — the single reason a broken voice
+    // note looked like a broken UI rather than a broken file.
+    const p = a.play();
+    if (p && p.catch) {
+        p.catch(err=>{
+            btn.textContent='▶';
+            const why = (a.error && a.error.code === 4)
+                ? 'This browser cannot play the audio format (WhatsApp sends OGG/Opus, which Safari does not support).'
+                : (err && err.name === 'NotAllowedError'
+                    ? 'The browser blocked playback — click the play button again.'
+                    : 'The audio could not be loaded. It may have expired on Meta’s side.');
+            tvaToast(why, 'error');
+            console.warn('audio playback failed', err, a.error);
+        });
+    }
 }
 function audioSeek(e,id){ const a=audioEl(id); const r=e.currentTarget.getBoundingClientRect(); if(a.duration) a.currentTime=((e.clientX-r.left)/r.width)*a.duration; }
 function toggleVideo(ov){ const v=ov.parentElement.querySelector('video'); if(v.paused){ v.play(); ov.style.display='none'; v.setAttribute('controls',''); } }

@@ -28,6 +28,8 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
         private TenantManager $tenants,
         private PythonClient $python,
         private ContactAvatars $avatars,
+        private ComplianceGuard $guard,
+        private \App\Services\Crm\ContactResolver $contacts,
     ) {}
 
     public function handle(InboundMessage $m): ?string
@@ -80,6 +82,27 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
             $session->refresh();
         }
 
+        // Who is this, across every channel? Resolved on EVERY message, not
+        // just on session creation, because the linking moment is usually
+        // later — the customer gives an email mid-conversation and that is
+        // what reveals they already exist under a WhatsApp number.
+        $contact = $this->contacts->resolve(
+            projectId:      $m->projectId,
+            channel:        $channel,
+            externalId:     $m->from,
+            channelAccount: $m->channelExternalId,
+            details:        array_filter([
+                'name'  => $m->senderName ?: $session->customer_name,
+                'phone' => $session->customer_phone,
+                'email' => $session->customer_email,
+            ]),
+        );
+
+        if ($contact && (int) $session->contact_id !== (int) $contact->id) {
+            $session->contact_id = $contact->id;
+            $session->save();
+        }
+
         $userMessage = Message::create([
             'session_id' => $session->id,
             'project_id' => $m->projectId,
@@ -89,6 +112,11 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
                 'source'      => $m->provider,
                 'wamid'       => $m->messageId,
                 'attachments' => $attachmentMeta ?: null,
+                // Resolved to a preview at write time rather than at render
+                // time. The alternative is a lookup per message every time
+                // the thread is opened, to reconstruct something that can
+                // never change once written.
+                'reply_to'    => $this->resolveQuoted($session->id, $m->replyToExternalId),
             ]),
             'created_at' => $now,
         ]);
@@ -124,14 +152,101 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
         }
         $session->save();
 
+        // ── Compliance, before anything is sent ──────────────────────
+        //
+        // Applied here because every Meta channel funnels through this
+        // method, so WhatsApp, Messenger and Instagram get identical
+        // treatment without three copies of the rules.
+
+        // 1. "STOP" outranks everything, including a human agent's session.
+        //    Continuing to message someone who asked you to stop is the
+        //    fastest route to a block and a policy violation in its own right.
+        if ($this->guard->isOptOut($text)) {
+            $this->mergeSessionMeta($session, ['opted_out' => true, 'opted_out_at' => $now]);
+            Log::info('Meta: contact opted out', ['session' => $session->id, 'channel' => $channel]);
+
+            // One confirmation, then silence. Saying nothing leaves the
+            // customer unsure it worked, and an unsure customer blocks the
+            // number to make certain.
+            return $this->guard->optOutConfirmation();
+        }
+
+        // 2. Coming back is always allowed — opt-out must be reversible.
+        if ($this->guard->isOptedOut($session)) {
+            if ($this->guard->isOptIn($text)) {
+                $this->mergeSessionMeta($session, ['opted_out' => false, 'opted_out_at' => null]);
+            } else {
+                // Stay silent. The message is still stored, so an agent can
+                // see it, but nothing is sent back.
+                return null;
+            }
+        }
+
         // If a human agent has taken over this conversation, store the
         // inbound message but don't let the bot reply.
         if (data_get($session->metadata, 'meta.bot_paused')) {
             return null;
         }
 
+        // 3. Hand to a human when asked, or when the bot has clearly stopped
+        //    helping. Meta requires a "prompt, clear and direct escalation
+        //    path", and a customer held in a loop is the one who blocks.
+        if ($this->guard->shouldEscalate($session, $text)) {
+            $this->mergeSessionMeta($session, ['bot_turns' => 0]);
+            app(\App\Services\Conversation\HumanRouter::class)->handoff($session);
+
+            return 'Let me get a colleague to help — one moment.';
+        }
+
         $reply = $this->conversation->handle($session, $userMessage, 'text');
+
+        // Count consecutive bot turns so rule 3 can fire before frustration
+        // does. Reset whenever a person takes over (see ChatController).
+        $this->mergeSessionMeta($session, ['bot_turns' => $this->guard->botTurns($session) + 1]);
+
         return $reply->content ?? null;
+    }
+
+    /** Merge keys into `metadata.meta` without clobbering the rest. */
+    private function mergeSessionMeta(Session $session, array $values): void
+    {
+        $meta = (array) $session->metadata;
+        $meta['meta'] = array_merge((array) ($meta['meta'] ?? []), $values);
+        $session->metadata = $meta;
+        $session->save();
+    }
+
+    /**
+     * Turn a quoted provider id into the preview the thread renders.
+     *
+     * Scoped to the session and bounded, because a wamid is only meaningful
+     * inside the conversation it belongs to, and an unbounded scan would grow
+     * with the thread. Returns null when the quoted message predates us —
+     * common, and not worth reporting.
+     *
+     * @return array{id:int, preview:string, author:string}|null
+     */
+    private function resolveQuoted(int $sessionId, ?string $externalId): ?array
+    {
+        if (! $externalId) {
+            return null;
+        }
+
+        $quoted = Message::where('session_id', $sessionId)
+            ->orderByDesc('id')
+            ->limit(200)
+            ->get(['id', 'role', 'content', 'metadata'])
+            ->first(fn (Message $m) => data_get($m->metadata, 'wamid') === $externalId);
+
+        if (! $quoted) {
+            return null;
+        }
+
+        return [
+            'id'      => $quoted->id,
+            'preview' => mb_substr((string) ($quoted->content ?: '📎 Attachment'), 0, 90),
+            'author'  => $quoted->role === 'user' ? 'customer' : 'agent',
+        ];
     }
 
     /** Map a Meta provider to the sessions.channel enum value. */

@@ -74,6 +74,10 @@ class AppServiceProvider extends ServiceProvider
             \Msd\MetaChannels\Contracts\HandlesInboundCall::class,
             \App\Meta\CrmInboundCallHandler::class,
         );
+        $this->app->bind(
+            \Msd\MetaChannels\Contracts\HandlesMessageStatus::class,
+            \App\Meta\CrmMessageStatusHandler::class,
+        );
 
         $this->app->singleton(DataSourceRouter::class, function ($app) {
             $router = new DataSourceRouter();

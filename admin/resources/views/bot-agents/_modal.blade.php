@@ -129,6 +129,60 @@
                     <span class="text-sm">Default agent for widget</span>
                 </label>
             </div>
+
+            {{-- Channels + permissions. Owner only: these decide who answers
+                 which customers and what they may do, so they are not
+                 something a team member should be able to widen for
+                 themselves. BotAgentWebController::metadataFor() refuses to
+                 write them for anyone else regardless of what is posted. --}}
+            @if (!empty($isOwner))
+                @php
+                    $agentType    = $agent?->type ?? 'ai';
+                    $agentChannels = $agent ? $agent->channels() : array_keys(\App\Models\BotAgent::CHANNELS);
+                    $agentCaps    = $agent ? $agent->capabilities() : [];
+                @endphp
+
+                <div class="tva-ag-perm">
+                    <div class="tva-ag-perm__h">Channels this agent handles</div>
+                    <div class="text-xs text-slate-500 mb-2">
+                        Conversations on a channel are routed only to agents that handle it.
+                        Tick none to handle every channel.
+                    </div>
+                    <div class="tva-ag-perm__grid">
+                        @foreach (\App\Models\BotAgent::CHANNELS as $key => $label)
+                            <label class="tva-ag-perm__opt">
+                                <input type="checkbox" name="channels[]" value="{{ $key }}"
+                                       @checked(in_array($key, $agentChannels, true))>
+                                <span>{{ $label }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+
+                <div class="tva-ag-perm">
+                    <div class="tva-ag-perm__h">What this agent may do</div>
+                    <div class="text-xs text-slate-500 mb-2">
+                        Enforced on the server, not just hidden — an agent without a permission
+                        gets a clear refusal rather than a broken button.
+                    </div>
+                    <div class="tva-ag-perm__grid">
+                        @foreach (\App\Models\BotAgent::CAPABILITIES as $key => [$label, $appliesTo])
+                            {{-- Human-only permissions (transfer, statuses) are
+                                 meaningless on an AI persona; showing them would
+                                 invite someone to tick a box that does nothing. --}}
+                            {{-- js-human is the class the type selector at the
+                                 top of this form already toggles, so these
+                                 show and hide with it for free. --}}
+                            <label class="tva-ag-perm__opt {{ $appliesTo === 'human' ? 'js-human' : '' }}"
+                                   @if($appliesTo === 'human' && $agentType !== 'human') style="display:none" @endif>
+                                <input type="checkbox" name="capabilities[{{ $key }}]" value="1"
+                                       @checked($agentCaps[$key] ?? true)>
+                                <span>{{ $label }}</span>
+                            </label>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
         </div>
 
         <div class="tva-modal__foot">

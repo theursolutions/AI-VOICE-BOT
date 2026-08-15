@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Msd\MetaChannels\Contracts\HandlesInboundCall;
 use Msd\MetaChannels\Jobs\ProcessInboundMessage;
+use Msd\MetaChannels\Jobs\ProcessMessageStatus;
 use Msd\MetaChannels\MetaManager;
 use Msd\MetaChannels\Models\ChannelConnection;
 use Msd\MetaChannels\Services\GraphClient;
@@ -98,6 +99,12 @@ class WebhookController
             if (!empty($value['messages'])) {
                 $this->handleMessages($value, $phoneNumberId, $conn);
             }
+            // Delivery receipts. Meta sends these on the same webhook as
+            // messages but in their own array, which we were dropping
+            // entirely — hence no sent/delivered/read ticks anywhere.
+            if (!empty($value['statuses'])) {
+                $this->handleStatuses($value['statuses'], $conn);
+            }
         }
     }
 
@@ -170,6 +177,8 @@ class WebhookController
                 profilePic:        $profile['profile_pic'] ?? null,
                 attachments:       $attachments,
                 graphBase:         GraphClient::baseFor($conn->metadata),
+                // Messenger and Instagram put the quoted message id here.
+                replyToExternalId: (string) data_get($event, 'message.reply_to.mid') ?: null,
             ));
         }
     }
@@ -229,6 +238,42 @@ class WebhookController
         return $profile;
     }
 
+    /**
+     * Delivery receipts: sent → delivered → read (or failed).
+     *
+     * Each entry carries the wamid of a message WE sent, so this is how the
+     * ticks in the inbox get filled in. Handed to the host app through the
+     * same contract as messages, because resolving a wamid to a stored
+     * message means touching the tenant database, which this package
+     * deliberately knows nothing about.
+     *
+     * Statuses arrive out of order and repeat — `delivered` can land after
+     * `read` on a slow connection — so the handler ranks them rather than
+     * overwriting blindly.
+     */
+    private function handleStatuses(array $statuses, ChannelConnection $conn): void
+    {
+        foreach ($statuses as $s) {
+            $wamid  = (string) ($s['id'] ?? '');
+            $status = (string) ($s['status'] ?? '');
+
+            if ($wamid === '' || $status === '') {
+                continue;
+            }
+
+            ProcessMessageStatus::dispatch(
+                projectId: (int) $conn->project_id,
+                wamid:     $wamid,
+                status:    $status,
+                timestamp: (int) ($s['timestamp'] ?? time()),
+                // Present only on `failed`. Worth carrying: "message
+                // undeliverable" with no reason is unactionable, and the
+                // reason is usually something the operator can fix.
+                error:     (string) (data_get($s, 'errors.0.title') ?: ''),
+            );
+        }
+    }
+
     private function handleMessages(array $value, string $phoneNumberId, ChannelConnection $conn): void
     {
         $names = [];
@@ -261,6 +306,11 @@ class WebhookController
                 messageId:         $waId ?: null,
                 accessToken:       $conn->access_token ?: null,
                 attachments:       $attachments,
+                // The wamid of the message this one quotes. Present whenever
+                // the customer used WhatsApp's reply-swipe; dropping it meant
+                // a reply to "which size?" arrived as a bare "large" with no
+                // way to tell what it answered.
+                replyToExternalId: (string) data_get($msg, 'context.id') ?: null,
             ));
         }
     }

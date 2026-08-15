@@ -17,6 +17,31 @@
          Targets the .tva-* utility classes used across telephony,
          brain-settings, leads, sessions, skills, bot-agents, etc. --}}
     <style>
+        /* ── Scrollbars, app-wide ─────────────────────────────────────
+           Thin, on-theme, and only visible where something actually
+           scrolls. The browser default is a 15px light-grey trough that
+           cuts a bright stripe through every dark panel and steals width
+           from the content beside it.
+
+           Firefox gets the standard two properties; Chromium and Safari
+           need the -webkit- pseudo-elements. Both are declared rather than
+           picking one, because they are not interchangeable. */
+        * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+        html.dark * { scrollbar-color: #475569 transparent; }
+
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; border-radius: 99px;
+            /* Inset via a transparent border so the thumb reads as slimmer
+               than its hit area — easier to grab, lighter to look at. */
+            border: 2px solid transparent; background-clip: content-box;
+        }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; background-clip: content-box; }
+        ::-webkit-scrollbar-corner { background: transparent; }
+        html.dark ::-webkit-scrollbar-thumb { background: #475569; background-clip: content-box; }
+        html.dark ::-webkit-scrollbar-thumb:hover { background: #64748b; background-clip: content-box; }
+
         /* Stat-grid: 4 cols → 2 cols on tablet → 1 col on phone. */
         @media (max-width: 1024px) {
             .tva-stat-grid { grid-template-columns: repeat(2, 1fr) !important; }

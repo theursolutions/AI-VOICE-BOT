@@ -14,6 +14,8 @@ class Session extends Model
 
     protected $fillable = [
         'project_id',
+        // The person behind this conversation, across every channel.
+        'contact_id',
         'channel',
         'external_id',
         // Business account the customer messaged (WhatsApp phone_number_id /

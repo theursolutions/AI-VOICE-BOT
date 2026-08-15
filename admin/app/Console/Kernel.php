@@ -58,6 +58,14 @@ class Kernel extends ConsoleKernel
             ->dailyAt('04:40')
             ->withoutOverlapping();
 
+        // Quality-rating watchdog. Meta degrades a number GREEN → YELLOW →
+        // RED over days before restricting it, so a daily read means nobody
+        // is ever surprised by a suspension — the warning was in the logs a
+        // fortnight earlier. No-op when no WhatsApp numbers are connected.
+        $schedule->command('meta:quality-check')
+            ->dailyAt('05:10')
+            ->withoutOverlapping();
+
         // GeoLite2 refresh. Shared .mmdb — one file serves both the local-price
         // display and visitor analytics. MaxMind publishes weekly; the command
         // no-ops if the file is under 6 days old, and is a silent no-op with no
