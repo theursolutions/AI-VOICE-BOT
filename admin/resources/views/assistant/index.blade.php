@@ -293,7 +293,7 @@
             {{-- RIGHT: response panel (slides in when an answer/skeleton is shown) --}}
             <div class="jv-right" id="jv-right">
                 <div class="jv-right__head">
-                    <span class="jv-right__title"><i data-lucide="sparkles" style="width:14px;height:14px"></i> Conversation</span>
+                    <span class="jv-right__title"><i data-lucide="wand" style="width:14px;height:14px"></i> Conversation</span>
                     <button class="jv-iconbtn" id="jv-rmin" title="Close panel (full-screen orb)"><i data-lucide="x" style="width:16px;height:16px"></i></button>
                 </div>
                 <div class="jv-right__body" id="jv-answer"></div>
@@ -1020,7 +1020,16 @@
 
     var orbMat=new THREE.MeshBasicMaterial({color:0x3b82f6, wireframe:true, transparent:true, opacity:0.85});
     var orb=new THREE.Mesh(new THREE.IcosahedronGeometry(1.35,2), orbMat); scene.add(orb);
-    scene.add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.0,1), new THREE.MeshBasicMaterial({color:0x1e3a8a, transparent:true, opacity:0.25})));
+    /* Inner core. It gives the orb depth against the dark page, but on white
+       it is a grey faceted lump showing through the wireframe — every flat
+       face legible. Hidden in light and kept in sync with the theme toggle,
+       which a canvas cannot pick up from CSS. Same treatment as the hero orb
+       on the marketing site. */
+    var core=new THREE.Mesh(new THREE.IcosahedronGeometry(1.0,1), new THREE.MeshBasicMaterial({color:0x1e3a8a, transparent:true, opacity:0.25}));
+    scene.add(core);
+    function syncCore(){ core.visible=document.documentElement.classList.contains('dark'); }
+    syncCore();
+    window.addEventListener('tva:theme', syncCore);
     var ringMat=new THREE.MeshBasicMaterial({color:0x3b82f6, side:THREE.DoubleSide, transparent:true, opacity:0.35});
     var ring=new THREE.Mesh(new THREE.RingGeometry(1.75,1.78,64), ringMat); ring.rotation.x=Math.PI/2.4; scene.add(ring);
 

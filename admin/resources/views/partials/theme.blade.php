@@ -103,12 +103,23 @@
        small screens. A background-image on the parent has neither problem.
 
        68px = the bar's fixed 67px plus the 1px `.content::before` spacer,
-       which would otherwise read as a hairline of paper above the navy. */
-    html:not(.dark) .content {
+       which would otherwise read as a hairline of paper above the navy.
+
+       Matched through the shell (body > .flex > .content) rather than on
+       `.content` alone, because 45 page templates open a SECOND .content
+       inside the layout's one. A bare `.content` selector paints the band
+       again at the top of the page body — a phantom navy strip that reads as
+       an over-tall header — and repaints the vendor's rounded panel, which
+       surfaces as a stray white card behind the page's own hero. */
+    html:not(.dark) body > .flex > .content {
         background-color: var(--tva-bg);
         background-image: linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
         background-repeat: no-repeat;
     }
+    /* Those nested wrappers inherit the page instead of painting their own
+       slightly-different slate, which otherwise shows as a faint rounded
+       panel edge around the content. */
+    html:not(.dark) .content .content { background: transparent; }
     html:not(.dark) .top-bar { border-bottom-color: rgba(255,255,255,.10); }
 
     /* The chrome is dark in BOTH themes, so its contents must not follow the

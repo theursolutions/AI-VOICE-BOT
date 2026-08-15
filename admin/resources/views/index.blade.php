@@ -1054,8 +1054,15 @@
         }
         html:not(.dark) .hero::after { display: none; }
 
+        /* Type on paper reads heavier and harder-edged than the same type on a
+           near-black page — dark-on-light thickens the strokes where
+           light-on-dark thins them. Carrying the dark theme's 800 weight and
+           tight tracking straight across left the headline looking
+           over-sharpened, so light gets its own settings: back to the base
+           -.02em tracking, and one weight step down. It reads as solid as the
+           dark 800 does, because the background is doing some of the work. */
         html:not(.dark) .hero h1 {
-            color: #0b1b33; letter-spacing: -.032em; font-weight: 800;
+            color: #0b1b33; letter-spacing: -.02em; font-weight: 700;
         }
         html:not(.dark) .hero h1 .accent {
             background: none; -webkit-background-clip: initial; background-clip: initial;
@@ -1100,7 +1107,9 @@
             box-shadow: 0 1px 2px rgba(16,24,40,.04);
         }
         html:not(.dark) .nav.is-open { background: #ffffff; }
-        html:not(.dark) .nav__brand { color: #0b1b33; }
+        /* Same correction for the wordmark beside the logo — it sat at 800 for
+           a dark bar and looked over-inked once the bar turned white. */
+        html:not(.dark) .nav__brand { color: #0b1b33; font-weight: 700; }
         html:not(.dark) .nav__brand-mark { filter: none; }
         html:not(.dark) .nav__links a { color: #46586f; }
         html:not(.dark) .nav__links a:hover { color: #0b1b33; }
