@@ -215,7 +215,7 @@
 
             @if (empty($usage))
                 <div class="bl-empty">
-                    <i data-lucide="bar-chart-3" class="w-7 h-7"></i>
+                    <i data-lucide="bar-chart-2" class="w-7 h-7"></i>
                     No usage recorded yet.
                 </div>
             @else
@@ -309,7 +309,7 @@
         {{-- Transaction history --}}
         <div class="bl-card intro-y">
             <div class="bl-card__head">
-                <i data-lucide="receipt" class="w-4 h-4" style="color:#6366f1"></i>
+                <i data-lucide="file-text" class="w-4 h-4" style="color:#6366f1"></i>
                 <div class="bl-card__title">Payment history</div>
             </div>
 
@@ -320,7 +320,8 @@
                 </div>
             @else
                 <div style="overflow-x:auto">
-                    <table class="bl-table">
+                    <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-billing', 'filename' => 'billing', 'paginator' => null])</div>
+                    <table class="bl-table" id="tva-t-billing">
                         <thead>
                             <tr><th>Date</th><th>Invoice</th><th>Status</th><th>Amount</th></tr>
                         </thead>

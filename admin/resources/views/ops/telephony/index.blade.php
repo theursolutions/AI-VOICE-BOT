@@ -27,10 +27,11 @@
                 @endforeach
             </select>
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($paginator->total()) }} number(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-telephony', 'filename' => 'ops-telephony', 'paginator' => $paginator ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-telephony">
                 <thead>
                     <tr>
                         <th>Phone number</th>

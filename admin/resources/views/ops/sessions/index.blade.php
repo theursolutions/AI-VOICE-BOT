@@ -45,10 +45,11 @@
             <div class="ml-auto" style="color:#64748b; font-size:12px;">
                 {{ number_format($paginator->total()) }} session(s)
             </div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-sessions', 'filename' => 'ops-sessions', 'paginator' => $paginator ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-sessions">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -57,7 +58,7 @@
                         <th>Channel</th>
                         <th>Status</th>
                         <th>Last activity</th>
-                        <th style="text-align:right;">Actions</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

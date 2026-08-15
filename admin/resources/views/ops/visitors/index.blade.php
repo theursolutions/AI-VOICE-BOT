@@ -145,10 +145,11 @@
                 <a href="{{ route('ops.visitors.index') }}" class="btn btn-secondary btn-sm">Clear</a>
             @endif
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($visitors->total()) }} visitor(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-visitors', 'filename' => 'ops-visitors', 'paginator' => $visitors ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-visitors">
                 <thead>
                     <tr>
                         <th>IP / visitor</th>

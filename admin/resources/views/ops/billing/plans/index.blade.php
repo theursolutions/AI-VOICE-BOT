@@ -168,7 +168,8 @@
                     </p>
                 @else
                     <div class="ob-tablewrap" style="margin-top:16px">
-                        <table class="ob-table">
+                        <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-billing-plans', 'filename' => 'ops-billing-plans', 'paginator' => null])</div>
+                        <table class="ob-table" id="tva-t-ops-billing-plans">
                             <thead>
                                 <tr>
                                     <th style="width:110px">Interval</th>

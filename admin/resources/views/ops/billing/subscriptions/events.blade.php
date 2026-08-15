@@ -57,7 +57,8 @@
         </div>
 
         <div style="overflow-x:auto">
-            <table class="ev-table">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-billing-subscriptions-events', 'filename' => 'ops-billing-subscriptions-events', 'paginator' => $events ?? null])</div>
+            <table class="ev-table" id="tva-t-ops-billing-subscriptions-events">
                 <thead>
                     <tr>
                         <th>Received</th><th>Type</th><th>Event id</th>

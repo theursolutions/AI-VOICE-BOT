@@ -204,10 +204,11 @@
                     @endforeach
                 </select>
             </div>
+            @include('partials.table-export', ['table' => '#tva-t-sessions', 'filename' => 'sessions', 'paginator' => $sessions ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-sessions">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -216,7 +217,7 @@
                         <th>Status</th>
                         <th>Started</th>
                         <th>Last activity</th>
-                        <th style="text-align:right;">Actions</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -274,7 +275,7 @@
                     </tr>
                 @empty
                     <tr><td colspan="7" style="text-align:center; padding:60px 20px; color:#94a3b8;">
-                        <i data-lucide="message-square-off" class="w-10 h-10 inline mb-2"></i>
+                        <i data-lucide="inbox" class="w-10 h-10 inline mb-2"></i>
                         <div style="font-size:14px; font-weight:500;">
                             @if ($search !== '') No sessions match "{{ $search }}". @else No sessions yet. @endif
                         </div>

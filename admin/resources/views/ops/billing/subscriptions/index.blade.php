@@ -62,7 +62,7 @@
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
             <a href="{{ route('ops.billing.subscriptions.events') }}" class="ob-btn ob-btn--sm">
-                <i data-lucide="webhook" class="w-3.5 h-3.5"></i>
+                <i data-lucide="link" class="w-3.5 h-3.5"></i>
                 Stripe events
                 @if ($failedEvents > 0)
                     <span class="ob-pill ob-pill--red">{{ $failedEvents }} failed</span>
@@ -120,7 +120,8 @@
 
         {{-- ── Table ──────────────────────────────────────────────── --}}
         <div style="overflow-x:auto">
-            <table class="sb-table">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-billing-subscriptions', 'filename' => 'ops-billing-subscriptions', 'paginator' => $subscriptions ?? null])</div>
+            <table class="sb-table" id="tva-t-ops-billing-subscriptions">
                 <thead>
                     <tr>
                         <th>Workspace</th><th>Plan</th><th>Status</th><th>Amount</th>
@@ -181,7 +182,7 @@
                                         @csrf
                                         <input type="number" name="days" min="1" max="90" value="7" title="Days">
                                         <button type="submit" class="ob-btn ob-btn--sm" title="Extend free access">
-                                            <i data-lucide="calendar-plus" class="w-3.5 h-3.5"></i>
+                                            <i data-lucide="calendar" class="w-3.5 h-3.5"></i>
                                         </button>
                                     </form>
 

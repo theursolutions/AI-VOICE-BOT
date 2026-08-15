@@ -180,10 +180,10 @@
                 <button type="button" class="seo-tab is-active" data-tab="meta"><i data-lucide="tag"></i> General Meta</button>
                 <button type="button" class="seo-tab" data-tab="social"><i data-lucide="share-2"></i> Social Cards</button>
                 <button type="button" class="seo-tab" data-tab="icons"><i data-lucide="image"></i> Icons</button>
-                <button type="button" class="seo-tab" data-tab="verify"><i data-lucide="badge-check"></i> Verify &amp; Analytics</button>
+                <button type="button" class="seo-tab" data-tab="verify"><i data-lucide="check-circle"></i> Verify &amp; Analytics</button>
                 <button type="button" class="seo-tab" data-tab="robots"><i data-lucide="bot"></i> robots.txt</button>
                 <button type="button" class="seo-tab" data-tab="sitemap"><i data-lucide="map"></i> Sitemap</button>
-                <button type="button" class="seo-tab" data-tab="schema"><i data-lucide="boxes"></i> Structured Data</button>
+                <button type="button" class="seo-tab" data-tab="schema"><i data-lucide="package"></i> Structured Data</button>
                 <button type="button" class="seo-tab" data-tab="advanced"><i data-lucide="code-2"></i> Advanced</button>
             </div>
 
@@ -446,7 +446,8 @@
             <div class="seo-card__sub">Append-only record of every change applied here.</div>
         </div>
         <div class="overflow-x-auto">
-            <table class="tva-dt-table" style="width:100%;">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-seo', 'filename' => 'ops-seo', 'paginator' => null])</div>
+            <table class="tva-dt-table" style="width:100%;" id="tva-t-ops-seo">
                 <thead><tr><th>When</th><th>Action</th><th>Actor</th><th>Detail</th></tr></thead>
                 <tbody>
                 @forelse ($logs as $log)

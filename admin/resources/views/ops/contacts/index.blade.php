@@ -60,10 +60,11 @@
                 <a href="{{ route('ops.contacts.index', array_filter(['status' => $status])) }}" class="btn btn-secondary btn-sm">Clear</a>
             @endif
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($contacts->total()) }} contact(s)</div>
+            @include('partials.table-export', ['table' => '#tva-t-ops-contacts', 'filename' => 'ops-contacts', 'paginator' => $contacts ?? null])
         </form>
 
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-ops-contacts">
                 <thead>
                     <tr>
                         <th>When</th>
@@ -73,7 +74,7 @@
                         <th>Referrer</th>
                         <th>IP</th>
                         <th>Status</th>
-                        <th style="text-align:right;">Action</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

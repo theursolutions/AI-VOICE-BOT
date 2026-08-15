@@ -230,6 +230,17 @@
             <input type="hidden" name="view" value="{{ $view }}">
 
             <div class="ml-auto flex items-center gap-2">
+                {{-- Table view only: the board is not a table, so there is
+                     nothing for the exporter to read. Switching view is one
+                     click away and the export then covers every page. --}}
+                @if ($view === 'table')
+                    @include('partials.table-export', [
+                        'table'     => '#tva-t-leads',
+                        'filename'  => 'leads',
+                        'paginator' => $leads ?? null,
+                    ])
+                @endif
+
                 <div class="tva-viewtog" role="group" aria-label="Leads layout">
                     <a href="{{ route('leads.index', ['client' => $client->slug]) . '?' . http_build_query($base + ['status' => $status, 'view' => 'board']) }}"
                        class="{{ $view === 'board' ? 'is-on' : '' }}" title="Pipeline board">
@@ -257,7 +268,7 @@
         {{-- Table --}}
         @if ($view === 'table')
         <div class="overflow-x-auto">
-            <table class="tva-dt-table">
+            <table class="tva-dt-table" id="tva-t-leads">
                 <thead>
                     <tr>
                         <th>ID</th>
@@ -267,7 +278,7 @@
                         <th>Confidence</th>
                         <th>Status</th>
                         <th>Session</th>
-                        <th style="text-align:right;">Actions</th>
+                        <th style="text-align:right;" data-export-skip>Actions</th>
                     </tr>
                 </thead>
                 <tbody>

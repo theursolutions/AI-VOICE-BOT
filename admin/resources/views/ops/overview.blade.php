@@ -50,7 +50,7 @@
             </div>
         </div>
         <a href="{{ route('ops.analytics.index') }}" style="background:rgba(255,255,255,.18); padding:10px 16px; border-radius:10px; color:#fff; font-weight:600; font-size:13px; text-decoration:none;">
-            <i data-lucide="bar-chart-3" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Deep analytics →
+            <i data-lucide="bar-chart-2" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Deep analytics →
         </a>
     </div>
 
@@ -122,7 +122,7 @@
     <div class="ops-chart-grid">
         <div class="intro-y box p-5">
             <div class="ops-card-title">
-                <i data-lucide="audio-waveform" class="w-4 h-4" style="color: var(--tva-accent);"></i>
+                <i data-lucide="activity" class="w-4 h-4" style="color: var(--tva-accent);"></i>
                 Voice replies per day
                 <span class="badge">14 days</span>
             </div>
@@ -203,7 +203,8 @@
                 <h2 class="font-medium text-base"><i data-lucide="briefcase" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Recent workspaces</h2>
                 <a href="{{ route('ops.clients.index') }}" class="ml-auto text-xs" style="color: var(--tva-accent);">View all →</a>
             </div>
-            <table class="tva-dt-table">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-recent-workspaces', 'filename' => 'ops-recent-workspaces', 'paginator' => null])</div>
+            <table class="tva-dt-table" id="tva-t-ops-recent-workspaces">
                 <thead><tr><th>ID</th><th>Name</th><th>Status</th></tr></thead>
                 <tbody>
                 @forelse ($recentClients as $c)
@@ -233,7 +234,8 @@
                 <h2 class="font-medium text-base"><i data-lucide="users" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Recent users</h2>
                 <a href="{{ route('ops.users.index') }}" class="ml-auto text-xs" style="color: var(--tva-accent);">View all →</a>
             </div>
-            <table class="tva-dt-table">
+            <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-recent-users', 'filename' => 'ops-recent-users', 'paginator' => null])</div>
+            <table class="tva-dt-table" id="tva-t-ops-recent-users">
                 <thead><tr><th>ID</th><th>Name</th><th>Email</th></tr></thead>
                 <tbody>
                 @forelse ($recentUsers as $u)
@@ -255,7 +257,8 @@
             <h2 class="font-medium text-base"><i data-lucide="file-text" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Recent audit events</h2>
             <a href="{{ route('ops.audit.index') }}" class="ml-auto text-xs" style="color: var(--tva-accent);">View all →</a>
         </div>
-        <table class="tva-dt-table">
+        <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-recent-audit', 'filename' => 'ops-recent-audit', 'paginator' => null])</div>
+        <table class="tva-dt-table" id="tva-t-ops-recent-audit">
             <thead><tr><th>When</th><th>Action</th><th>Target</th></tr></thead>
             <tbody>
             @forelse ($recentAudit as $a)

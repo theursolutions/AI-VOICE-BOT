@@ -94,7 +94,8 @@
                 </div>
 
                 <div class="fm-wrap">
-                    <table class="fm">
+                    <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-billing-features', 'filename' => 'ops-billing-features', 'paginator' => null])</div>
+                    <table class="fm" id="tva-t-ops-billing-features">
                         <thead>
                             <tr>
                                 <th>Feature</th>
@@ -299,7 +300,8 @@
                 </div>
 
                 <div class="ob-tablewrap">
-                    <table class="ob-table">
+                    <div class="tva-export-bar">@include('partials.table-export', ['table' => '#tva-t-ops-billing-features-2', 'filename' => 'ops-billing-features-2', 'paginator' => null])</div>
+                    <table class="ob-table" id="tva-t-ops-billing-features-2">
                         <thead>
                             <tr>
                                 <th>Feature</th><th style="width:130px">Type</th>
