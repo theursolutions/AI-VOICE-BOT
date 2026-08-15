@@ -227,7 +227,7 @@
             --text-dim: #8b96a8;
             --line:     rgba(120,180,220,.12);
             --line-hot: rgba(59,130,246,.35);
-            background: rgba(5,6,9,.92);
+            background: #070c17;   /* opaque: white sections scroll under it */
             border-bottom-color: rgba(120,180,220,.12);
             color: var(--text);
         }

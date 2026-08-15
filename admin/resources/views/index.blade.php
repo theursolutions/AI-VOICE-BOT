@@ -1403,7 +1403,11 @@
             border-bottom: 1px solid rgba(59,130,246,.22);
         }
         html:not(.dark) .nav {
-            background: rgba(5, 6, 9, .55);
+            /* OPAQUE in light mode. At 55% it was dark over the hero and
+               grey the moment a white section scrolled underneath —
+               translucency only works when everything behind it is the
+               same colour. The blur stays for the frosted edge. */
+            background: #070c17;
             border-bottom-color: rgba(120,180,220,.12);
             box-shadow: none;
         }
@@ -1543,7 +1547,12 @@
            own items were not centred, so the theme switch and the CTA sat
            on the text baseline instead of the row axis. */
         .nav__links { align-items: center; }
-        .nav__links > * { display: inline-flex; align-items: center; }
+        /* Only real controls. A universal child selector here also hit
+           the <style> and <script> the theme-toggle partial brings with
+           it, overriding their default display:none — so the browser
+           laid out their SOURCE as visible text in the header. */
+        .nav__links > a,
+        .nav__links > button { display: inline-flex; align-items: center; }
         .nav__cta { line-height: 1; }
 </style>
 </head>

@@ -22,6 +22,13 @@
 </button>
 
 <style>
+    /* This partial carries its own <style> and <script>, so wherever it is
+       dropped in they become CHILDREN of that container. A layout rule like
+       `.nav__links > * { display: inline-flex }` then overrides their default
+       display:none, and the browser lays out their SOURCE as visible text in
+       the page. Cheap insurance, stated where the risk originates. */
+    style, script { display: none !important; }
+
     .nav__theme {
         display: inline-flex; align-items: center; justify-content: center;
         width: 32px; height: 32px; padding: 0; flex-shrink: 0;
