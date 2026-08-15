@@ -20,6 +20,8 @@ use Illuminate\View\View;
  */
 class BotAgentWebController extends Controller
 {
+    use \App\Http\Controllers\Concerns\EnforcesPlanFeatures;
+
     public function __construct(private TenantManager $tenants) {}
 
     public function index(Request $request, Client $client): View
@@ -73,6 +75,14 @@ class BotAgentWebController extends Controller
 
     public function store(Request $request, Client $client): RedirectResponse
     {
+        // Structural quota: an extra agent beyond the plan is not overage,
+        // it is simply not in the plan, so this is a hard stop.
+        if ($refusal = $this->refuseUnlessWithinQuota(
+            $client, 'agents', \App\Models\BotAgent::whereIn('project_id',
+                \App\Models\Project::where('client_id', $client->id)->pluck('id'))->count(), 'AI agent')) {
+            return $refusal;
+        }
+
         $data = $this->validateInput($request);
         $project = $this->guard($client, (int) $data['project_id']);
 

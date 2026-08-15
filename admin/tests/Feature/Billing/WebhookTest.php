@@ -253,6 +253,71 @@ class WebhookTest extends BillingTestCase
         ]);
     }
 
+    // ── API-version shape changes ────────────────────────────────────
+
+    public function test_period_dates_are_read_from_the_subscription_item(): void
+    {
+        // Stripe moved current_period_start/end off the subscription and onto
+        // each ITEM in API version 2025-03-31.basil. Reading only the old
+        // location writes NULL on a modern account — no error anywhere, but
+        // renewal quota resets, the usage window and `ends_at` all break at
+        // once. This is the modern payload shape.
+        [$client] = $this->makeWorkspace();
+
+        $start = now()->subDays(3)->getTimestamp();
+        $end   = now()->addDays(27)->getTimestamp();
+
+        $event = $this->subscriptionEvent('customer.subscription.created', $client, 'active');
+
+        unset($event['data']['object']['current_period_start']);
+        unset($event['data']['object']['current_period_end']);
+
+        $event['data']['object']['items']['data'][0]['current_period_start'] = $start;
+        $event['data']['object']['items']['data'][0]['current_period_end']   = $end;
+
+        $this->postWebhook($event)->assertOk();
+
+        $subscription = Subscription::where('client_id', $client->id)->latest('id')->first();
+
+        $this->assertNotNull($subscription->current_period_start, 'Period start must survive the newer payload shape.');
+        $this->assertSame($start, $subscription->current_period_start->getTimestamp());
+        $this->assertSame($end, $subscription->current_period_end->getTimestamp());
+    }
+
+    public function test_an_addon_item_does_not_hijack_the_plan(): void
+    {
+        // Add-ons are extra items on the SAME subscription and Stripe makes no
+        // promise about their order. Reading items.data[0] blindly would
+        // rewrite the workspace's plan to "Extra team seat" — downgrading a
+        // paying customer to an add-on.
+        [$client] = $this->makeWorkspace();
+
+        $growth = $this->price('growth', 'monthly');
+        $seat   = $this->plan('addon-seat')->priceFor('monthly');
+
+        $event = $this->subscriptionEvent('customer.subscription.updated', $client, 'active');
+
+        // Add-on FIRST, plan second.
+        array_unshift($event['data']['object']['items']['data'], [
+            'id'       => 'si_addon',
+            'quantity' => 3,
+            'price'    => [
+                'id'          => $seat->stripe_price_ref,
+                'unit_amount' => $seat->unit_amount,
+                'currency'    => 'usd',
+            ],
+        ]);
+
+        $this->postWebhook($event)->assertOk();
+
+        $subscription = Subscription::where('client_id', $client->id)->latest('id')->first();
+
+        $this->assertSame($this->plan('growth')->id, $subscription->plan_id);
+        $this->assertSame($growth->stripe_price_ref, $subscription->stripe_price_ref);
+        $this->assertSame(5900, $subscription->unit_amount);
+        $this->assertSame(1, $subscription->quantity, 'Quantity must come from the plan line, not the add-on.');
+    }
+
     public function test_an_event_for_an_unknown_subscription_is_acked_not_retried_forever(): void
     {
         // e.g. a subscription created directly in the Stripe dashboard.

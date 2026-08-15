@@ -110,6 +110,34 @@
     .pk-feats li i { color:#12b76a; flex:none; margin-top:2px; }
 
     /* ── Enterprise ── */
+    .pk-addons {
+        margin-top:34px; border:1px solid #e7e9f0; border-radius:16px;
+        background:#fbfbfe; padding:22px 24px;
+    }
+    .pk-addons__head h3 { margin:0 0 5px; font-size:16px; font-weight:800; color:#0b1220; letter-spacing:-.01em; }
+    .pk-addons__head p { margin:0 0 16px; font-size:13px; color:#667085; line-height:1.6; max-width:620px; }
+    .pk-addons__grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(270px,1fr)); }
+    .pk-addon {
+        display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+        border:1px solid #e7e9f0; border-radius:12px; background:#fff; padding:13px 15px;
+    }
+    .pk-addon__name { font-size:13.5px; font-weight:700; color:#0b1220; }
+    .pk-addon__meta { font-size:12px; color:#667085; margin-top:3px; }
+    .pk-addon__meta strong { color:#0b1220; font-weight:700; }
+    .pk-addon__form { display:flex; gap:8px; align-items:center; }
+    .pk-addon__form input {
+        width:70px; text-align:center; border:1px solid #e2e8f0; border-radius:9px;
+        padding:7px 6px; font-size:13px; background:#fff; color:#0b1220;
+    }
+    .pk-addon__hint { font-size:12px; color:#98a2b3; }
+    .pk-addons__note { margin:14px 0 0; font-size:11.5px; color:#98a2b3; line-height:1.6; }
+
+    html.dark .pk-addons { background:#0f172a; border-color:#334155; }
+    html.dark .pk-addons__head h3 { color:#f8fafc; }
+    html.dark .pk-addon { background:#1e293b; border-color:#334155; }
+    html.dark .pk-addon__name, html.dark .pk-addon__meta strong { color:#f8fafc; }
+    html.dark .pk-addon__form input { background:#0f172a; border-color:#334155; color:#f8fafc; }
+
     .pk-ent {
         margin-top:22px; display:flex; gap:22px; flex-wrap:wrap; align-items:center;
         background:#0b1220; border-radius:18px; padding:26px 30px; color:#fff;
@@ -260,6 +288,73 @@
         </div>
     @endforeach
 </div>
+
+{{-- ── Add-ons ──────────────────────────────────────────────────────
+     Top up one thing instead of moving up a whole tier. Shown here as well
+     as on the billing overview because this is the page people reach when
+     they hit a limit. --}}
+@if (! empty($addons))
+    <div class="pk-addons intro-y">
+        <div class="pk-addons__head">
+            <div>
+                <h3>Need a little more?</h3>
+                <p>
+                    Add extra capacity to your current plan instead of upgrading.
+                    @if ($canBuyAddons)
+                        Charged on your existing invoice and prorated from today.
+                    @endif
+                </p>
+            </div>
+        </div>
+
+        <div class="pk-addons__grid">
+            @foreach ($addons as $item)
+                @php $addonPlan = $item['plan']; @endphp
+                <div class="pk-addon">
+                    <div style="flex:1;min-width:0">
+                        <div class="pk-addon__name">{{ $addonPlan->name }}</div>
+                        <div class="pk-addon__meta">
+                            <strong>{{ $item['price']->formatted() }}</strong>
+                            each per {{ $item['price']->months() > 1 ? 'year' : 'month' }}
+                            @if ($item['owned'] > 0)
+                                <span class="bl-badge bl-badge--blue" style="margin-left:6px">
+                                    {{ $item['owned'] }} active
+                                </span>
+                            @endif
+                        </div>
+                    </div>
+
+                    @if ($canBuyAddons && $checkoutOpen)
+                        {{-- Slug + quantity only; the amount is resolved
+                             server-side for the subscription's interval. --}}
+                        <form method="POST"
+                              action="{{ route('billing.addons.update', ['client' => $client->slug]) }}"
+                              class="pk-addon__form">
+                            @csrf
+                            <input type="hidden" name="addon" value="{{ $addonPlan->slug }}">
+                            <input type="number" name="quantity" min="0" max="999"
+                                   value="{{ $item['owned'] }}" aria-label="Quantity">
+                            <button type="submit" class="bl-btn bl-btn--ghost bl-btn--sm">
+                                {{ $item['owned'] > 0 ? 'Update' : 'Add' }}
+                            </button>
+                        </form>
+                    @else
+                        <span class="pk-addon__hint">
+                            {{ $canBuyAddons ? 'Available soon' : 'Choose a plan first' }}
+                        </span>
+                    @endif
+                </div>
+            @endforeach
+        </div>
+
+        @if ($canBuyAddons && $checkoutOpen)
+            <p class="pk-addons__note">
+                Set a quantity to 0 to remove an add-on — your next invoice is credited for the
+                unused part. Add-ons follow your plan’s billing interval.
+            </p>
+        @endif
+    </div>
+@endif
 
 @if ($ent)
     <div class="pk-ent intro-y">

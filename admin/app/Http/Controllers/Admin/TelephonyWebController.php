@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
 use App\Models\BotAgent;
 use App\Models\Client;
 use App\Models\Flow;
 use App\Models\Project;
+use App\Models\ProjectTwilioAccount;
 use App\Models\Skill;
 use App\Services\Telephony\WelcomeAudioService;
 use App\Services\Tenant\TenantManager;
@@ -79,13 +81,155 @@ class TelephonyWebController extends Controller
             'status' => $base ? $base . '/api/telephony/twilio/status' : null,
         ];
 
+        // Per-project Twilio connection state. Deliberately an array, not
+        // the model: the token is $hidden, but a plain array is the safer
+        // contract for something a Blade view receives.
+        $twilio = [];
+        foreach ($projects as $p) {
+            $acc = ProjectTwilioAccount::where('project_id', $p->id)->first();
+            $twilio[$p->id] = $acc ? [
+                'account_sid'   => $acc->account_sid,
+                'token_hint'    => $acc->auth_token_hint,
+                'friendly_name' => $acc->friendly_name,
+                'is_trial'      => $acc->isTrial(),
+                'verified_at'   => $acc->verified_at?->diffForHumans(),
+            ] : null;
+        }
+
         return view('telephony.index', [
             'client'      => $client,
             'projects'    => $projects,
             'perProject'  => $perProject,
             'webhookUrls' => $webhookUrls,
             'envDefault'  => trim((string) config('services.twilio.phone_number', '')),
+            'twilio'      => $twilio,
         ]);
+    }
+
+    /**
+     * POST /telephony/credentials — save a project's own Twilio credentials.
+     *
+     * The credentials are checked against Twilio before being stored. That
+     * single round-trip is worth it: an unverified typo doesn't fail here, it
+     * fails days later as a customer call that gets a 403 from our signature
+     * check — invisible to them and to us.
+     */
+    public function saveCredentials(Request $request, Client $client): RedirectResponse
+    {
+        $data = $request->validate([
+            'project_id'  => 'required|integer',
+            'account_sid' => 'required|string|max:64',
+            'auth_token'  => 'required|string|max:64',
+        ]);
+
+        $project = $this->guard($client, (int) $data['project_id']);
+        $sid     = trim($data['account_sid']);
+        $token   = trim($data['auth_token']);
+
+        // Catch the two mistakes people actually make — pasting an API Key
+        // (SK…) instead of the Account SID, or swapping the two fields — with
+        // a message that says what to do, rather than a bare 401 from Twilio.
+        if (! preg_match('/^AC[0-9a-f]{32}$/i', $sid)) {
+            return back()->withErrors(['account_sid' => str_starts_with(strtoupper($sid), 'SK')
+                ? 'That looks like an API Key SID. We need the Account SID — it starts with "AC".'
+                : 'That Account SID doesn\'t look right. It starts with "AC" and is 34 characters long.',
+            ])->withInput();
+        }
+
+        $check = $this->verifyTwilioCredentials($sid, $token);
+        if (! $check['ok']) {
+            return back()->withErrors(['auth_token' => $check['error']])->withInput();
+        }
+
+        $account = ProjectTwilioAccount::firstOrNew(['project_id' => $project->id]);
+        $account->fill([
+            'account_sid'   => $sid,
+            'friendly_name' => $check['friendly_name'],
+            'account_type'  => $check['type'],
+            'status'        => ProjectTwilioAccount::STATUS_CONNECTED,
+            'last_error'    => null,
+            'verified_at'   => now(),
+        ]);
+        $account->setToken($token);
+        $account->save();
+
+        // The SID identifies an account and is safe to record; the token
+        // never is.
+        AuditLog::record('telephony.credentials_saved', [
+            'target_type' => 'project',
+            'target_id'   => $project->id,
+            'payload'     => ['account_sid' => $sid, 'type' => $check['type']],
+        ]);
+
+        $msg = "Twilio account connected for {$project->name}.";
+        if (strcasecmp((string) $check['type'], 'Trial') === 0) {
+            $msg .= ' Note: this is a Trial account — it can only call numbers verified in your Twilio console.';
+        }
+
+        return back()->with('success', $msg);
+    }
+
+    /** POST /telephony/credentials/delete — forget a project's credentials. */
+    public function deleteCredentials(Request $request, Client $client): RedirectResponse
+    {
+        $data    = $request->validate(['project_id' => 'required|integer']);
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        ProjectTwilioAccount::where('project_id', $project->id)->delete();
+
+        AuditLog::record('telephony.credentials_removed', [
+            'target_type' => 'project', 'target_id' => $project->id,
+        ]);
+
+        // The numbers stay on the project deliberately: removing credentials
+        // is usually a token rotation, and silently unrouting live phone
+        // numbers would take a customer's phone line down.
+        return back()->with('success', 'Twilio credentials removed. Calls to this project\'s numbers will be rejected until you add them again.');
+    }
+
+    /**
+     * One GET against Twilio to confirm the credentials work and read back
+     * what kind of account they belong to.
+     *
+     * @return array{ok:bool,error:?string,friendly_name:?string,type:?string}
+     */
+    private function verifyTwilioCredentials(string $sid, string $token): array
+    {
+        $ch = curl_init("https://api.twilio.com/2010-04-01/Accounts/{$sid}.json");
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_USERPWD        => $sid . ':' . $token,
+            CURLOPT_HTTPAUTH       => CURLAUTH_BASIC,
+            CURLOPT_TIMEOUT        => 15,
+            CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+        ]);
+        $raw  = curl_exec($ch);
+        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $err  = curl_error($ch);
+        curl_close($ch);
+
+        if ($err !== '') {
+            return ['ok' => false, 'error' => 'Could not reach Twilio to check those credentials. Try again in a moment.',
+                    'friendly_name' => null, 'type' => null];
+        }
+
+        $body = $raw ? (json_decode($raw, true) ?: []) : [];
+
+        if ($code === 401) {
+            return ['ok' => false, 'error' => 'Twilio rejected those credentials. Check the Auth Token — copy it with the button in the console, and note it changes if you rotate it.',
+                    'friendly_name' => null, 'type' => null];
+        }
+        if ($code < 200 || $code >= 300) {
+            return ['ok' => false, 'error' => $body['message'] ?? "Twilio returned HTTP {$code}.",
+                    'friendly_name' => null, 'type' => null];
+        }
+
+        return [
+            'ok'            => true,
+            'error'         => null,
+            'friendly_name' => $body['friendly_name'] ?? null,
+            'type'          => $body['type'] ?? null,
+        ];
     }
 
     /**

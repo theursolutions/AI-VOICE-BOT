@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Billing;
 
 use App\Http\Controllers\Controller;
+use App\Mail\InvoicePaidMail;
 use App\Models\Billing\StripeEvent;
 use App\Models\Billing\Subscription;
 use App\Models\Client;
@@ -12,6 +13,7 @@ use App\Services\Billing\SubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Stripe\Exception\SignatureVerificationException;
 use Stripe\Webhook;
 
@@ -258,6 +260,91 @@ class StripeWebhookController extends Controller
         $stripeSubscription = $this->factory->make()->subscriptions->retrieve($subscriptionRef, []);
 
         $this->subscriptions->syncFromStripe($stripeSubscription->toArray());
+
+        $this->sendReceipt($invoice);
+    }
+
+    /**
+     * Email the receipt for a paid invoice.
+     *
+     * Sent from `invoice.paid` and nowhere else. That event is the only signal
+     * that money actually settled — it also covers renewals, retries after a
+     * failed card and Stripe-side manual payments, none of which pass through
+     * our checkout controller. Duplicate delivery is already impossible: the
+     * webhook is idempotent on `stripe_event_id`, so a Stripe retry never
+     * reaches this method twice.
+     *
+     * Never allowed to break the webhook. A mail outage must not make us
+     * return 500 to Stripe and lose the subscription sync along with it.
+     */
+    private function sendReceipt(array $invoice): void
+    {
+        if (! config('billing.mail.receipts', true)) {
+            return;
+        }
+
+        try {
+            $client = $this->clientFrom($invoice)
+                ?? Client::query()->where('stripe_customer_ref', $invoice['customer'] ?? null)->first();
+
+            if (! $client) {
+                return;
+            }
+
+            // A $0 invoice (a trial starting, or a credit covering the whole
+            // amount) is not a payment; "you have been charged $0.00" is a
+            // confusing thing to receive.
+            if ((int) ($invoice['amount_paid'] ?? 0) <= 0) {
+                return;
+            }
+
+            // Re-fetch through BillingService rather than trusting the webhook
+            // body: it applies the cross-tenant ownership check and returns
+            // the same normalised shape (including the tax breakdown) that the
+            // on-site invoice page renders, so the two can never disagree.
+            $data = $this->billing->invoice($client, (string) $invoice['id']);
+
+            if (! $data) {
+                return;
+            }
+
+            $owner = $client->billingOwner();
+
+            $recipient = $owner?->email
+                ?: $client->billing_email
+                ?: ($data['customer_email'] ?? null);
+
+            if (! $recipient) {
+                Log::warning('billing.receipt.no_recipient', ['client_id' => $client->getKey()]);
+
+                return;
+            }
+
+            $subscription = $client->currentSubscription();
+            $card         = $this->billing->paymentMethod($client);
+
+            Mail::to($recipient)->send(new InvoicePaidMail(
+                client:        $client,
+                invoice:       $data,
+                plan:          $subscription?->plan,
+                recipientName: $owner?->name,
+                cardLabel:     $card
+                    ? trim(ucfirst((string) ($card['brand'] ?? 'Card')) . ' ending ' . ($card['last4'] ?? '••••'))
+                    : null,
+                renewsOn:      $subscription?->current_period_end,
+            ));
+
+            Log::info('billing.receipt.sent', [
+                'client_id' => $client->getKey(),
+                'invoice'   => $data['id'],
+                'to'        => $recipient,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('billing.receipt.failed', [
+                'invoice' => $invoice['id'] ?? null,
+                'error'   => $e->getMessage(),
+            ]);
+        }
     }
 
     private function onInvoicePaymentFailed(array $invoice): void

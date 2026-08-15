@@ -66,6 +66,12 @@ class Subscription extends Model
 
     // ── Relations ────────────────────────────────────────────────────
 
+    /** Extra seats / agents bought on top of the plan. */
+    public function addons(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SubscriptionAddon::class, 'subscription_id');
+    }
+
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class, 'client_id');

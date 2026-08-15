@@ -2,8 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\ProjectTwilioAccount;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -29,9 +31,37 @@ class TwilioSignature
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $token = (string) config('services.twilio.auth_token');
+        // WHOSE token signed this?
+        //
+        // Every customer connects their own Twilio account (see
+        // App\Models\ProjectTwilioAccount) — the credentials in .env belong to
+        // the Serve AI demo project alone. Twilio signs a webhook with the
+        // auth token of the account that owns the number, so validating
+        // everything against the platform token would reject every real
+        // customer call with a 403 they'd never see an explanation for.
+        //
+        // AccountSid rides in the body of every Twilio webhook, so the right
+        // credential is always identifiable.
+        $token = $this->tokenFor((string) $request->input('AccountSid', ''));
+
+        if ($token === null) {
+            // A SID we've never seen. Refuse in production rather than fall
+            // back to the platform token: without that, anyone who found this
+            // URL could point their own Twilio account at it and be trusted.
+            if (app()->environment('production')) {
+                Log::warning('Twilio webhook from an unrecognised account', [
+                    'account_sid' => $request->input('AccountSid'),
+                    'path'        => $request->path(),
+                ]);
+
+                return response('Unknown Twilio account', 403);
+            }
+
+            return $next($request);
+        }
+
         if ($token === '') {
-            // Not configured — let it through (dev/single-tenant).
+            // Platform account with no token configured — dev, as before.
             return $next($request);
         }
 
@@ -79,5 +109,36 @@ class TwilioSignature
         }
 
         return $next($request);
+    }
+
+    /**
+     * Auth token for the account that signed this request.
+     *
+     *   string — validate against it
+     *   ''     — platform account, no token configured (dev passthrough)
+     *   null   — unrecognised account; refuse in production
+     */
+    private function tokenFor(string $accountSid): ?string
+    {
+        $platformSid   = (string) config('services.twilio.account_sid');
+        $platformToken = (string) config('services.twilio.auth_token');
+
+        // Ours: the demo project and the landing-page demo call. Also the
+        // no-AccountSid case, which is a local curl test.
+        if ($accountSid === '' || ($platformSid !== '' && hash_equals($platformSid, $accountSid))) {
+            return $platformToken;
+        }
+
+        try {
+            $token = ProjectTwilioAccount::findBySid($accountSid)?->auth_token;
+        } catch (\Throwable $e) {
+            // Table not migrated yet — degrade to the previous single-account
+            // behaviour rather than taking telephony down entirely.
+            Log::warning('TwilioSignature: credential lookup failed', ['err' => $e->getMessage()]);
+
+            return $platformToken !== '' ? $platformToken : null;
+        }
+
+        return is_string($token) && $token !== '' ? $token : null;
     }
 }

@@ -128,15 +128,11 @@ class PaymentMethodService
         $customerRef = $this->billing->ensureCustomer($client);
         $stripe      = $this->factory->make();
 
-        try {
-            $stripe->paymentMethods->attach($paymentMethodRef, ['customer' => $customerRef]);
-        } catch (\Stripe\Exception\InvalidRequestException $e) {
-            // Already attached to THIS customer → fine. Attached to another
-            // customer → a real problem worth surfacing.
-            if (! str_contains($e->getMessage(), 'already been attached')) {
-                throw $e;
-            }
-        }
+        // One implementation, shared with checkout: decides from the PM's
+        // current owner instead of string-matching a Stripe error message,
+        // which couldn't tell "already attached to you" from "already attached
+        // to someone else".
+        $this->billing->attachPaymentMethod($client, $paymentMethodRef);
 
         if ($makeDefault) {
             $stripe->customers->update($customerRef, [

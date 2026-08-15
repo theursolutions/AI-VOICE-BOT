@@ -45,10 +45,42 @@ return [
 
         // Pin the API version so a Stripe-side upgrade can never silently
         // change payload shapes underneath the webhook handler.
-        'api_version'    => env('STRIPE_API_VERSION', '2024-06-20'),
+        //
+        // Defaults to the version the INSTALLED stripe-php was generated for,
+        // rather than a hard-coded date. A hand-written date rots: pinning
+        // 2024-06-20 against stripe-php v21 made Stripe reject every request
+        // with "You are using an outdated API version", so not one Product
+        // could be created. Tying it to the library means `composer update`
+        // moves both together, and an explicit STRIPE_API_VERSION still wins.
+        'api_version'    => env('STRIPE_API_VERSION') ?: \Stripe\Util\ApiVersion::CURRENT,
 
         // Seconds of tolerance for webhook timestamp skew.
         'webhook_tolerance' => (int) env('STRIPE_WEBHOOK_TOLERANCE', 300),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Billing email
+    |--------------------------------------------------------------------------
+    |
+    | Receipts come from their own address rather than the global
+    | MAIL_FROM_ADDRESS (no-reply@). A receipt is the one transactional message
+    | customers actually reply to — "charge the other card", "we need a tax
+    | number on this" — so it must arrive from somewhere a human reads.
+    |
+    | The sending domain still has to be verified with the mail provider
+    | (Resend, here). `reply_to` is optional: set it when the from-address is
+    | an alias that forwards elsewhere.
+    |
+    */
+    'mail' => [
+        'from_address' => env('BILLING_MAIL_FROM', 'billing@serveai.com.pk'),
+        'from_name'    => env('BILLING_MAIL_FROM_NAME'),
+        'reply_to'     => env('BILLING_MAIL_REPLY_TO'),
+
+        // Master switch, so receipts can be silenced in staging without
+        // touching the webhook handler.
+        'receipts'     => (bool) env('BILLING_EMAIL_RECEIPTS', true),
     ],
 
     /*
