@@ -2,6 +2,26 @@
 
 @section('content')
 <style>
+    /* ── Top-left corner, dashboard only ───────────────────────────────
+       Dashboard is the first item in the sidebar, so the corner wedge above
+       its active menu item ends up level with the work area's top-left corner
+       — the one place the shared rule in partials/theme also draws a curve.
+
+       The two do not sit on top of each other: the sidebar's wedge is at the
+       RAIL's right edge and the shared one at the CONTENT's left edge, about
+       20px apart, so both drawn together read as two curves with a navy
+       splinter caught between them.
+
+       The content's corner is the one to keep — it is the corner every other
+       page shows, and dropping it instead leaves this page square. So the
+       sidebar's TOP wedge stands down here. Its bottom wedge (::after) is
+       untouched: that one sits below the pill, well clear of the corner, and
+       still smooths the pill back into the page.
+
+       Scoped to this page, which is the only page where Dashboard is the
+       active item and therefore the only page where they collide. */
+    html:not(.dark) .side-nav .side-menu--active::before { display: none; }
+
     /* ── KPI cards ─────────────────────────────────────────────────── */
     .tva-dash-hero {
         background: var(--tva-gradient);
@@ -192,7 +212,7 @@
     <div class="tva-row" style="margin-bottom: 22px;">
         <div class="tva-card">
             <div class="tva-card__title">
-                <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Activity — last 14 days
+                <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Activity — last 14 days
             </div>
             <div class="tva-chart-wrap">
                 <canvas id="tvaActivityChart"></canvas>
