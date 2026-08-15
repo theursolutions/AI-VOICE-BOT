@@ -113,62 +113,14 @@
        surfaces as a stray white card behind the page's own hero. */
     html:not(.dark) body > .flex > .content {
         background-color: var(--tva-bg);
-        background-image: linear-gradient(#1b3962 0, #1b3962 98px, transparent 98px);
+        background-image: linear-gradient(#1b3962 0, #1b3962 68px, transparent 68px);
         background-repeat: no-repeat;
-    }
-
-    /* In dark the whole column — top bar included — is one panel, so its 30px
-       radius is visible at the top. In light the top of that same panel is
-       navy against a navy page, so the curve is there but invisible, and the
-       work area below it began on a hard horizontal edge.
-
-       This gives the paper its own rounded shoulder: the navy band is run 30px
-       deeper than the bar needs, and this element covers that overrun in page
-       colour with the top corners rounded, leaving two small navy wedges. The
-       negative bottom margin cancels its height, so nothing below it moves —
-       and being early in the DOM it paints behind the page's own content
-       rather than over it. Sized only in light; in dark it collapses to
-       nothing. */
-    html:not(.dark) .tva-shoulder {
-        height: 30px;
-        margin: 0 -22px -30px;
-        background: var(--tva-bg);
-        border-radius: 30px 30px 0 0;
-    }
-    @media (max-width: 767px) {
-        /* `.content` drops to px-4 below md, so the bleed has to match. */
-        html:not(.dark) .tva-shoulder { margin-left: -16px; margin-right: -16px; }
     }
     /* Those nested wrappers inherit the page instead of painting their own
        slightly-different slate, which otherwise shows as a faint rounded
        panel edge around the content. */
     html:not(.dark) .content .content { background: transparent; }
     html:not(.dark) .top-bar { border-bottom-color: rgba(255,255,255,.10); }
-
-    /* The vendor's active menu item is not a pill — it is a TAB that melts
-       into the work area. It overhangs the rail by 20px and adds two SVG
-       corner wedges above and below, and all three are painted in a
-       HARDCODED #f1f5f8 chosen to match the content sitting behind them.
-
-       That only works while the rail sits on the content colour. On navy
-       there is nothing to melt into, so the overhang and its wedges read as a
-       stray light slab with a notch cut out of it — most visible against the
-       header band, which the top menu item sits alongside.
-
-       Light mode drops the trick and uses an actual pill, which owes nothing
-       to whatever is behind the rail. Only the ACTIVE item's marker is
-       removed: `:not(.side-menu--active) .side-menu__icon:before` is the
-       inactive items' bullet and is left alone. */
-    html:not(.dark) .side-nav .side-menu--active::before,
-    html:not(.dark) .side-nav .side-menu--active::after,
-    html:not(.dark) .side-nav .side-menu--active .side-menu__icon::before {
-        display: none !important;
-    }
-    html:not(.dark) .side-nav > ul > li > .side-menu--active {
-        background: #ffffff;
-        border-radius: 12px;
-        box-shadow: 0 1px 2px rgba(8,20,40,.16);
-    }
 
     /* The chrome is dark in BOTH themes, so its contents must not follow the
        light text tokens — white-on-navy is correct in light mode too. */

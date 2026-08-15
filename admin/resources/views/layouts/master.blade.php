@@ -28,8 +28,6 @@
                 <!-- BEGIN: Top Bar -->
                 @include('layouts.topbar')
                 <!-- END: Top Bar -->
-                {{-- Rounds the top of the work area against the navy bar (light mode only; see partials/theme). --}}
-                <div class="tva-shoulder" aria-hidden="true"></div>
                 <!-- Verify-email nudge (Dashboard + Ask AI, only while unverified) -->
                 @include('partials.verify-email-banner')
                 <!-- BEGIN Actual page content -->

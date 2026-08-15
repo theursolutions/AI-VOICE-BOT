@@ -152,8 +152,6 @@
             @include('layouts.ops-sidebar')
             <div class="content">
                 @include('layouts.ops-topbar')
-                {{-- Rounds the top of the work area against the navy bar (light mode only; see partials/theme). --}}
-                <div class="tva-shoulder" aria-hidden="true"></div>
                 @yield('content')
             </div>
         </div>
