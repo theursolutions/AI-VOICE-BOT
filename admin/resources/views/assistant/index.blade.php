@@ -13,12 +13,16 @@
         --bg:#ffffff; --panel:#f9fafb; --panel-2:#f3f5f9; --panel-3:#eef1f6;
         --line:#e4e7ec; --line-2:#dfe3ea; --txt:#16202e; --muted:#667085;
         --accent:#1d4ed8; --accent2:#2563eb;
+        --overlay:rgba(255,255,255,.72);
+        --danger-bg:#fef3f2; --danger-line:#fecdca;
     }
     /* The original palette, kept intact — only its trigger changed. */
     html.dark .jv {
         --bg:#070b16; --panel:#0b1120; --panel-2:#101a31; --panel-3:#16203a;
         --line:#1e293b; --line-2:#24324f; --txt:#e2e8f0; --muted:#94a3b8;
         --accent:#3b82f6; --accent2:#60a5fa;
+        --overlay:rgba(2,6,16,.72);
+        --danger-bg:#1b1014; --danger-line:#7f1d1d;
     }
     html.dark .jv {
         background:radial-gradient(1200px 600px at 50% -10%, rgba(59,130,246,.10), transparent 60%), var(--bg);
@@ -34,25 +38,25 @@
     /* Themed scrollbars — replaces the chunky default OS scrollbar everywhere
        inside the Ask AI page (response panel, tables, chat stream, drawer). */
     .jv *::-webkit-scrollbar { width:10px; height:10px; }
-    .jv *::-webkit-scrollbar-track { background:rgba(15,23,42,.55); border-radius:10px; }
+    .jv *::-webkit-scrollbar-track { background:var(--panel-2); border-radius:10px; }
     .jv *::-webkit-scrollbar-thumb {
         background:linear-gradient(180deg,var(--accent),#2563eb);
         border-radius:10px; border:2px solid var(--panel); background-clip:padding-box;
     }
     .jv *::-webkit-scrollbar-thumb:hover { background:linear-gradient(180deg,var(--accent2),var(--accent)); border-color:var(--panel); background-clip:padding-box; }
     .jv *::-webkit-scrollbar-corner { background:transparent; }
-    .jv * { scrollbar-width:thin; scrollbar-color:var(--accent) rgba(15,23,42,.55); }
+    .jv * { scrollbar-width:thin; scrollbar-color:var(--accent) transparent; }
     /* Print/export popups inherit the page font; their default scrollbar is fine. */
 
     /* Top bar */
     .jv-top { display:flex; align-items:center; gap:10px; padding:12px 16px; border-bottom:1px solid var(--line); z-index:4; }
     .jv-iconbtn { background:var(--panel); color:var(--muted); border:1px solid var(--line); border-radius:9px; width:38px; height:38px;
         display:flex; align-items:center; justify-content:center; cursor:pointer; transition:.15s; }
-    .jv-iconbtn:hover { color:var(--txt); border-color:#334155; }
+    .jv-iconbtn:hover { color:var(--txt); border-color:var(--line-2); }
     .jv-iconbtn.on { color:#fff; background:linear-gradient(135deg,var(--accent),#2563eb); border-color:var(--accent); }
     /* mic muted (listening stopped) — red so it reads as "off" at a glance */
     #jv-micbtn.on { background:linear-gradient(135deg,#22c55e,#16a34a); border-color:#16a34a; }
-    #jv-micbtn.muted { color:#fca5a5; background:#1b1014; border-color:#7f1d1d; animation:none; }
+    #jv-micbtn.muted { color:#fca5a5; background:var(--danger-bg); border-color:var(--danger-line); animation:none; }
     #jv-micbtn.on::after { content:''; }
     .jv-title { font-size:14px; font-weight:600; display:flex; align-items:center; gap:8px; }
     .jv-title .asst-dot { width:7px;height:7px;border-radius:50%;background:#22c55e;box-shadow:0 0 8px #22c55e; }
@@ -99,7 +103,7 @@
     .jv-state { font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent2); font-family:ui-monospace,monospace; min-height:15px; }
     .jv-state.listening { color:#22c55e; } .jv-state.speaking { color:var(--accent2); } .jv-state.idle { color:var(--muted); }
     .jv-transcript { width:100%; max-width:560px; flex-shrink:0; }
-    .jv-transcript input { width:100%; text-align:center; background:rgba(10,15,29,.6); border:1px solid var(--line);
+    .jv-transcript input { width:100%; text-align:center; background:var(--panel-2); border:1px solid var(--line);
         border-radius:12px; padding:12px 16px; color:var(--txt); font-size:15px; outline:none; }
     .jv-transcript input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(59,130,246,.15); }
     .jv-hint { font-size:11px; color:#64748b; text-align:center; max-width:520px; }
@@ -139,7 +143,7 @@
     .jv-rcol { display:flex; flex-direction:column; gap:6px; min-width:0; max-width:88%; }
     .jv-rrow.user .jv-rcol { align-items:flex-end; }
     .jv-rbubble { padding:11px 14px; border-radius:13px; font-size:14px; line-height:1.55; white-space:pre-wrap; word-break:break-word; }
-    .jv-rrow.bot .jv-rbubble { background:#0f1a2e; border:1px solid var(--line); color:#e2e8f0; border-top-left-radius:4px; }
+    .jv-rrow.bot .jv-rbubble { background:var(--panel-2); border:1px solid var(--line); color:#e2e8f0; border-top-left-radius:4px; }
     .jv-rrow.user .jv-rbubble { background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; border-top-right-radius:4px; }
     .jv-rmeta, .jv-tmeta { font-size:10.5px; color:#64748b; padding:0 4px; }
     .jv-rrow.user .jv-rmeta { text-align:right; }
@@ -158,16 +162,16 @@
     .jv-bubble { padding:12px 15px; border-radius:14px; font-size:13.6px; line-height:1.6; white-space:pre-wrap; word-wrap:break-word; }
     .jv-row.bot .jv-bubble{ background:var(--panel-3); border:1px solid var(--line); border-top-left-radius:4px; }
     .jv-row.user .jv-bubble{ background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff; border-top-right-radius:4px; }
-    .jv-composer { padding:16px 24px 22px; border-top:1px solid var(--line); background:linear-gradient(to top, rgba(8,12,22,.5), transparent); }
+    .jv-composer { padding:16px 24px 22px; border-top:1px solid var(--line); background:transparent; }
     .jv-inputbar {
         max-width:880px; margin:0 auto; display:flex; gap:10px; align-items:flex-end;
-        background:#0b1322; border:1px solid #243352; border-radius:16px; padding:7px 7px 7px 18px;
+        background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:7px 7px 7px 18px;
         transition:border-color .18s ease, box-shadow .18s ease, background .18s ease;
     }
-    .jv-inputbar:hover { border-color:#2f4368; }
+    .jv-inputbar:hover { border-color:var(--line-2); }
     /* ONE focus treatment lives on the bar — a single accent ring + soft glow. */
     .jv-inputbar:focus-within {
-        border-color:var(--accent); background:#0c1528;
+        border-color:var(--accent); background:var(--bg-2, #fff);
         box-shadow:0 0 0 4px rgba(59,130,246,.16), 0 10px 28px -14px rgba(59,130,246,.55);
     }
     /* The textarea must carry NO chrome of its own. @tailwindcss/forms (bundled
@@ -184,7 +188,7 @@
         border:0; outline:none; box-shadow:none;
         --tw-ring-shadow:0 0 #0000; --tw-ring-offset-shadow:0 0 #0000;
     }
-    .jv-input::placeholder{ color:#64748b; }
+    .jv-input::placeholder{ color:var(--muted); }
     .jv-send {
         flex-shrink:0; width:42px; height:42px; border:none; border-radius:12px; cursor:pointer;
         background:linear-gradient(135deg,var(--accent),#2563eb); color:#fff;
@@ -198,12 +202,12 @@
 
     /* Data widget */
     .jv-widget { background:var(--panel); border:1px solid var(--line-2); border-radius:12px; overflow:hidden; }
-    .jv-widget__bar { display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); background:#0a0f1d; position:sticky; top:0; z-index:3; }
+    .jv-widget__bar { display:flex; align-items:center; gap:10px; padding:9px 12px; border-bottom:1px solid var(--line); background:var(--panel-2); position:sticky; top:0; z-index:3; }
     .jv-widget__title { font-size:12px; font-weight:600; color:#cbd5e1; }
     .jv-widget__count { font-size:10.5px; color:var(--muted); font-family:ui-monospace,monospace; }
     .jv-widget__acts { margin-left:auto; display:flex; gap:6px; }
     .jv-wbtn { background:var(--panel-3); color:#cbd5e1; border:1px solid var(--line-2); border-radius:7px; padding:5px 10px; font-size:11.5px; cursor:pointer; display:flex; align-items:center; gap:5px; }
-    .jv-wbtn:hover { background:#1c2942; border-color:var(--accent); color:#fff; }
+    .jv-wbtn:hover { background:var(--panel-3); border-color:var(--accent); color:#fff; }
     .jv-tblwrap { max-height:240px; overflow:auto; }
     .jv-tbl { width:100%; border-collapse:collapse; font-size:12.3px; }
     .jv-tbl th,.jv-tbl td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); white-space:nowrap; }
@@ -211,7 +215,7 @@
     .jv-tbl tbody tr:hover { background:var(--panel-2); }
 
     /* History drawer (hidden by default) */
-    .jv-overlay { position:absolute; inset:0; background:rgba(2,6,16,.55); z-index:8; opacity:0; pointer-events:none; transition:opacity .2s; }
+    .jv-overlay { position:absolute; inset:0; background:var(--overlay); z-index:8; opacity:0; pointer-events:none; transition:opacity .2s; }
     .jv-overlay.show { opacity:1; pointer-events:auto; }
     .jv-drawer { position:absolute; top:0; left:0; bottom:0; width:280px; z-index:9; background:var(--panel); border-right:1px solid var(--line);
         transform:translateX(-100%); transition:transform .25s cubic-bezier(.4,0,.2,1); display:flex; flex-direction:column; }

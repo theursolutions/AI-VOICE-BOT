@@ -743,8 +743,8 @@ html.dark {
    refine it. Violet throughout so it reads as a distinct mode from the
    green test runner and the blue selection state. */
 .fb-ai-btn {
-    background: rgba(139, 92, 246, .14);
-    color: #c4b5fd;
+    background: rgba(139, 92, 246, .12);
+    color: #6d28d9;
     border: 1px solid rgba(139, 92, 246, .38);
     border-radius: 8px;
     padding: 7px 14px;
@@ -756,10 +756,12 @@ html.dark {
     transition: background .12s ease, border-color .12s ease, color .12s ease, transform .08s ease;
 }
 .fb-ai-btn:hover {
-    background: rgba(139, 92, 246, .24);
+    background: rgba(139, 92, 246, .2);
     border-color: rgba(139, 92, 246, .6);
-    color: #ddd6fe;
+    color: #5b21b6;
 }
+html.dark .fb-ai-btn { color: #c4b5fd; }
+html.dark .fb-ai-btn:hover { color: #ddd6fe; }
 .fb-ai-btn:active { transform: translateY(1px); }
 .fb-ai-btn.is-active {
     background: rgba(139, 92, 246, .3);
@@ -780,7 +782,8 @@ html.dark {
     padding: 16px 18px 12px;
     border-bottom: 1px solid var(--fb-line);
 }
-.fb-ai__title { font-size: 14px; font-weight: 600; flex: 1; color: #ddd6fe; }
+.fb-ai__title { font-size: 14px; font-weight: 600; flex: 1; color: #7c3aed; }
+html.dark .fb-ai__title { color: #ddd6fe; }
 
 .fb-ai__channel {
     display: flex; align-items: center; gap: 8px;
@@ -797,9 +800,9 @@ html.dark {
 
 .fb-ai__log { flex: 1; overflow-y: auto; padding: 14px 16px; min-height: 0; }
 .fb-ai__intro {
-    font-size: 12.5px; line-height: 1.6; color: var(--fb-text-3);
-    background: rgba(139, 92, 246, .08);
-    border: 1px solid rgba(139, 92, 246, .22);
+    font-size: 12.5px; line-height: 1.6; color: var(--fb-text-2);
+    background: rgba(139, 92, 246, .07);
+    border: 1px solid rgba(139, 92, 246, .2);
     border-radius: 10px; padding: 12px 14px;
 }
 
@@ -812,12 +815,12 @@ html.dark {
     max-width: 100%; word-break: break-word; white-space: pre-wrap;
 }
 .fb-ai__msg.is-user .fb-ai__bubble {
-    background: rgba(59, 130, 246, .18);
-    border: 1px solid rgba(59, 130, 246, .35);
-    color: #dbeafe;
+    background: #3b82f6;
+    border: 1px solid #3b82f6;
+    color: #ffffff;
 }
 .fb-ai__msg.is-assistant .fb-ai__bubble {
-    background: var(--fb-bg); border: 1px solid var(--fb-line-3);
+    background: var(--fb-surface); border: 1px solid var(--fb-line);
     color: var(--fb-text);
 }
 .fb-ai__bubble.is-thinking { display: flex; align-items: center; gap: 8px; color: var(--fb-text-3); }
@@ -843,12 +846,17 @@ html.dark {
 .fb-ai__note b { display: block; margin-bottom: 4px; }
 .fb-ai__note ul { margin: 0; padding-left: 16px; }
 .fb-ai__note li { margin-bottom: 2px; }
-.fb-ai__note.is-gap  { background: rgba(245, 158, 11, .1);  border: 1px solid rgba(245, 158, 11, .3);  color: #fcd34d; }
-.fb-ai__note.is-warn { background: rgba(245, 158, 11, .08); border: 1px solid rgba(245, 158, 11, .25); color: #fde68a; }
-.fb-ai__note.is-info { background: rgba(148, 163, 184, .1); border: 1px solid rgba(148, 163, 184, .25); color: #cbd5e1; }
-.fb-ai__note.is-err  { background: rgba(239, 68, 68, .1);   border: 1px solid rgba(239, 68, 68, .3);   color: #fca5a5; }
+.fb-ai__note.is-gap  { background: rgba(245, 158, 11, .12); border: 1px solid rgba(245, 158, 11, .35); color: #92400e; }
+.fb-ai__note.is-warn { background: rgba(245, 158, 11, .09); border: 1px solid rgba(245, 158, 11, .28); color: #92400e; }
+.fb-ai__note.is-info { background: rgba(148, 163, 184, .12); border: 1px solid rgba(148, 163, 184, .3);  color: #475467; }
+.fb-ai__note.is-err  { background: rgba(239, 68, 68, .1);   border: 1px solid rgba(239, 68, 68, .32);  color: #b91c1c; }
+html.dark .fb-ai__note.is-gap  { color: #fcd34d; }
+html.dark .fb-ai__note.is-warn { color: #fde68a; }
+html.dark .fb-ai__note.is-info { color: #cbd5e1; }
+html.dark .fb-ai__note.is-err  { color: #fca5a5; }
 
-.fb-ai__gap { padding: 5px 0; border-bottom: 1px dashed rgba(255, 255, 255, .1); }
+.fb-ai__gap { padding: 5px 0; border-bottom: 1px dashed rgba(146, 64, 14, .25); }
+html.dark .fb-ai__gap { border-bottom-color: rgba(255, 255, 255, .1); }
 .fb-ai__gap:last-child { border-bottom: none; }
 .fb-ai__gap .t { display: block; font-weight: 600; }
 .fb-ai__gap .w { display: block; opacity: .8; }
@@ -868,10 +876,11 @@ html.dark {
 .fb-ai__examples button {
     background: rgba(139, 92, 246, .1);
     border: 1px solid rgba(139, 92, 246, .28);
-    color: #c4b5fd; border-radius: 999px;
+    color: #6d28d9; border-radius: 999px;
     padding: 4px 11px; font-size: 11px; cursor: pointer; font-family: inherit;
 }
 .fb-ai__examples button:hover { background: rgba(139, 92, 246, .2); }
+html.dark .fb-ai__examples button { color: #c4b5fd; }
 
 .fb-ai__composer {
     display: flex; gap: 8px; align-items: flex-end;

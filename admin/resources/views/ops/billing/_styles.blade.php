@@ -101,6 +101,28 @@
     .ob-pill--warn    { background:#fffaeb; color:#b54708; border-color:#fedf89; }
     .ob-pill--purple  { background:#f4f3ff; color:#5925dc; border-color:#d9d6fe; }
 
+    /* Colour-named aliases, used by the subscriptions table where the meaning
+       varies per column. Same swatches as the semantic names above so the two
+       vocabularies can't drift into different greens. */
+    .ob-pill--green { background:#ecfdf3; color:#067647; border-color:#abefc6; }
+    .ob-pill--red   { background:#fef3f2; color:#b42318; border-color:#fecdca; }
+    .ob-pill--amber { background:#fffaeb; color:#b54708; border-color:#fedf89; }
+    .ob-pill--blue  { background:#eff6ff; color:#1849a9; border-color:#b2ddff; }
+    .ob-pill--slate { background:#f8fafc; color:#475467; border-color:#e4e7ec; }
+
+    /* Stripe event outcomes — named after the status column they render. */
+    .ob-pill--processed { background:#ecfdf3; color:#067647; border-color:#abefc6; }
+    .ob-pill--skipped   { background:#f8fafc; color:#475467; border-color:#e4e7ec; }
+    .ob-pill--failed    { background:#fef3f2; color:#b42318; border-color:#fecdca; }
+    .ob-pill--pending   { background:#fffaeb; color:#b54708; border-color:#fedf89; }
+    .ob-pill--test      { background:#f4f3ff; color:#5925dc; border-color:#d9d6fe; }
+
+    /* Standalone label above a filter control (no .ob-field wrapper). */
+    .ob-field-label {
+        display:block; font-size:12px; font-weight:600; color:#334155; margin-bottom:6px;
+    }
+    html.dark .ob-field-label { color:#cbd5e1; }
+
     /* ── Tables ────────────────────────────────────────────────────── */
     .ob-tablewrap { overflow-x:auto; }
     .ob-table { width:100%; border-collapse:collapse; font-size:13px; }

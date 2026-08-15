@@ -1,6 +1,8 @@
 @extends('layouts.ops')
 
 @section('content')
+@include('ops.billing._styles')
+
 <style>
     .ev-card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:20px; }
     .ev-table { width:100%; border-collapse:collapse; font-size:13px; }
@@ -22,7 +24,7 @@
         font-size:12px; font-weight:600; padding:6px 11px; border-radius:8px;
         border:1px solid #e2e8f0; background:#fff; color:#334155;
     }
-    .ev-btn.is-on { background:var(--tva-gradient, linear-gradient(135deg,#6366f1,#8b5cf6)); color:#fff; border-color:transparent; }
+    .ev-btn.is-on { background:var(--tva-gradient, linear-gradient(135deg,#c97a00,#8b5cf6)); color:#fff; border-color:transparent; }
     .ev-note { font-size:11.5px; color:#94a3b8; margin-top:14px; line-height:1.6; }
 
     html.dark .ev-card { background:#1e293b; border-color:#334155; }
@@ -41,7 +43,7 @@
                 subscription's state doesn't match the Stripe dashboard.
             </div>
         </div>
-        <a href="{{ route('ops.billing.subscriptions.index') }}" class="ev-btn">
+        <a href="{{ route('ops.billing.subscriptions.index') }}" class="ob-btn ob-btn--sm">
             <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Subscriptions
         </a>
     </div>
@@ -50,7 +52,7 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
             @foreach (['' => 'All', 'processed' => 'Processed', 'skipped' => 'Skipped', 'failed' => 'Failed', 'pending' => 'Pending'] as $key => $label)
                 <a href="{{ request()->fullUrlWithQuery(['status' => $key ?: null]) }}"
-                   class="ev-btn {{ $filter === $key ? 'is-on' : '' }}">{{ $label }}</a>
+                   class="ob-btn ob-btn--sm {{ $filter === $key ? 'ob-btn--primary' : '' }}">{{ $label }}</a>
             @endforeach
         </div>
 
@@ -74,14 +76,14 @@
                             <td><span class="ev-type">{{ $event->type }}</span></td>
                             <td><span class="ev-ref">{{ $event->stripe_event_id }}</span></td>
                             <td>
-                                <span class="ev-pill ev-pill--{{ $event->status }}">{{ $event->status }}</span>
+                                <span class="ob-pill ob-pill--{{ $event->status }}">{{ $event->status }}</span>
                                 @if ($event->attempts > 1)
                                     <div class="ev-ref">{{ $event->attempts }} attempts</div>
                                 @endif
                             </td>
                             <td>
                                 @if ($event->livemode === false)
-                                    <span class="ev-pill ev-pill--test">test</span>
+                                    <span class="ob-pill ob-pill--test">test</span>
                                 @elseif ($event->livemode)
                                     <span class="ev-ref">live</span>
                                 @else
