@@ -1336,6 +1336,48 @@
         html:not(.dark) .hero__eyebrow::before {
             background: #7ee2a8; box-shadow: 0 0 10px rgba(126,226,168,.9);
         }
+
+        /* ── Seam labels ────────────────────────────────────────────────
+           I had dimmed the whole seam to .35 opacity, which turned the
+           LAYER 02 — LAUNCH SEQUENCE labels into pale ghosts on white.
+           Wrong instinct: they are the section markers, so they should be
+           quiet but LEGIBLE. Full opacity, navy ink on a white chip, and
+           the neon rule reduced to a hairline instead of a glowing wire. */
+        html:not(.dark) .seam { opacity: 1; }
+        html:not(.dark) .seam__label {
+            color: #1b3962;
+            background: #ffffff;
+            border-color: rgba(27,57,98,.20);
+            font-weight: 700;
+        }
+        html:not(.dark) .seam__line {
+            background: linear-gradient(90deg, transparent, rgba(27,57,98,.18) 30%, rgba(27,57,98,.28) 50%, rgba(27,57,98,.18) 70%, transparent);
+            box-shadow: none;
+        }
+        /* The travelling scan dot is a dark-console flourish. */
+        html:not(.dark) .seam__scan { display: none; }
+
+        /* ── Launch-sequence cards ──────────────────────────────────────
+           The icon tiles were rgba(59,130,246,.08) — an 8% blue on white is
+           barely a tint, so the icons floated with no container. Each step
+           now gets its own solid tile, which also makes the four read as a
+           SEQUENCE rather than four copies of the same card. */
+        html:not(.dark) .step__icon {
+            background: #1b3962;
+            color: #ffffff;
+            box-shadow: 0 6px 14px -6px rgba(27,57,98,.45);
+        }
+        html:not(.dark) .step:nth-of-type(2) .step__icon { background: #23548c; }
+        html:not(.dark) .step:nth-of-type(3) .step__icon { background: #2b6fb5; }
+        html:not(.dark) .step:nth-of-type(4) .step__icon { background: #3488d6; }
+
+        /* The step number sat on --bg with a neon border; on white that was
+           a pale outline around pale text. */
+        html:not(.dark) .step__num {
+            background: #1b3962;
+            border-color: #1b3962;
+            color: #ffffff;
+        }
 </style>
 </head>
 <body>
