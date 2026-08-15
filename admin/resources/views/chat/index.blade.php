@@ -551,8 +551,14 @@
        pushed the header past its container: the name broke onto three lines,
        the metrics squeezed into unreadable slivers, and a horizontal
        scrollbar appeared under the thread. */
+    /* NO overflow:hidden here. It was added to make the name truncate, but
+       truncation is done by the CHILDREN (min-width:0 plus text-overflow on
+       #hdrName and #hdrChannel) — the parent never needed it, and clipping
+       the header also clipped the Transfer and Status dropdowns, which hang
+       below it. position:relative + z-index instead, so the header sits
+       above the thread and its menus can escape. */
     .tva-chat__head { padding:11px 16px; border-bottom:1px solid #e2e8f0; display:flex; align-items:center;
-                      gap:12px; flex:0 0 auto; min-width:0; overflow:hidden; }
+                      gap:12px; flex:0 0 auto; min-width:0; position:relative; z-index:20; }
     /* The name and channel truncate; everything else keeps its size. */
     .tva-chat__head > .min-w-0 { flex:1 1 auto; min-width:0; }
     #hdrName, #hdrChannel { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

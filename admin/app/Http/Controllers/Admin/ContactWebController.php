@@ -42,6 +42,16 @@ class ContactWebController extends Controller
         if ($project) {
             $this->tenants->useFor($project);
             $available = ContactResolver::available();
+
+            // The customer sees a plain "no contacts yet". The actionable
+            // detail belongs to whoever can act on it, which is never them.
+            if (! $available) {
+                \Illuminate\Support\Facades\Log::warning(
+                    'Contacts tables missing for project — run: php artisan tenant:migrate '
+                    . '&& php artisan contacts:backfill',
+                    ['project_id' => $project->id, 'project' => $project->name],
+                );
+            }
         }
 
         if ($available && $project) {

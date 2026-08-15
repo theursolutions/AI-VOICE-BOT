@@ -225,9 +225,13 @@ class ChatController extends Controller
         $session = $this->session($project, $sessionId);
 
         if (! ContactResolver::available()) {
+            Log::warning('Contacts unavailable — run: php artisan tenant:migrate', [
+                'project_id' => $project->id,
+            ]);
+
             return response()->json([
                 'ok'      => false,
-                'message' => 'Contacts need a database update on this workspace. Run: php artisan tenant:migrate',
+                'message' => 'Contact profiles aren’t available on this workspace yet.',
             ], 422);
         }
 
@@ -654,11 +658,8 @@ class ChatController extends Controller
         }
         $session = $this->session($project, $sessionId);
 
-        if (! ConversationStatus::available()) {
-            return response()->json([
-                'ok'      => false,
-                'message' => 'Conversation statuses need a database update on this workspace. Run: php artisan tenant:migrate',
-            ], 422);
+        if ($error = $this->statusesUnavailable()) {
+            return $error;
         }
 
         $status = null;
@@ -804,10 +805,13 @@ class ChatController extends Controller
             return null;
         }
 
+        // The command goes to the log, not to the person who cannot run it.
+        Log::warning('Conversation statuses unavailable — run: php artisan tenant:migrate');
+
         return response()->json([
             'ok'      => false,
-            'message' => 'Conversation statuses are not set up on this workspace yet. '
-                       . 'Run: php artisan tenant:migrate',
+            'message' => 'Conversation statuses aren’t available on this workspace yet. '
+                       . 'Please contact support if this continues.',
         ], 422);
     }
 
