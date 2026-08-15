@@ -1522,6 +1522,29 @@
             .hero__meta-item { padding: 4px 0; }
             .hero__meta-item + .hero__meta-item::before { display: none; }
         }
+
+        /* ── Band coverage ──────────────────────────────────────────────
+           The dark came from #stars, a canvas fixed at 100vh. The hero is
+           min-height:100vh PLUS 130px/80px of padding, so it is always
+           taller than the canvas — and the overflow showed white behind the
+           bottom of the section, which is exactly where the
+           'No credit card / 90 seconds' row sits.
+
+           The gradient now lives on .hero itself, so it covers the section
+           whatever its height, and the canvas is just the moving dots on
+           top of it. */
+        html:not(.dark) .hero {
+            background: radial-gradient(ellipse at 50% -8%, #0d1a2e 0%, #050609 58%, #000 100%);
+        }
+        html:not(.dark) #stars { background: transparent; height: 100vh; }
+
+        /* ── Nav alignment ──────────────────────────────────────────────
+           .nav centres its children, but .nav__links is a flex row whose
+           own items were not centred, so the theme switch and the CTA sat
+           on the text baseline instead of the row axis. */
+        .nav__links { align-items: center; }
+        .nav__links > * { display: inline-flex; align-items: center; }
+        .nav__cta { line-height: 1; }
 </style>
 </head>
 <body>
@@ -2830,7 +2853,10 @@ WEBGL_INITS.push(function () {
                         gsap.to(el, {
                             opacity: 1, x: 0, y: 0, rotateX: 0, rotateY: 0, scale: 1,
                             duration: 0.7, ease: 'back.out(1.5)', delay: d,
-                            onStart: function () { mechTick(); }
+                            /* The servo whir used to fire on every reveal. The
+                               sound button now means "read this page aloud", so a
+                               mechanical noise over the narration is just two
+                               things talking at once. */
                         });
                         gsap.to(el, {
                             filter: 'blur(0px)', duration: 0.5, ease: 'power2.out', delay: d,
@@ -2926,23 +2952,113 @@ WEBGL_INITS.push(function () {
 
     var toggle = document.createElement('button');
     toggle.className = 'sfx-toggle';
-    toggle.setAttribute('aria-label', 'Toggle ambient sound');
-    toggle.innerHTML = ICON_OFF + '<span class="sfx-toggle__hint">Sound on — full experience</span>';
+    toggle.setAttribute('aria-label', 'Read this page aloud');
+    toggle.innerHTML = ICON_OFF + '<span class="sfx-toggle__hint">Read this page aloud</span>';
     document.body.appendChild(toggle);
+
+    /* ── Section narrator ───────────────────────────────────────────────
+       The button used to play ambient sci-fi noise. It now READS the section
+       you are looking at, using the browser's own speech synthesis — no
+       audio files, no network, and it inherits whatever voices the user
+       already has installed.
+
+       Three rules make it feel like listening rather than like a machine:
+
+         · it reads the HEADING then the LEAD paragraph, and nothing else.
+           Reading a whole section aloud is unbearable; the summary is what
+           someone skimming actually wants.
+         · scrolling to a new section CANCELS the current utterance and
+           starts the new one. Continuing to narrate a section the reader has
+           left is the single most annoying thing this feature could do.
+         · turning it off stops mid-sentence. A stop button that waits for
+           the end of a paragraph is not a stop button.                     */
+    var narrator = (function () {
+        var synth = window.speechSynthesis || null;
+        var current = null;          // section element being read
+        var voice = null;
+
+        function pickVoice() {
+            if (!synth) return null;
+            var all = synth.getVoices() || [];
+            // Prefer a natural en-GB/en-US voice; fall back to any English.
+            return all.find(function (v) { return /en[-_](GB|US)/i.test(v.lang) && /natural|premium|enhanced/i.test(v.name); })
+                || all.find(function (v) { return /^en/i.test(v.lang); })
+                || all[0] || null;
+        }
+        if (synth) {
+            voice = pickVoice();
+            // Voices load asynchronously in Chrome — the first call is empty.
+            synth.addEventListener && synth.addEventListener('voiceschanged', function () { voice = pickVoice(); });
+        }
+
+        /** Heading + lead of a section, trimmed to something listenable. */
+        function scriptFor(sec) {
+            if (!sec) return '';
+            var h = sec.querySelector('h1, h2');
+            var p = sec.querySelector('p.lead, p.sub, p');
+            var parts = [];
+            if (h) parts.push(h.textContent.replace(/\s+/g, ' ').trim());
+            if (p) parts.push(p.textContent.replace(/\s+/g, ' ').trim());
+            // Two sentences is the limit of what anyone listens to per band.
+            return parts.join('. ').replace(/\.\.+/g, '.').slice(0, 320);
+        }
+
+        return {
+            get on() { return audioOn; },
+            stop: function () {
+                if (synth) { try { synth.cancel(); } catch (e) {} }
+                current = null;
+            },
+            /** Speak this section, replacing whatever is being said. */
+            read: function (sec) {
+                if (!audioOn || !synth || !sec || sec === current) return;
+                var text = scriptFor(sec);
+                if (!text) return;
+
+                try { synth.cancel(); } catch (e) {}
+                current = sec;
+
+                var u = new SpeechSynthesisUtterance(text);
+                if (voice) u.voice = voice;
+                u.rate = 1.0;          // 1.0 reads as a person; 1.2 as a robot
+                u.pitch = 1.0;
+                u.volume = 0.95;
+                u.lang = (voice && voice.lang) || 'en-GB';
+                try { synth.speak(u); } catch (e) {}
+            },
+            /** The section currently filling most of the viewport. */
+            readVisible: function () {
+                var best = null, bestArea = 0;
+                document.querySelectorAll('section').forEach(function (sec) {
+                    var r = sec.getBoundingClientRect();
+                    var vh = window.innerHeight || 0;
+                    var visible = Math.max(0, Math.min(r.bottom, vh) - Math.max(r.top, 0));
+                    if (visible > bestArea) { bestArea = visible; best = sec; }
+                });
+                if (best) narrator.read(best);
+            }
+        };
+    })();
 
     toggle.addEventListener('click', function () {
         audioOn = !audioOn;
         if (audioOn) {
             toggle.classList.add('is-on');
-            toggle.innerHTML = ICON_ON + '<span class="sfx-toggle__hint">Sound on</span>';
-            startAmbient();
-            mechTick();
+            toggle.innerHTML = ICON_ON + '<span class="sfx-toggle__hint">Reading this page aloud</span>';
+            // Start with whatever the reader is actually looking at, not
+            // from the top — they may have scrolled halfway before pressing.
+            narrator.readVisible();
         } else {
             toggle.classList.remove('is-on');
-            toggle.innerHTML = ICON_OFF + '<span class="sfx-toggle__hint">Sound off</span>';
-            stopAmbient();
+            toggle.innerHTML = ICON_OFF + '<span class="sfx-toggle__hint">Read this page aloud</span>';
+            narrator.stop();
         }
     });
+
+    // Leaving the page mid-sentence would otherwise keep speaking: browsers
+    // let speechSynthesis outlive a navigation.
+    window.addEventListener('pagehide', function () { narrator.stop(); });
+    window.addEventListener('beforeunload', function () { narrator.stop(); });
 
     /* ---- IntersectionObserver: drive HUD status + scan blip per section ---- */
     var io = new IntersectionObserver(function (entries) {
@@ -2951,7 +3067,12 @@ WEBGL_INITS.push(function () {
             var sec = e.target;
             if (hudStatus) hudStatus.textContent = sec.dataset.status || 'PROCESSING';
             if (hudSub) hudSub.textContent = sec.dataset.layer || '';
-            mechTick();
+
+            /* Follow the reader. Scrolling into a new section cancels
+               whatever is being said and starts this one — continuing
+               to narrate a section they have already left is the most
+               annoying thing this feature could do. */
+            narrator.read(sec);
         });
     }, { threshold: 0.35 });
     sections.forEach(function (s) { io.observe(s); });

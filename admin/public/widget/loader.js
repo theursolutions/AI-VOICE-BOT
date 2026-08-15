@@ -62,16 +62,53 @@
         var attr = root.getAttribute('data-theme') || (body && body.getAttribute('data-theme'));
         if (attr === 'dark' || attr === 'light') return attr;
 
-        // A site that marks itself light explicitly should not be
-        // overridden by the OS preference.
         if (root.classList.contains('light') || root.getAttribute('data-bs-theme') === 'light') return 'light';
         if (root.getAttribute('data-bs-theme') === 'dark') return 'dark';
+
+        // No explicit marker. Read what the page ACTUALLY looks like.
+        //
+        // This matters more than it sounds: plenty of sites (ours included)
+        // signal dark by adding a class and signal light by having no class
+        // at all, so "no class" is indistinguishable from "no opinion". Asking
+        // the OS at that point puts a dark widget on a white page for every
+        // visitor whose laptop is set to dark. The rendered background cannot
+        // be wrong in the same way — and it tracks the site's own toggle for
+        // free, because toggling is what changes it.
+        var bg = readBackgroundLuminance();
+        if (bg !== null) return bg < 0.45 ? 'dark' : 'light';
 
         try {
             if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
         } catch (e) {}
 
         return 'light';
+    }
+
+    /**
+     * Perceived lightness (0 = black, 1 = white) of the page background, or
+     * null when everything is transparent and nothing can be concluded.
+     */
+    function readBackgroundLuminance() {
+        var els = [document.body, document.documentElement];
+
+        for (var i = 0; i < els.length; i++) {
+            if (!els[i]) continue;
+
+            var colour;
+            try { colour = window.getComputedStyle(els[i]).backgroundColor; } catch (e) { continue; }
+            if (!colour) continue;
+
+            var m = colour.match(/rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)(?:[,\s/]+([\d.]+))?/i);
+            if (!m) continue;
+
+            // Fully transparent tells us nothing — keep looking up the tree.
+            if (m[4] !== undefined && parseFloat(m[4]) === 0) continue;
+
+            // Rec. 601 luma: cheap, and accurate enough to sort light from dark.
+            return (0.299 * +m[1] + 0.587 * +m[2] + 0.114 * +m[3]) / 255;
+        }
+
+        return null;
     }
 
     // loader.js is served from {host}/AI-CRM-AGENT/admin/public/widget/loader.js
