@@ -503,8 +503,15 @@
 
         /* Mockup: lead extracted */
         .mock-lead {
-            border: 1px solid var(--line); border-radius: 10px; padding: 16px; background: rgba(0,0,0,.3);
+            border: 1px solid var(--line); border-radius: 10px; background: rgba(0,0,0,.3);
             position: relative;
+            /* Extra top padding RESERVES the band the "+ New lead" stamp is
+               absolutely positioned into. Without it the stamp sat on top of
+               the first row, hiding the value on the right — the lead's name,
+               which is the one thing the panel exists to show. Present in
+               both themes; it only became obvious once the surfaces were
+               light enough to see the collision. */
+            padding: 44px 16px 16px;
         }
         .mock-lead__stamp {
             position: absolute; top: 14px; right: 14px;
