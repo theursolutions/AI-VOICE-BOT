@@ -145,6 +145,31 @@
     html:not(.dark) .content .content { background: transparent; }
     html:not(.dark) .top-bar { border-bottom-color: rgba(255,255,255,.10); }
 
+    /* The vendor's active menu item is not a pill — it is a TAB that melts
+       into the work area. It overhangs the rail by 20px and adds two SVG
+       corner wedges above and below, and all three are painted in a
+       HARDCODED #f1f5f8 chosen to match the content sitting behind them.
+
+       That only works while the rail sits on the content colour. On navy
+       there is nothing to melt into, so the overhang and its wedges read as a
+       stray light slab with a notch cut out of it — most visible against the
+       header band, which the top menu item sits alongside.
+
+       Light mode drops the trick and uses an actual pill, which owes nothing
+       to whatever is behind the rail. Only the ACTIVE item's marker is
+       removed: `:not(.side-menu--active) .side-menu__icon:before` is the
+       inactive items' bullet and is left alone. */
+    html:not(.dark) .side-nav .side-menu--active::before,
+    html:not(.dark) .side-nav .side-menu--active::after,
+    html:not(.dark) .side-nav .side-menu--active .side-menu__icon::before {
+        display: none !important;
+    }
+    html:not(.dark) .side-nav > ul > li > .side-menu--active {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 1px 2px rgba(8,20,40,.16);
+    }
+
     /* The chrome is dark in BOTH themes, so its contents must not follow the
        light text tokens — white-on-navy is correct in light mode too. */
     html:not(.dark) .top-bar .search__input {
