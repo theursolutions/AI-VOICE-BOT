@@ -36,9 +36,12 @@ class SiteContentController extends Controller
 
         return [
             ['title' => 'Appearance', 'fields' => [
-                $sel('default_theme', 'Default theme for the public website', [
+                $sel('default_theme', 'Default theme — public website', [
                     'light' => 'Light', 'dark' => 'Dark',
-                ], 'What a first-time visitor sees. Anyone who picks a theme themselves keeps that choice — this only sets the starting point.'),
+                ], 'What a first-time visitor to the marketing site sees.'),
+                $sel('default_theme_admin', 'Default theme — after login', [
+                    'light' => 'Light', 'dark' => 'Dark',
+                ], 'What a member sees in the workspace before they choose for themselves. Separate from the public site: a marketing page often wants dark for impact, while the app people work in all day wants light. Either way, anyone who picks a theme keeps their choice.'),
             ]],
             'Brand' => ['icon' => '🏷️', 'fields' => [
                 $t('brand_name', 'Brand name (nav + footer)'),

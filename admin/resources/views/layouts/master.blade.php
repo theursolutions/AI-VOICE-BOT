@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="{{ tva_theme_class() }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="{{ tva_theme_class('admin') }}">
     <!-- BEGIN: Head -->
     @include('layouts.head')
     @include('partials.theme')

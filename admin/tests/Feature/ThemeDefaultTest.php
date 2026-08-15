@@ -28,6 +28,38 @@ class ThemeDefaultTest extends TestCase
         $this->assertSame('dark', tva_theme_class());
     }
 
+    /**
+     * The two areas are configured independently. A marketing page often
+     * wants dark for impact while the app people work in all day wants
+     * light; one shared setting makes whichever loses feel like an oversight.
+     */
+    public function test_the_public_and_admin_defaults_are_independent(): void
+    {
+        SiteSetting::set('content.default_theme', 'dark');
+        SiteSetting::set('content.default_theme_admin', 'light');
+
+        $this->assertSame('dark',  tva_theme('public'));
+        $this->assertSame('light', tva_theme('admin'));
+
+        SiteSetting::set('content.default_theme', 'light');
+        SiteSetting::set('content.default_theme_admin', 'dark');
+
+        $this->assertSame('light', tva_theme('public'));
+        $this->assertSame('dark',  tva_theme('admin'));
+    }
+
+    /** One cookie for both, so signing in keeps the theme you were using. */
+    public function test_a_chosen_theme_carries_across_both_areas(): void
+    {
+        SiteSetting::set('content.default_theme', 'dark');
+        SiteSetting::set('content.default_theme_admin', 'dark');
+
+        $this->app['request']->cookies->set('tva_theme', 'light');
+
+        $this->assertSame('light', tva_theme('public'));
+        $this->assertSame('light', tva_theme('admin'));
+    }
+
     public function test_the_visitors_choice_beats_the_site_default(): void
     {
         SiteSetting::set('content.default_theme', 'dark');

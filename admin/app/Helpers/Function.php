@@ -179,22 +179,32 @@ if (! function_exists('tva_theme')) {
      * Light is the default because that is what an unconfigured visitor
      * should see; dark is a deliberate choice they opt into.
      */
-    function tva_theme(): string
+    /**
+     * @param string $area 'public' for the marketing site, 'admin' for
+     *        everything behind a login. They get SEPARATE defaults: a
+     *        marketing site often wants dark for impact while the app people
+     *        stare at all day wants light, and forcing one choice on both
+     *        makes whichever loses feel like an oversight.
+     */
+    function tva_theme(string $area = 'public'): string
     {
-        // 1. The visitor's own choice, if they have made one. It always wins —
-        //    an admin changing the site default must never silently override
-        //    someone who has deliberately picked a theme.
+        // 1. The visitor's own choice, if they have made one. It always wins,
+        //    across both areas — an admin changing a default must never
+        //    silently override someone who has deliberately picked a theme.
+        //    One cookie, so signing in keeps the theme you were just using.
         $chosen = request()?->cookie('tva_theme');
         if ($chosen === 'dark' || $chosen === 'light') {
             return $chosen;
         }
 
-        // 2. Otherwise the site default, set in Ops → Page Content →
-        //    Appearance. Wrapped because this runs on every page render
-        //    including error pages, where the settings table may be
-        //    unreachable — a broken database must not also break the layout.
+        // 2. Otherwise the default for this area, set in Ops → Page Content →
+        //    Appearance. Wrapped because this runs on every render including
+        //    error pages, where the settings table may be unreachable — a
+        //    broken database must not also break the layout.
+        $key = $area === 'admin' ? 'content.default_theme_admin' : 'content.default_theme';
+
         try {
-            $default = tva_setting('content.default_theme', 'light');
+            $default = tva_setting($key, 'light');
         } catch (\Throwable $e) {
             $default = 'light';
         }
@@ -205,8 +215,8 @@ if (! function_exists('tva_theme')) {
 
 if (! function_exists('tva_theme_class')) {
     /** Class for the <html> element — '' in light, 'dark' in dark. */
-    function tva_theme_class(): string
+    function tva_theme_class(string $area = 'public'): string
     {
-        return tva_theme() === 'dark' ? 'dark' : '';
+        return tva_theme($area) === 'dark' ? 'dark' : '';
     }
 }
