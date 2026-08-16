@@ -35,7 +35,11 @@ class SiteContentController extends Controller
         $icons = implode(' · ', \App\Support\BrandIcons::slugs());
 
         return [
-            ['title' => 'Appearance', 'fields' => [
+            // Keyed by NAME with an icon, like every other section — the view
+            // iterates `$sections as $name => $sec` and prints `$sec['icon']`.
+            // This entry was a numeric-keyed ['title' => …] with no icon, so
+            // the page died on "Undefined array key" before rendering a thing.
+            'Appearance' => ['icon' => '🎨', 'fields' => [
                 $sel('default_theme', 'Default theme — public website', [
                     'light' => 'Light', 'dark' => 'Dark',
                 ], 'What a first-time visitor to the marketing site sees.'),
