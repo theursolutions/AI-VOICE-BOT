@@ -170,8 +170,28 @@ return [
     // iframe the real widget. Defaults to swapping /admin/public out of
     // app.url for /widget, which matches the local laragon layout.
     'widget' => [
-        'base_url' => env('WIDGET_BASE_URL') ?:
-            preg_replace('#/admin/?public/?$#', '/widget', rtrim((string) env('APP_URL', ''), '/')),
+        // The fallback has to handle BOTH deployment shapes:
+        //
+        //   subfolder (laragon)  https://host/AI-CRM-AGENT/admin/public
+        //                        → swap the tail          → …/AI-CRM-AGENT/widget
+        //   docroot (production) https://host
+        //                        → nothing to swap, so APPEND → https://host/widget
+        //
+        // The old version only did the swap. On a deploy where the admin IS
+        // the docroot, preg_replace matched nothing and returned APP_URL
+        // unchanged — a base with no /widget in it, which produced a preview
+        // pointing at https://host/webchat-app.php and a 404 on every install
+        // that did not happen to set WIDGET_BASE_URL by hand.
+        'base_url' => env('WIDGET_BASE_URL') ?: (function () {
+            $appUrl = rtrim((string) env('APP_URL', ''), '/');
+            if ($appUrl === '') {
+                return '';
+            }
+
+            $swapped = preg_replace('#/admin/?public/?$#', '/widget', $appUrl);
+
+            return $swapped === $appUrl ? $appUrl . '/widget' : $swapped;
+        })(),
     ],
 
     'voice' => [

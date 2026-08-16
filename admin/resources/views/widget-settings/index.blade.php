@@ -208,6 +208,10 @@
         overflow-x: auto;
         position: relative;
     }
+    /* Anchor for the copy button. It sits on the wrapper rather than on the
+       code box itself because the button has to stay OUTSIDE that box — the
+       copy handler reads its textContent. */
+    .tva-embed-wrap { position: relative; }
     .tva-embed-copy {
         position: absolute; top: 8px; right: 8px;
         background: #6366f1; color:#fff;
@@ -508,8 +512,18 @@
                         <i data-lucide="code-2" class="w-4 h-4"></i> Embed on customer's site
                     </div>
                     <p class="text-xs text-slate-500 mb-3">Paste this just before <code>&lt;/body&gt;</code> on the customer's website. The widget reads the project's settings automatically via the API key.</p>
-                    <div class="tva-embed-box" id="ws_embed_code">{{ $embedSnippet }}</div>
-                    <button type="button" class="tva-embed-copy" id="ws_copy_btn" onclick="event.stopPropagation();">Copy</button>
+                    {{-- The button is absolutely positioned and was a SIBLING
+                         of the code box, so it anchored to the page instead of
+                         the box and floated up into the header. It cannot simply
+                         move inside the box: the copy handler reads that
+                         element's textContent, and the button's own label would
+                         be copied along with the snippet. A positioned wrapper
+                         gives it something to anchor to while keeping the
+                         snippet's text to itself. --}}
+                    <div class="tva-embed-wrap">
+                        <div class="tva-embed-box" id="ws_embed_code">{{ $embedSnippet }}</div>
+                        <button type="button" class="tva-embed-copy" id="ws_copy_btn" onclick="event.stopPropagation();">Copy</button>
+                    </div>
                 </div>
                 @endif
 
