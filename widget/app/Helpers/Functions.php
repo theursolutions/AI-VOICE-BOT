@@ -9,9 +9,28 @@ use Dotenv\Dotenv;
 if (!function_exists('getBaseUrl')) {
     function getBaseUrl(): string
     {
-        $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'
-            || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443))
-            ? "https://" : "http://";
+        // Scheme detection has to account for a TLS-terminating proxy.
+        //
+        // In production the chain is Caddy (holds the certificate) → HAProxy →
+        // nginx on :8080 inside the container, all plain HTTP. So $_SERVER
+        // ['HTTPS'] is unset and SERVER_PORT is 8080, and the original check
+        // concluded "http" on a site served entirely over HTTPS. Every asset
+        // URL it built was then blocked by the browser as mixed content, which
+        // presents as the widget rendering but no button doing anything.
+        //
+        // X-Forwarded-Proto is the proxy telling us what the CLIENT used. It
+        // is only trustworthy because nothing reaches this app except through
+        // that proxy; it is never exposed directly. The header can arrive as a
+        // list ("https, http") when more than one hop appends to it, and the
+        // first entry is the client-facing one.
+        $forwarded = trim(explode(',', (string) ($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? ''))[0]);
+
+        $isHttps = (!empty($_SERVER['HTTPS']) && strtolower((string) $_SERVER['HTTPS']) !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && (int) $_SERVER['SERVER_PORT'] === 443)
+            || strtolower($forwarded) === 'https'
+            || strtolower((string) ($_SERVER['HTTP_X_FORWARDED_SSL'] ?? '')) === 'on';
+
+        $protocol = $isHttps ? "https://" : "http://";
 
         $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
 
