@@ -183,6 +183,55 @@ Both take effect on the next checkout. No deploy.
 
 ---
 
+## Add-ons — extra seats and AI agents
+
+Customers can buy extra capacity without moving up a tier. Two ship today:
+
+| Add-on | Price | What one unit grants |
+|---|---|---|
+| Extra team seat | $5/mo · $50/yr | `seats` +1 |
+| Extra AI agent | $9/mo · $90/yr | `agents` +1 |
+
+They appear on the customer's **Billing** page and on their **Choose a plan**
+page. They are never on the public pricing page — an add-on attaches to a live
+subscription, so there is nothing to sell a visitor.
+
+**An add-on is just a plan** with type `addon`, so everything you already know
+applies:
+
+- **Change its price** — Plans & Pricing → the add-on → *Change price*. Same
+  rule as any plan: existing holders are grandfathered on the old price, new
+  buyers get the new one. Then **Sync to Stripe**.
+- **Change what one unit grants** — Features & Limits → the add-on's column →
+  set `seats` to `2` and every seat sold from then on is worth two. Existing
+  holders get the new value too, because the limit is computed live as
+  `base + (unit value × quantity)`.
+- **Stop selling one** — set it inactive. Customers who already hold it keep
+  it; nobody new can buy it.
+
+**Both a monthly and an annual price are required.** An add-on has to match
+whatever interval the customer's subscription is on — Stripe refuses to put a
+monthly and an annual price on the same subscription. If an annual customer
+tries to buy an add-on that has no annual price, they're told to contact you
+rather than being charged the wrong cadence.
+
+### Creating a new add-on
+
+1. Plans & Pricing → **Create plan** → set **Type** to `addon`. Leave *public*
+   off.
+2. Add a **monthly** and an **annual** price.
+3. Features & Limits → give it exactly **one** numeric feature with the value
+   one unit grants (usually `1`). That single row is what the add-on tops up —
+   the first positive numeric feature is the one used.
+4. **Sync to Stripe.**
+
+> If an add-on has no feature row, it will happily bill the customer and grant
+> them nothing. The seeder guards the two shipped add-ons against this; a
+> hand-made one is your responsibility — check it on the Features & Limits
+> screen before you sell it.
+
+---
+
 ## Sync to Stripe
 
 Plans & Pricing → **Sync all to Stripe** creates a Stripe Product/Price for anything that doesn't have one.
@@ -259,6 +308,8 @@ Paid state comes from Stripe and only from Stripe. A manual override would creat
 | Trial length, card-required-for-trial | Plans & Pricing → Edit | No |
 | Any usage limit | Features & Limits | No |
 | Add / remove / re-gate a feature | Features & Limits | No |
+| Add-on price, or what one unit grants | Plans & Pricing / Features & Limits | No |
+| Create or retire an add-on | Plans & Pricing (type `addon`) | No |
 | Extend a customer's free access | Subscriptions | No |
 | Waive an abuse block | Subscriptions | No |
 | Show quarterly on the pricing page | `billing.intervals.offered` | Yes (one line) |
