@@ -44,6 +44,21 @@ class WidgetSettingsController extends Controller
         'show_history_tab'   => true,  // bottom nav tab listing past conversations
         'show_powered_by'    => true,  // small "Powered by Serve AI" line in footer
 
+        // Home screen. The widget opens here unless visitor modes are off,
+        // in which case it goes straight to the conversation — a home screen
+        // with nothing to choose on it is a click in the way.
+        'home_bg_url'     => null,   // optional background image behind the greeting
+        'home_greeting'   => 'Hello there.',
+        'home_subtitle'   => 'How can we help?',
+        'home_cta_title'  => 'Ask a question',
+        'home_cta_text'   => 'Our AI agent answers instantly',
+
+        // FAQs shown in the widget's Help tab. Each entry is
+        // ['q' => '…', 'a' => '…']. Empty list hides the tab entirely, so a
+        // project that never fills these in does not show an empty section.
+        'faqs'            => [],
+        'show_faq_tab'    => true,
+
         // Logo URL (web-accessible). When empty the widget falls back
         // to the emoji avatar below.
         'logo_url'        => null,
@@ -122,6 +137,24 @@ class WidgetSettingsController extends Controller
             'placeholder'        => 'nullable|string|max:120',
             'logo'               => 'nullable|file|mimetypes:image/png,image/jpeg,image/gif,image/webp,image/svg+xml|max:2048',
             'remove_logo'        => 'nullable|boolean',
+
+            'home_greeting'      => 'nullable|string|max:80',
+            'home_subtitle'      => 'nullable|string|max:120',
+            'home_cta_title'     => 'nullable|string|max:60',
+            'home_cta_text'      => 'nullable|string|max:120',
+            // Photographs only — an SVG background is an XSS vector, and this
+            // one is rendered full-bleed behind the greeting.
+            'home_bg'            => 'nullable|file|mimetypes:image/png,image/jpeg,image/webp|max:4096',
+            'remove_home_bg'     => 'nullable|boolean',
+
+            'show_faq_tab'       => 'nullable|boolean',
+            'faq_q'              => 'nullable|array',
+            'faq_q.*'            => 'nullable|string|max:200',
+            'faq_a'              => 'nullable|array',
+            'faq_a.*'            => 'nullable|string|max:2000',
+            // Bulk import. Same accepted types as a data source, minus the
+            // binary ones — an FAQ list is text by nature.
+            'faq_file'           => 'nullable|file|max:1024',
             'allowed_origins'    => 'nullable|string|max:2000',
             'default_flow_id'    => 'nullable|integer',
         ]);
@@ -153,6 +186,27 @@ class WidgetSettingsController extends Controller
             $logoUrl = $this->storeLogo($request->file('logo'), $project->id);
         }
 
+        // Same lifecycle for the home background.
+        $homeBgUrl = $existing['home_bg_url'] ?? null;
+        if ($request->boolean('remove_home_bg')) {
+            $this->unlinkLogo($homeBgUrl);
+            $homeBgUrl = null;
+        }
+        if ($request->hasFile('home_bg')) {
+            $this->unlinkLogo($homeBgUrl);
+            $homeBgUrl = $this->storeLogo($request->file('home_bg'), $project->id, 'home-bg');
+        }
+
+        // FAQs: the typed rows, plus anything imported from a file. The file
+        // is additive rather than replacing — someone uploading a list has
+        // usually already typed a couple by hand, and silently discarding
+        // those is the kind of data loss a form should never do.
+        $faqs = $this->faqRows($data['faq_q'] ?? [], $data['faq_a'] ?? []);
+        if ($request->hasFile('faq_file')) {
+            $faqs = array_merge($faqs, $this->parseFaqFile($request->file('faq_file')));
+        }
+        $faqs = $this->dedupeFaqs($faqs);
+
         $json['widget'] = array_merge(self::DEFAULTS, [
             'primary_color'      => $data['primary_color'],
             'accent_color'       => $data['accent_color'],
@@ -179,6 +233,13 @@ class WidgetSettingsController extends Controller
             'show_powered_by'    => $this->planAllows($client, 'remove_branding')
                                         ? (bool) ($data['show_powered_by'] ?? false)
                                         : true,
+            'home_bg_url'        => $homeBgUrl,
+            'home_greeting'      => $data['home_greeting']  ?: self::DEFAULTS['home_greeting'],
+            'home_subtitle'      => $data['home_subtitle']  ?: self::DEFAULTS['home_subtitle'],
+            'home_cta_title'     => $data['home_cta_title'] ?: self::DEFAULTS['home_cta_title'],
+            'home_cta_text'      => $data['home_cta_text']  ?: self::DEFAULTS['home_cta_text'],
+            'faqs'               => $faqs,
+            'show_faq_tab'       => (bool) ($data['show_faq_tab'] ?? false),
             'avatar_emoji'       => $data['avatar_emoji']   ?? self::DEFAULTS['avatar_emoji'],
             'opening_hours'      => $data['opening_hours']  ?? self::DEFAULTS['opening_hours'],
             'placeholder'        => $data['placeholder']    ?? self::DEFAULTS['placeholder'],
@@ -225,7 +286,96 @@ class WidgetSettingsController extends Controller
 HTML;
     }
 
-    private function storeLogo(UploadedFile $file, int $projectId): string
+    /**
+     * Pair the two parallel form arrays into FAQ rows, dropping any where
+     * either half is blank — a question with no answer is worse than no FAQ,
+     * because the widget would render it and leave the visitor stuck.
+     *
+     * @return array<int, array{q: string, a: string}>
+     */
+    private function faqRows(array $questions, array $answers): array
+    {
+        $out = [];
+        foreach ($questions as $i => $q) {
+            $q = trim((string) $q);
+            $a = trim((string) ($answers[$i] ?? ''));
+            if ($q !== '' && $a !== '') {
+                $out[] = ['q' => $q, 'a' => $a];
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Read an uploaded FAQ list.
+     *
+     * Two shapes, both of which people actually produce:
+     *   CSV/TSV  question,answer  per line (a header row is skipped)
+     *   JSON     [{"q": "…", "a": "…"}]  or  [{"question": …, "answer": …}]
+     *
+     * A malformed file yields nothing rather than throwing: the rest of the
+     * form is still valid and saving it should not fail over an import.
+     *
+     * @return array<int, array{q: string, a: string}>
+     */
+    private function parseFaqFile(UploadedFile $file): array
+    {
+        $raw = @file_get_contents($file->getRealPath());
+        if ($raw === false || trim($raw) === '') {
+            return [];
+        }
+
+        // JSON first — it is unambiguous, so a file that parses as JSON was
+        // meant as JSON.
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            $out = [];
+            foreach ($decoded as $row) {
+                if (!is_array($row)) continue;
+                $q = trim((string) ($row['q'] ?? $row['question'] ?? ''));
+                $a = trim((string) ($row['a'] ?? $row['answer'] ?? ''));
+                if ($q !== '' && $a !== '') $out[] = ['q' => $q, 'a' => $a];
+            }
+            if ($out) return $out;
+        }
+
+        // Otherwise delimited text. Tabs win when present, since an answer is
+        // far more likely to contain a comma than a tab.
+        $lines = preg_split('/\r\n|\r|\n/', $raw) ?: [];
+        $delim = str_contains($raw, "\t") ? "\t" : ',';
+
+        $out = [];
+        foreach ($lines as $i => $line) {
+            if (trim($line) === '') continue;
+            $cols = str_getcsv($line, $delim);
+            $q = trim((string) ($cols[0] ?? ''));
+            $a = trim((string) ($cols[1] ?? ''));
+            // Skip a header row, but only if it is the first line — a real FAQ
+            // could legitimately start with the word "question".
+            if ($i === 0 && strcasecmp($q, 'question') === 0) continue;
+            if ($q !== '' && $a !== '') $out[] = ['q' => $q, 'a' => $a];
+        }
+
+        return $out;
+    }
+
+    /** First occurrence of each question wins; comparison ignores case. */
+    private function dedupeFaqs(array $faqs): array
+    {
+        $seen = [];
+        $out  = [];
+        foreach ($faqs as $row) {
+            $key = mb_strtolower($row['q']);
+            if (isset($seen[$key])) continue;
+            $seen[$key] = true;
+            $out[] = $row;
+        }
+
+        return $out;
+    }
+
+    private function storeLogo(UploadedFile $file, int $projectId, string $name = 'logo'): string
     {
         // public_path() is the admin's web root (admin/public). Files
         // dropped here are served directly by Apache, no Laravel hop.
@@ -237,7 +387,7 @@ HTML;
         $ext = strtolower($file->getClientOriginalExtension() ?: 'png');
         // Single canonical filename per project — overwrites cleanly,
         // cache-bust via the ?v=time query string in the saved URL.
-        $name = "logo.{$ext}";
+        $name = "{$name}.{$ext}";
         $file->move($abs, $name);
 
         // URL base: use the actual running script's directory rather
