@@ -178,52 +178,24 @@ class SocialAuthController extends Controller
             ]);
         }
 
-        // An authorization code may be redeemed EXACTLY ONCE, so two requests
-        // carrying the same one must not both try.
+        // The callback runs TWICE for one sign-in. HAProxy runs `retries 3` with
+        // `option redispatch`, so a connection hiccup resends the same GET to the
+        // other app replica; a browser prefetch or a double-click does the same.
         //
-        // They do arrive: HAProxy runs `retries 3` with `option redispatch`, so a
-        // connection hiccup resends the same GET to the other app replica, and a
-        // browser prefetch or an impatient double-click has the same effect. The
-        // first request signs the user in; the second gets
-        // "This authorization code has been used" (subcode 36009) — and it is the
-        // second response that reaches the browser, so a sign-in that WORKED
-        // presented as a failure the visitor could do nothing about.
+        // Do NOT try to pick a winner up front. An earlier version claimed the
+        // code in the cache before exchanging it, and that made things worse:
+        // HAProxy abandons the first request, PHP-FPM kills the script on client
+        // disconnect, and the claim outlived the request that made it. The code
+        // was then poisoned for ten minutes and the retry — the one request still
+        // attached to a live browser — was refused before it could do anything.
+        // That is why sign-in went quiet: no error, no login, and a log saying
+        // the winner never published.
         //
-        // Cache::add is atomic and Redis is shared across replicas, so exactly
-        // one request wins regardless of which container it lands on.
+        // The provider is already the single-use gate, and it is the only one that
+        // cannot be orphaned. So both requests attempt the exchange; at most one
+        // can succeed, and the other is told so explicitly. This key is used only
+        // to hand the result from whichever won to whichever did not.
         $claim = 'social:code:' . hash('sha256', $provider . '|' . $request->query('code'));
-
-        if (! Cache::add($claim, 1, now()->addMinutes(10))) {
-            // Absorbing the duplicate is not enough on its own: BOTH requests
-            // carry the same session cookie, and the loser loaded that session
-            // before the winner called Auth::login(). Left alone, the loser's
-            // save at end-of-request writes its stale pre-login copy back over
-            // the winner's authenticated session — the sign-in happens and is
-            // then erased, which shows up as no error and no login.
-            //
-            // So the loser waits for the winner to publish who it authenticated
-            // and logs the same user in itself. Both requests then finish with an
-            // authenticated session, and it stops mattering which response the
-            // browser actually receives.
-            $userId = $this->awaitAuthenticatedUser($claim);
-
-            if ($userId && ($user = User::find($userId))) {
-                Auth::login($user, true);
-
-                Log::info('Social sign-in: duplicate callback adopted the winner\'s session', [
-                    'provider' => $provider,
-                ]);
-
-                return redirect()->intended(RouteServiceProvider::HOME);
-            }
-
-            Log::info('Social sign-in: duplicate callback ignored', [
-                'provider' => $provider,
-                'note'     => 'winner published no user — it is still running or it failed',
-            ]);
-
-            return redirect()->intended(RouteServiceProvider::HOME);
-        }
 
         try {
             $social = Socialite::driver($provider)
@@ -278,12 +250,35 @@ class SocialAuthController extends Controller
                 || str_contains($haystack, 'invalid_grant');
 
             if ($spent) {
-                Log::info('Social sign-in: authorization code already redeemed', [
+                // The other request got there first. Adopt whoever it signed in:
+                // both requests share one session cookie, so if this one finishes
+                // without logging in, its save at end-of-request overwrites the
+                // winner's authenticated session with a stale pre-login copy —
+                // the login happens and is then erased.
+                $userId = $this->awaitAuthenticatedUser($claim);
+
+                if ($userId && ($user = User::find($userId))) {
+                    Auth::login($user, true);
+
+                    Log::info('Social sign-in: duplicate callback adopted the completed sign-in', [
+                        'provider' => $provider,
+                    ]);
+
+                    return redirect()->intended(RouteServiceProvider::HOME);
+                }
+
+                // The code was spent by a request that then died before it could
+                // authenticate anyone — so nobody is signed in and there is
+                // nothing to adopt. Say so, because a silent redirect back to a
+                // login page the visitor just used reads as the button not working.
+                Log::warning('Social sign-in: code was redeemed but no user was authenticated', [
                     'provider' => $provider,
-                    'note'     => 'duplicate callback outside the claim window',
+                    'note'     => 'the request that redeemed it did not finish — likely aborted by a proxy retry',
                 ]);
 
-                return redirect()->intended(RouteServiceProvider::HOME);
+                return redirect()->route('login')->withErrors([
+                    'email' => 'Sign-in was interrupted. Please try once more.',
+                ]);
             }
 
             Log::warning('Social sign-in failed', array_filter([
