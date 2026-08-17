@@ -338,6 +338,11 @@ Route::middleware(['auth', 'active.client'])
         Route::post('/chat/{sessionId}/edit',            [App\Http\Controllers\Admin\ChatController::class, 'editMessage'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.edit');
         Route::post('/chat/{sessionId}/media',          [App\Http\Controllers\Admin\ChatController::class, 'sendMedia'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.media-send');
         Route::get ('/chat/{sessionId}/templates',      [App\Http\Controllers\Admin\ChatController::class, 'templates'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.templates');
+        // WhatsApp message templates. Project-scoped, not session-scoped: a
+        // template belongs to the WABA and serves every conversation on the
+        // number. Creating one needs whatsapp_business_management.
+        Route::get ('/whatsapp/templates',              [App\Http\Controllers\Admin\WhatsAppTemplateController::class, 'index'])->name('whatsapp.templates');
+        Route::post('/whatsapp/templates',              [App\Http\Controllers\Admin\WhatsAppTemplateController::class, 'store'])->name('whatsapp.templates.store');
         Route::post('/chat/{sessionId}/template',        [App\Http\Controllers\Admin\ChatController::class, 'sendTemplate'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.template');
         Route::post('/chat/{sessionId}/interactive',     [App\Http\Controllers\Admin\ChatController::class, 'sendInteractive'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.interactive');
         Route::post('/chat/{sessionId}/flow',            [App\Http\Controllers\Admin\ChatController::class, 'sendFlow'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.flow');

@@ -285,8 +285,93 @@ class GraphClient
      */
     public function listTemplates(string $wabaId, int $limit = 100): array
     {
-        $data = $this->get("{$wabaId}/message_templates", ['fields' => 'name,status,language,category,components', 'limit' => $limit]);
+        $data = $this->get("{$wabaId}/message_templates", ['fields' => 'name,status,language,category,components,rejected_reason', 'limit' => $limit]);
         return $data['data'] ?? [];
+    }
+
+    /**
+     * Create a message template on a WABA.
+     *
+     * Requires whatsapp_business_management. Templates are created PENDING and
+     * approved asynchronously by Meta (minutes for a simple UTILITY template,
+     * longer for MARKETING), so a freshly created one is NOT immediately
+     * sendable and will not appear in a picker that filters on APPROVED.
+     *
+     * THROWS rather than returning null, unlike the rest of this class. Meta
+     * rejects templates for a dozen precise reasons — a duplicate name, a
+     * placeholder with no example, a body that reads like marketing under a
+     * UTILITY category — and every one of them is actionable by whoever is
+     * filling in the form. Collapsing them all to null would put the operator
+     * in front of "failed" with no way to find out why.
+     *
+     * @param  array<int, array{type:string, text:string}> $buttons QUICK_REPLY / URL / PHONE_NUMBER
+     * @return array{id?:string, status?:string, category?:string}
+     * @throws \RuntimeException with Meta's own message
+     */
+    public function createTemplate(
+        string $wabaId,
+        string $name,
+        string $category,
+        string $language,
+        string $body,
+        ?string $header = null,
+        ?string $footer = null,
+        array $buttons = [],
+    ): array {
+        $components = [];
+
+        if ($header !== null && trim($header) !== '') {
+            $components[] = ['type' => 'HEADER', 'format' => 'TEXT', 'text' => $header];
+        }
+
+        $bodyComponent = ['type' => 'BODY', 'text' => $body];
+
+        // Meta requires an example value for EVERY {{n}} placeholder and
+        // rejects the template outright without them — with a message about
+        // "example" that does not mention the placeholders that caused it.
+        // Deriving the examples from the body means the form never has to ask
+        // for something the author has already implicitly told us.
+        if ($count = self::placeholderCount($body)) {
+            $bodyComponent['example'] = [
+                'body_text' => [array_map(
+                    static fn (int $i): string => 'sample' . $i,
+                    range(1, $count),
+                )],
+            ];
+        }
+
+        $components[] = $bodyComponent;
+
+        if ($footer !== null && trim($footer) !== '') {
+            $components[] = ['type' => 'FOOTER', 'text' => $footer];
+        }
+
+        if ($buttons) {
+            $components[] = ['type' => 'BUTTONS', 'buttons' => $buttons];
+        }
+
+        return $this->postOrFail("{$wabaId}/message_templates", [
+            // Lowercase with underscores is the only accepted shape, and Meta's
+            // error for a capital letter names the field but not the rule.
+            'name'       => strtolower(trim($name)),
+            'category'   => strtoupper($category),
+            'language'   => $language,
+            'components' => $components,
+        ]);
+    }
+
+    /**
+     * How many distinct {{n}} placeholders a template body uses.
+     *
+     * Counts DISTINCT indexes, not occurrences: `{{1}} ... {{1}}` is one
+     * variable used twice and needs exactly one example, while supplying two
+     * makes Meta reject the template for a count mismatch.
+     */
+    public static function placeholderCount(string $body): int
+    {
+        preg_match_all('/\{\{\s*(\d+)\s*\}\}/', $body, $m);
+
+        return $m[1] ? count(array_unique($m[1])) : 0;
     }
 
     /**
@@ -616,6 +701,59 @@ class GraphClient
             Log::error('MetaChannels GraphClient: exception on ' . $path . ': ' . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * POST that surfaces Meta's error instead of swallowing it.
+     *
+     * The sibling of post(), for the handful of calls an operator triggers
+     * DIRECTLY from a form. Fire-and-forget sends are better off returning null
+     * and logging — a failed send is retried, not explained. But when someone
+     * has just filled in six fields, the reason it was refused is the only
+     * output that matters, and it is Meta that knows it.
+     *
+     * @throws \RuntimeException carrying Meta's own message
+     */
+    private function postOrFail(string $path, array $json): array
+    {
+        if (! $this->token) {
+            throw new \RuntimeException('No WhatsApp access token is configured for this channel.');
+        }
+
+        $url = "{$this->base}/{$this->version}/{$path}";
+
+        try {
+            $client = new Client(['timeout' => 20, 'connect_timeout' => 8, 'http_errors' => false]);
+            $resp   = $client->post($url, [
+                'headers' => ['Authorization' => 'Bearer ' . $this->token, 'Content-Type' => 'application/json'],
+                'json'    => $json,
+            ]);
+        } catch (\Throwable $e) {
+            throw new \RuntimeException('Could not reach the Graph API: ' . $e->getMessage(), 0, $e);
+        }
+
+        $body = (string) $resp->getBody();
+        $data = json_decode($body, true);
+
+        if ($resp->getStatusCode() >= 400) {
+            $err = $data['error'] ?? [];
+
+            // error_user_msg is Meta's human-facing text and is far better than
+            // `message` when present — it says "a template with this name
+            // already exists" where message says "Invalid parameter".
+            $reason = $err['error_user_msg']
+                ?? $err['error_user_title']
+                ?? $err['message']
+                ?? ('HTTP ' . $resp->getStatusCode());
+
+            Log::warning('MetaChannels GraphClient: POST rejected', [
+                'path' => $path, 'code' => $resp->getStatusCode(), 'body' => substr($body, 0, 1000),
+            ]);
+
+            throw new \RuntimeException((string) $reason);
+        }
+
+        return is_array($data) ? $data : [];
     }
 
     private function truncate(string $text, int $max = 4096): string
