@@ -440,8 +440,30 @@ class LLMService:
         # every cloud tier is also unavailable.
         #
         # A single value still works exactly as before.
+        # When nothing is configured, DERIVE a chain rather than running with no
+        # safety net. An exhausted Groq quota is a routine event, not an
+        # exceptional one — free tiers reset daily — and the failure it produced
+        # was silent empty replies on every channel at once. Requiring an env var
+        # to be set in advance means the one time it matters, it is not set.
+        #
+        # Order: cloud tiers whose keys are actually present (fast, no RAM),
+        # then the local model last (always reachable, slow, no quota to
+        # exhaust). Ollama needs no key, so it is the one tier that cannot
+        # itself run out — which is exactly what a last resort should be.
+        configured = (settings.llm_fallback_provider or "").strip()
+        if not configured:
+            candidates = []
+            if settings.groq_api_key:      candidates.append("groq")
+            if settings.gemini_api_key:    candidates.append("gemini")
+            if settings.cerebras_api_key:  candidates.append("cerebras")
+            if settings.anthropic_api_key: candidates.append("anthropic")
+            candidates.append("ollama")
+
+            configured = ",".join(c for c in candidates if c != provider)
+            logger.info("LLM fallback chain auto-derived: %s", configured or "(none available)")
+
         self._fallbacks: List[Any] = []
-        for fb in [p.strip().lower() for p in (settings.llm_fallback_provider or "").split(",")]:
+        for fb in [p.strip().lower() for p in configured.split(",")]:
             if not fb or fb == provider:
                 continue
             try:

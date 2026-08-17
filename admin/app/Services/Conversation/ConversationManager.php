@@ -94,6 +94,27 @@ class ConversationManager
             'respond_with' => $respondWith,
         ]);
 
+        // An empty reply is saved as NULL content and, until now, said nothing
+        // to anyone. Each channel then failed in its own way with no shared
+        // cause visible: the widget printed "(no reply)", WhatsApp and
+        // Instagram sent nothing at all and sat on a typing indicator, and the
+        // log was silent. The generation itself is what failed — a provider
+        // timeout, a missing key, an unreachable voice-engine — and that is
+        // worth a line, because it is the same failure behind every one of
+        // those symptoms.
+        if (trim((string) ($reply['text'] ?? '')) === '') {
+            \Illuminate\Support\Facades\Log::warning('Empty assistant reply', [
+                'project_id'  => $session->project_id,
+                'session_id'  => $session->id,
+                'channel'     => $session->channel,
+                'model'       => $reply['model'] ?? null,
+                // Whatever the engine did send back, so a provider error that
+                // arrived in another field is not thrown away.
+                'reply_keys'  => array_keys((array) $reply),
+                'error'       => $reply['error'] ?? null,
+            ]);
+        }
+
         $latencyMs = (int) ((microtime(true) - $start) * 1000);
         $now = time();
 
