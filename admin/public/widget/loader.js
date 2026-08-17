@@ -275,6 +275,23 @@
         //   { type: 'tvaibwc:ready'  }              — boot complete
         window.addEventListener('message', function (ev) {
             if (!ev.data || typeof ev.data !== 'object') return;
+            // The widget tells us how tall it actually needs to be.
+            //
+            // An iframe captures every click inside its rectangle, including
+            // transparent space, so a 760px frame over a 600px panel left a
+            // 160px dead strip across the host page above the widget. Sizing
+            // the frame to the panel is the only fix — pointer-events cannot
+            // be applied to part of a cross-document frame.
+            //
+            // Clamped: a bad or hostile value must not cover the page, and the
+            // CSS max-height still applies on top of this.
+            if (ev.data.type === 'tvaibwc:height') {
+                var h = parseInt(ev.data.height, 10);
+                if (frame && frame.parentNode && h > 0) {
+                    h = Math.min(h, window.innerHeight - 28);
+                    frame.parentNode.style.height = Math.max(80, h) + 'px';
+                }
+            }
             if (ev.data.type === 'tvaibwc:close')  closeWidget();
             if (ev.data.type === 'tvaibwc:expand') {
                 frameWrap.classList.toggle('is-expanded', !!ev.data.on);

@@ -27,6 +27,13 @@ Route::middleware('project.apikey')->prefix('v1')->group(function () {
             \App\Http\Controllers\Admin\WidgetSettingsController::DEFAULTS,
             (array) data_get($project->json_data, 'widget', [])
         );
+        // Platform-wide attribution, folded in here so every embed picks it up
+        // from one super-admin setting. Deliberately AFTER the project's own
+        // config so a client cannot override our branding by writing these
+        // keys into their widget settings.
+        $config['powered_by_label'] = (string) tva_setting('content.powered_by_label', 'Serve AI');
+        $config['powered_by_url']   = (string) tva_setting('content.powered_by_url', '');
+
         return response()->json([
             'project_id' => $project->id,
             'config'     => $config,

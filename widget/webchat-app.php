@@ -138,6 +138,93 @@
         }
         #tvaibwc-chatToggle i { font-size: 18px !important; }
         <?php endif; ?>
+        /* ── Home screen ────────────────────────────────────────────
+           A greeting panel over an optional background image, then cards.
+           Colours come from the project's brand variables so this follows
+           whatever the owner set rather than shipping its own palette. */
+        .tvaibwc-home-hero {
+            padding: 26px 20px 22px;
+            background: var(--tva-brand-gradient);
+            color: #fff;
+            text-align: left;
+        }
+        .tvaibwc-home-hero.has-bg {
+            background-size: cover !important;
+            background-position: center !important;
+        }
+        .tvaibwc-home-logo {
+            width: 40px; height: 40px; border-radius: 50%;
+            object-fit: cover; margin-bottom: 14px; display: block;
+            box-shadow: 0 0 0 2px rgba(255,255,255,.28);
+        }
+        .tvaibwc-home-logo--emoji {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px; background: rgba(255,255,255,.18);
+        }
+        .tvaibwc-home-greeting { font-size: 21px; font-weight: 400; opacity: .82; line-height: 1.25; }
+        .tvaibwc-home-subtitle { font-size: 21px; font-weight: 700; line-height: 1.25; margin-top: 2px; }
+
+        .tvaibwc-home-body { padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+        .tvaibwc-home-card {
+            width: 100%; text-align: left;
+            display: flex; align-items: center; gap: 12px;
+            padding: 14px 15px; border-radius: 12px;
+            background: rgba(148,163,184,.10);
+            border: 1px solid rgba(148,163,184,.22);
+            color: inherit; cursor: pointer;
+            transition: border-color .15s, background .15s;
+        }
+        .tvaibwc-home-card:hover {
+            background: rgba(148,163,184,.16);
+            border-color: var(--tva-brand-accent);
+        }
+        .tvaibwc-home-card__text { flex: 1; min-width: 0; }
+        .tvaibwc-home-card__title { font-size: 14px; font-weight: 700; }
+        .tvaibwc-home-card__sub { font-size: 12px; opacity: .7; margin-top: 2px; }
+        .tvaibwc-home-card i { opacity: .55; flex-shrink: 0; }
+
+        /* ── FAQ tab ────────────────────────────────────────────────
+           Paged rather than one long list: a project with 200 FAQs would
+           otherwise render 200 nodes nobody scrolls through, so search is
+           the primary way in and the list is the fallback. */
+        .tvaibwc-faq-search {
+            position: relative; margin: 0 0 12px;
+        }
+        .tvaibwc-faq-search i {
+            position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+            font-size: 12px; opacity: .5; pointer-events: none;
+        }
+        .tvaibwc-faq-search input {
+            width: 100%; padding: 9px 30px 9px 30px;
+            border-radius: 9px; font-size: 13px;
+            border: 1px solid rgba(148,163,184,.3);
+            background: rgba(148,163,184,.08);
+            color: inherit; outline: none;
+        }
+        .tvaibwc-faq-search input:focus { border-color: var(--tva-brand-accent); }
+        #tvaibwc-faqClear {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            border: none; background: none; color: inherit;
+            opacity: .45; font-size: 17px; line-height: 1; cursor: pointer;
+            padding: 2px 6px; display: none;
+        }
+        #tvaibwc-faqClear.is-on { display: block; }
+
+        .tvaibwc-faq-empty { text-align: center; font-size: 12.5px; opacity: .6; padding: 22px 10px; }
+
+        .tvaibwc-faq-pager {
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 8px; margin-top: 12px; font-size: 12px;
+        }
+        .tvaibwc-faq-pager button {
+            border: 1px solid rgba(148,163,184,.3);
+            background: rgba(148,163,184,.08);
+            color: inherit; border-radius: 8px;
+            padding: 6px 11px; font-size: 12px; cursor: pointer;
+        }
+        .tvaibwc-faq-pager button:disabled { opacity: .35; cursor: default; }
+        #tvaibwc-faqCount { opacity: .65; }
+
         /* Action CTAs get the brand gradient. The send button is
            intentionally NOT in this list — we leave it on the stock
            dark theme so it blends into the input bar.  */
@@ -244,16 +331,37 @@
             </div>
 
             <div class="tvaibwc-widget-content active" id="tvaibwc-homeContent">
-                <!-- Update your homeContent section -->
-                <div class="tvaibwc-home-content">
+                <!-- Greeting panel. The background image is optional; when one
+                     is set it is overlaid with a gradient in the project's own
+                     colours so the text stays readable whatever was uploaded. -->
+                <div class="tvaibwc-home-hero<?= !empty($tvaConfig['home_bg_url']) ? ' has-bg' : '' ?>"
+                     <?php if (!empty($tvaConfig['home_bg_url'])): ?>
+                     style="background-image:
+                        linear-gradient(160deg, rgba(0,0,0,.55), rgba(0,0,0,.75)),
+                        url('<?= htmlspecialchars($tvaConfig['home_bg_url'], ENT_QUOTES) ?>');"
+                     <?php endif; ?>>
                     <?php if (!empty($tvaConfig['logo_url'])): ?>
-                        <img src="<?= htmlspecialchars($tvaConfig['logo_url']) ?>" alt="<?= htmlspecialchars($tvaConfig['bot_name']) ?>" style="border-radius:50%; width:80px; height:80px; object-fit:cover;">
+                        <img class="tvaibwc-home-logo" src="<?= htmlspecialchars($tvaConfig['logo_url']) ?>"
+                             alt="<?= htmlspecialchars($tvaConfig['bot_name']) ?>">
                     <?php else: ?>
-                        <div style="font-size:64px; line-height:1; margin-bottom:8px;"><?= $tvaConfig['avatar_emoji'] ?></div>
+                        <div class="tvaibwc-home-logo tvaibwc-home-logo--emoji"><?= $tvaConfig['avatar_emoji'] ?></div>
                     <?php endif; ?>
-                    <h4><?= htmlspecialchars($tvaConfig['welcome_title']) ?></h4>
-                    <p class="tvaibwc-content-text"><?= htmlspecialchars($tvaConfig['welcome_message']) ?></p>
-                    
+
+                    <div class="tvaibwc-home-greeting"><?= htmlspecialchars($tvaConfig['home_greeting'] ?? 'Hello there.') ?></div>
+                    <div class="tvaibwc-home-subtitle"><?= htmlspecialchars($tvaConfig['home_subtitle'] ?? 'How can we help?') ?></div>
+                </div>
+
+                <div class="tvaibwc-home-body">
+                    <!-- Start-chat card. Always present, so there is a way into
+                         the conversation even when the visitor tiles are off. -->
+                    <button type="button" class="tvaibwc-home-card" id="tvaibwc-homeAsk">
+                        <div class="tvaibwc-home-card__text">
+                            <div class="tvaibwc-home-card__title"><?= htmlspecialchars($tvaConfig['home_cta_title'] ?? 'Ask a question') ?></div>
+                            <div class="tvaibwc-home-card__sub"><?= htmlspecialchars($tvaConfig['home_cta_text'] ?? '') ?></div>
+                        </div>
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+
                     <?php if (!empty($tvaConfig['show_visitor_modes'])): ?>
                     <div class="tvaibwc-user-type-buttons">
                         <button class="tvaibwc-user-type-btn tvaibwc-visitor-btn">
@@ -404,34 +512,26 @@
 
             <div class="tvaibwc-widget-content" id="tvaibwc-faqContent">
                 <h6>Frequently Asked Questions</h6>
-                <div class="tvaibwc-faq-list" id="tvaibwc-faqList">
-                    <div class="tvaibwc-faq-item">
-                        <div class="tvaibwc-faq-question">
-                            <span>How do I reset my password?</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                        <div class="tvaibwc-faq-answer" style="display: none;">
-                            You can reset your password by clicking on the "Forgot Password" link on the login page. We'll send you an email with instructions to reset it.
-                        </div>
-                    </div>
-                    <div class="tvaibwc-faq-item">
-                        <div class="tvaibwc-faq-question">
-                            <span>What payment methods do you accept?</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                        <div class="tvaibwc-faq-answer" style="display: none;">
-                            We accept all major credit cards including Visa, MasterCard, and American Express. We also support PayPal for certain regions.
-                        </div>
-                    </div>
-                    <div class="tvaibwc-faq-item">
-                        <div class="tvaibwc-faq-question">
-                            <span>How can I cancel my subscription?</span>
-                            <i class="fas fa-chevron-down"></i>
-                        </div>
-                        <div class="tvaibwc-faq-answer" style="display: none;">
-                            You can cancel your subscription at any time from the Billing section in your account settings. Your subscription will remain active until the end of the current billing period.
-                        </div>
-                    </div>
+
+                <!-- Search first. With a hundred entries the list is not
+                     browsable, so the field is the primary way in and the
+                     paged list is the fallback. -->
+                <div class="tvaibwc-faq-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="tvaibwc-faqSearch" placeholder="Search FAQs..." autocomplete="off">
+                    <button type="button" id="tvaibwc-faqClear" title="Clear">&times;</button>
+                </div>
+
+                <div class="tvaibwc-faq-list" id="tvaibwc-faqList"></div>
+
+                <div class="tvaibwc-faq-empty" id="tvaibwc-faqEmpty" style="display:none;">
+                    No FAQ matches that.
+                </div>
+
+                <div class="tvaibwc-faq-pager" id="tvaibwc-faqPager" style="display:none;">
+                    <button type="button" id="tvaibwc-faqPrev">&larr; Prev</button>
+                    <span id="tvaibwc-faqCount"></span>
+                    <button type="button" id="tvaibwc-faqNext">Next &rarr;</button>
                 </div>
             </div>
 
@@ -450,15 +550,35 @@
                     <span>History</span>
                 </div>
                 <?php endif; ?>
+                <?php if (!empty($tvaConfig['show_faq_tab']) && !empty($tvaConfig['faqs'])): ?>
                 <div class="tvaibwc-widget-tab" data-tab="tvaibwc-faq">
                     <i class="fas fa-question-circle"></i>
                     <span>FAQ</span>
                 </div>
+                <?php endif; ?>
             </div>
 
             <?php if (!empty($tvaConfig['show_powered_by'])): ?>
             <div style="text-align:center; font-size:10.5px; color:#94a3b8; padding:6px 10px; border-top:1px solid rgba(148,163,184,.15);">
-                Powered by <a href="https://nuerabot.io" target="_blank" rel="noopener" style="color:inherit; text-decoration:none; font-weight:600;">NueraBot</a>
+                <?php
+                    // Platform attribution, set once by a super-admin and served
+                    // to every embed through /api/v1/widget/config. Was hardcoded
+                    // to a previous product name, so every customer's site
+                    // advertised the wrong brand.
+                    $tvaPbLabel = trim((string) ($tvaConfig['powered_by_label'] ?? 'Serve AI')) ?: 'Serve AI';
+                    $tvaPbUrl   = trim((string) ($tvaConfig['powered_by_url'] ?? ''));
+                    // Only http(s) is linkable — the value comes from a setting,
+                    // and javascript: in an href here would execute on every
+                    // customer's site.
+                    $tvaPbSafe  = (bool) preg_match('#^https?://#i', $tvaPbUrl);
+                ?>
+                Powered by
+                <?php if ($tvaPbSafe): ?>
+                    <a href="<?= htmlspecialchars($tvaPbUrl, ENT_QUOTES) ?>" target="_blank" rel="noopener"
+                       style="color:inherit; text-decoration:none; font-weight:600;"><?= htmlspecialchars($tvaPbLabel) ?></a>
+                <?php else: ?>
+                    <span style="font-weight:600;"><?= htmlspecialchars($tvaPbLabel) ?></span>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
@@ -571,5 +691,148 @@
     <script src="<?php echo BASE_URL;?>/assets/js/transport/mic-recorder.js?v=<?php echo $v;?>"></script>
     <script src="<?php echo BASE_URL;?>/assets/js/flow-runtime.js?v=<?php echo $v;?>"></script>
     <script src="<?php echo BASE_URL;?>/assets/js/request-handler.js?v=<?php echo $v;?>"></script>
+
+    <!-- Home + FAQ behaviour. After request-handler.js so the tab plumbing
+         and jQuery it relies on are already in place. -->
+    <script>
+    (function ($) {
+        if (!$) return;
+
+        /* ── FAQ ──────────────────────────────────────────────────────
+           Paged at ten. A project can have hundreds, and rendering them
+           all builds a list nobody scrolls; search is the way in and the
+           page is the fallback. Filtering happens over question AND
+           answer, because people search for a word they remember from the
+           answer as often as from the title. */
+        var FAQS     = <?= json_encode(array_values((array) ($tvaConfig['faqs'] ?? [])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+        var PER_PAGE = 10;
+
+        var $list  = $('#tvaibwc-faqList');
+        var $empty = $('#tvaibwc-faqEmpty');
+        var $pager = $('#tvaibwc-faqPager');
+        var $count = $('#tvaibwc-faqCount');
+        var $prev  = $('#tvaibwc-faqPrev');
+        var $next  = $('#tvaibwc-faqNext');
+        var $search = $('#tvaibwc-faqSearch');
+        var $clear  = $('#tvaibwc-faqClear');
+
+        var page = 0;
+        var term = '';
+
+        function esc(t) { return $('<div>').text(t == null ? '' : String(t)).html(); }
+
+        function matches() {
+            if (!term) return FAQS;
+            var q = term.toLowerCase();
+            return FAQS.filter(function (f) {
+                return ((f.q || '') + ' ' + (f.a || '')).toLowerCase().indexOf(q) !== -1;
+            });
+        }
+
+        function render() {
+            if (!$list.length) return;
+
+            var rows  = matches();
+            var pages = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+            if (page > pages - 1) page = pages - 1;
+            if (page < 0) page = 0;
+
+            var from = page * PER_PAGE;
+            var slice = rows.slice(from, from + PER_PAGE);
+
+            $list.empty();
+            slice.forEach(function (f) {
+                $list.append(
+                    '<div class="tvaibwc-faq-item">' +
+                        '<div class="tvaibwc-faq-question">' +
+                            '<span>' + esc(f.q) + '</span>' +
+                            '<i class="fas fa-chevron-down"></i>' +
+                        '</div>' +
+                        '<div class="tvaibwc-faq-answer" style="display:none;">' + esc(f.a) + '</div>' +
+                    '</div>'
+                );
+            });
+
+            $empty.toggle(rows.length === 0);
+
+            // The pager is pointless with a single page, and hiding it stops
+            // a short FAQ list looking like a broken paginated one.
+            $pager.toggle(rows.length > PER_PAGE);
+            $count.text((from + 1) + '–' + (from + slice.length) + ' of ' + rows.length);
+            $prev.prop('disabled', page === 0);
+            $next.prop('disabled', page >= pages - 1);
+        }
+
+        // Accordion, delegated so it survives re-rendering.
+        $list.on('click', '.tvaibwc-faq-question', function () {
+            var $a = $(this).next('.tvaibwc-faq-answer');
+            $a.slideToggle(140);
+            $(this).find('i').toggleClass('fa-chevron-down fa-chevron-up');
+        });
+
+        $prev.on('click', function () { page--; render(); });
+        $next.on('click', function () { page++; render(); });
+
+        var timer = null;
+        $search.on('input', function () {
+            var v = this.value;
+            $clear.toggleClass('is-on', v !== '');
+            clearTimeout(timer);
+            // Debounced: filtering re-renders the list on every keystroke and
+            // the array can be large.
+            timer = setTimeout(function () { term = v.trim(); page = 0; render(); }, 140);
+        });
+        $clear.on('click', function () {
+            $search.val('').trigger('input').focus();
+        });
+
+        render();
+
+        /* ── Report our height to the loader ──────────────────────────
+           The iframe is a rectangle and captures every click inside it,
+           including the transparent space above the visible panel — which
+           is why buttons on the host page above the widget went dead while
+           it was open. The panel is anchored to the bottom, so the fix is
+           to make the iframe no taller than the panel actually needs.
+
+           6px container offset + 62px panel offset + the panel itself, plus
+           a few pixels so a shadow is not clipped. */
+        function reportHeight() {
+            var panel  = document.querySelector('.tvaibwc-chat-widget');
+            var toggle = document.getElementById('tvaibwc-chatToggle');
+            var h = 0;
+
+            if (panel && panel.offsetHeight) h = 6 + 62 + panel.offsetHeight + 8;
+            // With the panel closed only the launcher needs covering.
+            if (toggle && toggle.offsetHeight) h = Math.max(h, 6 + toggle.offsetHeight + 8);
+            if (!h) return;
+
+            try {
+                window.parent.postMessage({ type: 'tvaibwc:height', height: Math.ceil(h) }, '*');
+            } catch (e) {}
+        }
+
+        // On load, after fonts/images settle, and whenever the panel resizes.
+        $(reportHeight);
+        $(window).on('load resize', reportHeight);
+        setTimeout(reportHeight, 350);
+        // The expand button changes the panel's size; report the new one.
+        $(document).on('click', '#tvaibwc-expandWidget, .tvaibwc-widget-tab', function () {
+            setTimeout(reportHeight, 300);
+        });
+        /* ── Home ─────────────────────────────────────────────────────
+           The start-chat card, and the case where the home screen has
+           nothing to offer. */
+        $('#tvaibwc-homeAsk').on('click', function () {
+            $('.tvaibwc-widget-tab[data-tab="tvaibwc-chat"]').click();
+        });
+
+        <?php if (empty($tvaConfig['show_visitor_modes'])): ?>
+        // Visitor tiles are off, so the home screen is a greeting and one
+        // button — a click in the way. Open straight into the conversation.
+        $(function () { $('.tvaibwc-widget-tab[data-tab="tvaibwc-chat"]').click(); });
+        <?php endif; ?>
+    })(window.jQuery);
+    </script>
 </body>
 </html>

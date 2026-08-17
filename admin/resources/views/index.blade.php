@@ -232,7 +232,13 @@
             .nav__toggle { order: 3; margin-left: 0; }
             /* Row 2: the drawer. Collapsed by max-height (not display:none) so
                it animates, and taken out of the a11y tree + tab order when shut. */
-            .nav__links {
+            /* `.nav .nav__links`, not `.nav__links`: a bare
+               `.nav__links { align-items: center }` is declared later in this
+               sheet for the desktop bar and won on source order — which
+               centred every item in the drawer column, while the theme
+               button, which sets its own align-self, stayed on the left.
+               That split was the symptom; this selector is the fix. */
+            .nav .nav__links {
                 order: 4; margin-left: 0;
                 flex-basis: 100%; flex-direction: column; align-items: stretch;
                 gap: 0; font-size: 15px;

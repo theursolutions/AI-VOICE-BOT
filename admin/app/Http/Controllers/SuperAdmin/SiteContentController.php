@@ -48,6 +48,8 @@ class SiteContentController extends Controller
                 ], 'What a member sees in the workspace before they choose for themselves. Separate from the public site: a marketing page often wants dark for impact, while the app people work in all day wants light. Either way, anyone who picks a theme keeps their choice.'),
             ]],
             'Brand' => ['icon' => '🏷️', 'fields' => [
+                $t('powered_by_label', 'Widget "Powered by" name'),
+                $t('powered_by_url',   'Widget "Powered by" link'),
                 $t('brand_name', 'Brand name (nav + footer)'),
             ]],
             'Hero' => ['icon' => '🚀', 'fields' => [
