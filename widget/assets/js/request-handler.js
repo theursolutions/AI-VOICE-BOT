@@ -345,7 +345,12 @@ function tvaibwcMakeStreamingBubble() {
         },
         finalize: function () {
             if (!streaming) {
-                $text.removeClass('typing').text('(no reply)');
+                // An empty reply is nearly always transient — a provider timeout or
+                // rate limit — so it is worded as busy rather than broken. "(no reply)"
+                // read like a crash to the visitor.
+                $text.removeClass('typing').text(
+                    window.TVAIBWC_BUSY_MSG || 'All our agents are busy right now — please try again in a moment.'
+                );
             }
         },
         renderHttpReply: function (text, audioUrl, voiceReply) {

@@ -12,14 +12,15 @@
 #
 # Pull the fallback model once (saved in the ollama_models volume):
 #   docker compose -f docker-compose.yml -f deploy/production/docker-compose.prod.yml \
-#     -f deploy/production/ollama.override.yml exec ollama ollama pull qwen2.5:7b
+#     -f deploy/production/ollama.override.yml exec ollama ollama pull qwen2.5:3b
 #
 # ── RAM on a 24 GB box ───────────────────────────────────────────────────────
 # Baseline (stack + XTTS) ≈ 10 GB. A 7B model loads ~6 GB ONLY while it's
 # actively generating (Ollama lazy-loads on first use, unloads after ~5 min
 # idle). Since Groq is primary, Ollama mostly sits idle (~few hundred MB) and
 # only spikes during a fallback — so ~16 GB peak, ~8 GB headroom. Comfortable.
-#   • 7B (qwen2.5:7b / llama3.1:8b) ≈ 6 GB  → recommended on this box
+#   • 3B (qwen2.5:3b)              ≈ 3 GB  → the default, and what fits a 12GB box
+#   • 7B (qwen2.5:7b / llama3.1:8b) ≈ 6 GB  → 24GB+ hosts only (exceeds the 4096M cap here)
 #   • 13–14B                        ≈ 9 GB  → fits, slower on CPU
 #   • 70B                           ≈ 43 GB → NOT possible without a GPU host
 # For full local-LLM speed you still want a GPU; on CPU keep it as the fallback.
@@ -67,7 +68,13 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-groq}
       LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
       OLLAMA_BASE_URL: http://ollama:11434/v1
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      # 3b, not 7b. The container limit below is 4096M and a 7B model needs
+      # ~6GB while generating, so the documented default could not fit inside
+      # its own cgroup — it would be OOM-killed on first use, which is the
+      # worst possible moment for a safety net to fail. 3b fits with room and
+      # is only ever the last resort behind the cloud tiers.
+      # Raise this (with the limit) on a 24GB+ host.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
     depends_on:
       - ollama
 

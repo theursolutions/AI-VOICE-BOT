@@ -44,6 +44,13 @@ class WidgetSettingsController extends Controller
         'show_history_tab'   => true,  // bottom nav tab listing past conversations
         'show_powered_by'    => true,  // small "Powered by Serve AI" line in footer
 
+        // Master switch. Off = the loader mounts nothing at all, so the widget
+        // disappears from every site it is embedded on without anyone having to
+        // edit their HTML. Deliberately separate from deleting the project:
+        // taking the widget down for a weekend should not cost the
+        // conversation history.
+        'widget_enabled'     => true,
+
         // Home screen. The widget opens here unless visitor modes are off,
         // in which case it goes straight to the conversation — a home screen
         // with nothing to choose on it is a click in the way.
@@ -65,6 +72,13 @@ class WidgetSettingsController extends Controller
         'avatar_emoji'    => "\u{1F916}",
         'opening_hours'   => '24/7',
         'placeholder'     => 'Type your message...',
+
+        // Shown when a turn comes back with nothing in it. The visitor used to
+        // get the literal string "(no reply)", which reads as a broken app
+        // rather than a busy one — and an empty reply is usually transient
+        // (provider timeout, rate limit), so the wording should invite a
+        // retry instead of implying the bot is broken.
+        'busy_message'    => 'All our agents are busy right now — please try again in a moment.',
         // Domains that may load this project's widget. CORS rejects
         // any other origin. Empty list = allow all (good for dev,
         // tighten before prod). One origin per entry, scheme + host,
@@ -132,9 +146,11 @@ class WidgetSettingsController extends Controller
             'show_visitor_modes' => 'nullable|boolean',
             'show_history_tab'   => 'nullable|boolean',
             'show_powered_by'    => 'nullable|boolean',
+            'widget_enabled'     => 'nullable|boolean',
             'avatar_emoji'       => 'nullable|string|max:8',
             'opening_hours'      => 'nullable|string|max:80',
             'placeholder'        => 'nullable|string|max:120',
+            'busy_message'       => 'nullable|string|max:200',
             'logo'               => 'nullable|file|mimetypes:image/png,image/jpeg,image/gif,image/webp,image/svg+xml|max:2048',
             'remove_logo'        => 'nullable|boolean',
 
@@ -224,6 +240,7 @@ class WidgetSettingsController extends Controller
             'show_reply_toggle'  => (bool) ($data['show_reply_toggle']  ?? false),
             'show_expand_button' => (bool) ($data['show_expand_button'] ?? false),
             'show_visitor_modes' => (bool) ($data['show_visitor_modes'] ?? false),
+            'widget_enabled'     => (bool) ($data['widget_enabled']     ?? false),
             'show_history_tab'   => (bool) ($data['show_history_tab']   ?? false),
             // Removing the "Powered by" badge is a paid feature
             // (`remove_branding`, Growth+). Forced back ON for plans without
@@ -241,6 +258,7 @@ class WidgetSettingsController extends Controller
             'faqs'               => $faqs,
             'show_faq_tab'       => (bool) ($data['show_faq_tab'] ?? false),
             'avatar_emoji'       => $data['avatar_emoji']   ?? self::DEFAULTS['avatar_emoji'],
+            'busy_message'       => ($data['busy_message'] ?? '') ?: self::DEFAULTS['busy_message'],
             'opening_hours'      => $data['opening_hours']  ?? self::DEFAULTS['opening_hours'],
             'placeholder'        => $data['placeholder']    ?? self::DEFAULTS['placeholder'],
             'logo_url'           => $logoUrl,

@@ -308,7 +308,7 @@ case "$cmd" in
     # Downloads the local LLM weights into the ollama_models volume (one time).
     # Kept out of the image so it survives rebuilds and isn't re-downloaded.
     m=$(grep -E '^OLLAMA_MODEL=' .env | head -1 | cut -d= -f2-)
-    m=${m:-qwen2.5:7b}
+    m=${m:-qwen2.5:3b}   # must match ollama.override.yml, or pull fetches a model nothing uses
     echo ">> pulling '$m' (several GB — this takes a while)…"
     "${DC[@]}" exec -T ollama ollama pull "$m"
     echo ">> installed models:"

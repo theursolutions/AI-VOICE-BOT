@@ -370,6 +370,17 @@
                     </div>
 
                     <div class="tva-form-group">
+                        <label class="tva-form-label">Message when no reply comes back</label>
+                        <input type="text" name="busy_message" value="{{ $config['busy_message'] ?? '' }}"
+                               class="form-control" maxlength="200"
+                               placeholder="All our agents are busy right now — please try again in a moment.">
+                        <div class="tva-form-help">
+                            Shown if the assistant returns nothing — usually a provider timeout or a rate
+                            limit, so it is worth wording as busy rather than broken.
+                        </div>
+                    </div>
+
+                    <div class="tva-form-group">
                         <label class="tva-form-label">Opening hours</label>
                         <input type="text" name="opening_hours" id="ws_hours" value="{{ $config['opening_hours'] }}" class="form-control" maxlength="80" placeholder="e.g. Mon–Fri 9am–6pm">
                         <div class="tva-form-help">Shown in the header next to bot name</div>
@@ -549,6 +560,7 @@
 
                     @php
                         $toggles = [
+                            ['widget_enabled',     'Widget enabled',           'Master switch. Off removes the widget from every site it is embedded on — no HTML change needed'],
                             ['show_voice',         'Voice / mic button',       'Lets visitors talk to the bot via microphone'],
                             ['show_emoji',         'Emoji picker',             'Smiley button next to the text input'],
                             ['show_attach',        'Attachment button',        'Paperclip button to send images, video, audio or files'],

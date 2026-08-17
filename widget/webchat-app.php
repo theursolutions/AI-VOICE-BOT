@@ -698,6 +698,10 @@
     (function ($) {
         if (!$) return;
 
+        // Wording for an empty reply, from the project's widget settings.
+        // request-handler.js reads this global rather than hardcoding.
+        window.TVAIBWC_BUSY_MSG = <?= json_encode($tvaConfig['busy_message'] ?? 'All our agents are busy right now — please try again in a moment.', JSON_UNESCAPED_UNICODE) ?>;
+
         /* ── FAQ ──────────────────────────────────────────────────────
            Paged at ten. A project can have hundreds, and rendering them
            all builds a list nobody scrolls; search is the way in and the
