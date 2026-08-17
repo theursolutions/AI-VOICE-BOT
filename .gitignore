@@ -1,8 +1,10 @@
 # ─── Secrets ─────────────────────────────────────────────────────────
+# Catch-all FIRST, then re-allow the one file that must be committed.
+# Named variants (.env.backup, .env.production, .env.bak-…) were slipping
+# through one at a time; anyone taking a quick backup before editing keys was
+# one `git add .` away from publishing live credentials.
 .env
-.env.local
-.env.*.local
-.env.habak
+.env.*
 !.env.example
 *.pem
 *.key
