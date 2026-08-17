@@ -103,7 +103,35 @@ class CrmInboundMessageHandler implements HandlesInboundMessage
             $session->save();
         }
 
-        $userMessage = Message::create([
+        // Has this exact provider message already been written?
+        //
+        // WebhookController dedupes on the message id before dispatching, but
+        // that token is spent by the DELIVERY, and it cannot help a JOB retry:
+        // the worker runs `--tries=3`, so a job that persisted the message and
+        // then threw anywhere later — a failed AI reply, a Graph timeout, a brief
+        // DB blip — comes back and writes the same message a second time. That is
+        // the "customer sent hello, two hellos appear" report, and it affects
+        // every channel because the retry is downstream of all of them.
+        //
+        // Keyed on the provider's own id, which is the only value that is stable
+        // across a redelivery and unique per message.
+        $existing = $m->messageId
+            ? Message::where('session_id', $session->id)
+                ->where('metadata->wamid', $m->messageId)
+                ->first()
+            : null;
+
+        if ($existing) {
+            Log::info('Meta inbound: message already recorded, not duplicating', [
+                'provider' => $m->provider,
+                'wamid'    => $m->messageId,
+            ]);
+        }
+
+        // Reuse the existing row rather than returning early: the rest of this
+        // handler still has to run, because whatever failed AFTER the write is
+        // exactly what the retry exists to complete.
+        $userMessage = $existing ?: Message::create([
             'session_id' => $session->id,
             'project_id' => $m->projectId,
             'role'       => 'user',

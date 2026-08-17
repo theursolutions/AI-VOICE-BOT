@@ -194,14 +194,34 @@ class SocialAuthController extends Controller
         $claim = 'social:code:' . hash('sha256', $provider . '|' . $request->query('code'));
 
         if (! Cache::add($claim, 1, now()->addMinutes(10))) {
+            // Absorbing the duplicate is not enough on its own: BOTH requests
+            // carry the same session cookie, and the loser loaded that session
+            // before the winner called Auth::login(). Left alone, the loser's
+            // save at end-of-request writes its stale pre-login copy back over
+            // the winner's authenticated session — the sign-in happens and is
+            // then erased, which shows up as no error and no login.
+            //
+            // So the loser waits for the winner to publish who it authenticated
+            // and logs the same user in itself. Both requests then finish with an
+            // authenticated session, and it stops mattering which response the
+            // browser actually receives.
+            $userId = $this->awaitAuthenticatedUser($claim);
+
+            if ($userId && ($user = User::find($userId))) {
+                Auth::login($user, true);
+
+                Log::info('Social sign-in: duplicate callback adopted the winner\'s session', [
+                    'provider' => $provider,
+                ]);
+
+                return redirect()->intended(RouteServiceProvider::HOME);
+            }
+
             Log::info('Social sign-in: duplicate callback ignored', [
                 'provider' => $provider,
-                'note'     => 'same authorization code already being redeemed by another request',
+                'note'     => 'winner published no user — it is still running or it failed',
             ]);
 
-            // Send them where they were going. Authenticated by the winning
-            // request → the dashboard; not yet → the login page via `auth`.
-            // Either is correct, and neither is an error message.
             return redirect()->intended(RouteServiceProvider::HOME);
         }
 
@@ -327,7 +347,36 @@ class SocialAuthController extends Controller
 
         Auth::login($user, true);
 
+        // Tell any duplicate request who this code authenticated, so it can log
+        // the same user in rather than overwriting this session with its own
+        // stale copy. Short-lived: it is only useful for the seconds during which
+        // a retry can still be in flight.
+        Cache::put($claim . ':user', $user->id, now()->addMinutes(2));
+
         return redirect()->intended(RouteServiceProvider::HOME);
+    }
+
+    /**
+     * Wait briefly for the request that won the code to publish the user it
+     * authenticated.
+     *
+     * Polls rather than taking a lock because the thing worth waiting for is the
+     * RESULT, not the critical section — the winner may finish its exchange and
+     * still be provisioning a workspace. Capped low: this runs while someone is
+     * staring at a redirect, and a duplicate that gives up merely lands on the
+     * login page instead of the dashboard.
+     */
+    private function awaitAuthenticatedUser(string $claim, int $attempts = 30, int $sleepMicros = 100_000): ?int
+    {
+        for ($i = 0; $i < $attempts; $i++) {
+            if ($id = Cache::get($claim . ':user')) {
+                return (int) $id;
+            }
+
+            usleep($sleepMicros);
+        }
+
+        return null;
     }
 
     /**
