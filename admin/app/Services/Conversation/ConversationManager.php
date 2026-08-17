@@ -5,6 +5,7 @@ namespace App\Services\Conversation;
 use App\Jobs\ExtractLeadFromTurn;
 use App\Models\Message;
 use App\Models\Session;
+use Illuminate\Support\Facades\Log;
 use App\Services\DataSource\DataSourceRouter;
 use App\Services\Conversation\HumanRouter;
 
@@ -87,12 +88,35 @@ class ConversationManager
 
         $messages = $this->memory->build($session, $contextResults);
 
-        $reply = $this->python->llm($messages, [
-            'project_id'   => $session->project_id,
-            'session_id'   => $session->id,
-            'voice_id'     => $session->voice_id,
-            'respond_with' => $respondWith,
-        ]);
+        // A provider failure must not become a 500.
+        //
+        // Every tier of the LLM chain exhausting is an outage, not a bug in the
+        // request: the visitor asked a perfectly good question and the answer
+        // is temporarily unavailable. Left uncaught it surfaced as an HTTP 500,
+        // which the widget could only render as a generic error — and on Meta
+        // channels sent nothing at all. A calm sentence is both truer and more
+        // useful, and the reason still reaches the log.
+        try {
+            $reply = $this->python->llm($messages, [
+                'project_id'   => $session->project_id,
+                'session_id'   => $session->id,
+                'voice_id'     => $session->voice_id,
+                'respond_with' => $respondWith,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('LLM generation failed for every provider', [
+                'project_id' => $session->project_id,
+                'session_id' => $session->id,
+                'channel'    => $session->channel,
+                'error'      => $e->getMessage(),
+                'class'      => get_class($e),
+            ]);
+
+            // Empty text deliberately: the block below already treats an empty
+            // reply as the busy case, logs it, and every channel already knows
+            // how to render that. One failure mode, one path.
+            $reply = ['text' => ''];
+        }
 
         // An empty reply is saved as NULL content and, until now, said nothing
         // to anyone. Each channel then failed in its own way with no shared
