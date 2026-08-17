@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     )
     ollama_model: str = Field(default="qwen2.5:7b", alias="OLLAMA_MODEL")
     ollama_max_tokens: int = Field(default=4096, alias="OLLAMA_MAX_TOKENS")
+    # The local tier needs its OWN timeout. Cloud providers answer in seconds, so
+    # the shared 60s default is generous for them — but CPU inference is a
+    # different order of magnitude: a cold model load alone costs ~16s, before
+    # generating a single token of a RAG-laden prompt at a few tokens/second.
+    # Sharing the cloud timeout meant the last tier of the chain could time out
+    # on every long answer and look exactly like "the fallback does nothing".
+    # It is the last resort — a slow answer beats no answer.
+    ollama_timeout: float = Field(default=300.0, alias="OLLAMA_TIMEOUT")
 
     # --- Auth -------------------------------------------------------------
     python_jwt_secret: str = Field(default="change-me", alias="PYTHON_JWT_SECRET")
