@@ -303,6 +303,44 @@ class SocialAuthController extends Controller
             ]);
         }
 
+        // Everything from here to Auth::login is wrapped, because it runs AFTER
+        // the authorization code has been spent and it is the only part that can
+        // fail without leaving a trace.
+        //
+        // Previously only the token exchange was guarded, so a throw in account
+        // creation, workspace provisioning or the subscription window became an
+        // anonymous 500 with no `Social sign-in` prefix anywhere. Meanwhile the
+        // duplicate request found the code spent with nobody authenticated and
+        // reported an interrupted sign-in — attributing our own failure to a
+        // proxy retry, and sending whoever was reading the log looking at the
+        // network instead of at this method.
+        try {
+            return $this->signIn($social, $email, $provider, $claim);
+        } catch (\Throwable $e) {
+            Log::error('Social sign-in failed after the token exchange', [
+                'provider' => $provider,
+                'email'    => $email,
+                'error'    => $e->getMessage(),
+                'class'    => get_class($e),
+                'at'       => $e->getFile() . ':' . $e->getLine(),
+            ]);
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'Signed in with ' . ucfirst($provider)
+                    . ', but we could not finish setting up your account. Please try again.',
+            ]);
+        }
+    }
+
+    /**
+     * Find or build the local account, then authenticate it.
+     *
+     * Split out so the caller can wrap it: the authorization code is already
+     * spent by the time this runs, so a failure here is not retryable by the
+     * visitor without going back to the provider for a fresh one.
+     */
+    private function signIn(\Laravel\Socialite\Contracts\User $social, string $email, string $provider, string $claim): RedirectResponse
+    {
         $user = User::where('email', $email)->first();
 
         if (!$user) {
