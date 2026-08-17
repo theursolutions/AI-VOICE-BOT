@@ -171,7 +171,22 @@ class ConversationManager
         // customer spoke. Cannot throw: see UsageRecorder.
         app(\App\Services\Billing\UsageRecorder::class)->assistantReplied($session, $userMessage);
 
-        ExtractLeadFromTurn::dispatch($session->project_id, $session->id, $assistant->id);
+        // Enqueued AFTER the reply is already generated and saved, so a queue
+        // problem must not fail the turn. Unguarded, an unreachable Redis threw
+        // here and 500'd a request whose answer was sitting in the database —
+        // the visitor saw an error for a reply that had actually succeeded.
+        //
+        // Lead extraction is a background nicety; losing one is worth far less
+        // than losing the conversation.
+        try {
+            ExtractLeadFromTurn::dispatch($session->project_id, $session->id, $assistant->id);
+        } catch (\Throwable $e) {
+            Log::warning('Could not queue lead extraction', [
+                'session_id' => $session->id,
+                'error'      => $e->getMessage(),
+                'class'      => get_class($e),
+            ]);
+        }
 
         return $assistant;
     }

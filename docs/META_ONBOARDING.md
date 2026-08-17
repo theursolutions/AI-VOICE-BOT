@@ -92,6 +92,19 @@ https://serveai.com.pk/meta/oauth/callback
 ```
 Must match byte-for-byte or the token exchange fails.
 
+> **Newer apps are organised by "use cases", not "products".** If the sidebar
+> shows *Use cases* and there is no top-level Facebook Login entry, the same
+> screen is at **Use cases → <your use case> → Customise → Settings**, and the
+> permission list is under **Customise → Permissions** on that use case. This
+> is why a permission can be spelled correctly, belong to a product you have
+> added, and STILL come back `Invalid Scope`: on a use-case app it also has to
+> be attached to the use case.
+>
+> That one **Valid OAuth Redirect URIs** box is a *list*, not a single value —
+> add each URI and save. But note that only Facebook-hosted callbacks belong
+> here. The Instagram-Login redirect is registered on a different screen
+> entirely (§4b.2), and putting it here has no effect.
+
 ### 2.4 Webhooks
 App → **WhatsApp → Configuration → Webhook**:
 - Callback URL: `https://serveai.com.pk/api/whatsapp/webhook`
@@ -127,7 +140,29 @@ the app itself — which is fine for your own testing and useless for customers.
 | `whatsapp_business_management` | WhatsApp | Read the WABA, numbers, templates |
 | `pages_messaging` | Facebook | Reply to Page messages |
 | `instagram_manage_messages` | Instagram | Reply to IG DMs |
-| `pages_show_list`, `business_management` | all | List what the customer may connect |
+| `pages_show_list` | Facebook, Instagram | List the Pages/IG accounts the customer may connect (`me/accounts`) |
+| `business_management` | **WhatsApp only** | `me/businesses`, the first hop of WhatsApp redirect-flow discovery. Not requested for Facebook or Instagram — nothing there uses it. |
+
+### Which use case holds which permission
+
+On a use-case app the dashboard never says "Facebook Pages", so the mapping has
+to be read off the descriptions. There is no use case for the Pages *messaging*
+flow under any name resembling "Pages" — it is the Messenger one:
+
+| Our provider | Use case to Customise | Permissions to add there |
+|---|---|---|
+| `facebook_page` | **Engage with customers on Messenger from Meta** | `pages_messaging`, `pages_show_list`, `pages_manage_metadata`, `pages_read_engagement` |
+| `instagram` (via FB Login) | **Manage messaging & content on Instagram** | `instagram_basic`, `instagram_manage_messages`, `pages_show_list`, `pages_manage_metadata` |
+| `whatsapp` | **Connect with customers through WhatsApp** | `whatsapp_business_management`, `whatsapp_business_messaging`, `business_management` |
+
+Ignore **Manage everything on your Page** (that is the Pages content/publishing
+API — we never publish posts) and every Marketing/Ads/Threads/Catalog entry.
+
+`business_management` is the awkward one: it belongs to the WhatsApp use case
+because `me/businesses` needs it, and it is the only reviewed permission in the
+table that is not messaging-related. If the WhatsApp use case does not offer it,
+see §4a — Embedded Signup skips `me/businesses` entirely
+(`discoverWhatsAppByIds()`), so that path works without it.
 
 ### What to submit for each
 
@@ -212,12 +247,30 @@ curl -X POST "https://graph.facebook.com/v21.0/<PHONE_NUMBER_ID>/register" \
 
 ## 4a. Embedded Signup
 
-Requires **Tech Provider** or Solution Partner status. Note the config does
-NOT live under the WhatsApp product, which is where the old version of this
-doc sent people.
+Requires **Tech Provider** or Solution Partner status.
 
-**App Dashboard → Facebook Login for Business → Configurations → Create
-configuration:**
+> **First, pick the right integration type.** The WhatsApp use case opens on
+> *Integrate with API* vs *Become a Partner*, and the two describe genuinely
+> different products:
+>
+> - *Integrate with API* — message **your own** customers from **your own**
+>   number. One business, one WABA.
+> - *Become a Partner* (Tech Provider) — onboard **other businesses'** numbers.
+>
+> This product is the second one: the whole point of ChannelOnboardController
+> is connecting each customer's own number to their own project. Choosing
+> *Integrate with API* is not fatal for testing with your own number, but it is
+> the wrong shape for the product and it never surfaces the Tech Provider path
+> that Embedded Signup and Coexistence both need.
+
+On a use-case app the configuration builder lives inside the WhatsApp use case,
+**not** under Facebook Login for Business → Configurations (where older docs,
+including a previous version of this one, sent people):
+
+**Use cases → Connect on WhatsApp → Become a Partner → Embedded Signup
+Builder.** Neighbouring entries there: *Become Tech Provider* (do this first)
+and *Migrate customers*. The WhatsApp permission table is under **Other tools →
+Permissions and features** on the same use case.
 
 | Field | Value |
 |---|---|
@@ -417,6 +470,124 @@ subscription (§2.4). The pipeline does this automatically and logs
 **"Permissions error."** The customer unticked something on the consent
 screen. The pipeline catches this at the token step and names the missing
 scopes rather than failing later with `(#200) Permissions error`.
+
+---
+
+## 6a. Two Meta apps: which credential goes where
+
+Dashboard sign-in and channel onboarding need **different Meta apps**, because
+they need contradictory things from one:
+
+| | Login app | Onboarding app |
+|---|---|---|
+| env vars | `FACEBOOK_CLIENT_ID` / `FACEBOOK_CLIENT_SECRET` | `META_APP_ID` / `META_APP_SECRET` |
+| app type | Consumer | Business |
+| products | Facebook Login | FB Login for Business, WhatsApp, Messenger, Instagram |
+| permissions | `email`, `public_profile` — no review | `pages_*`, `whatsapp_business_*`, `instagram_*` — all reviewed |
+| redirect URI | `/auth/facebook/callback` | `/meta/oauth/callback` |
+
+A Business app using Facebook Login for Business **refuses `email`**, which
+login cannot work without; and the login app has none of the products the
+`pages_*` scopes require. So one app cannot serve both, whichever way you
+point it.
+
+> **`META_APP_ID` is the ONBOARDING app, not the login app.** The names invite
+> the opposite reading, and putting the login app there breaks all three
+> channels at once: its whitelist has no `/meta/oauth/callback`, and with no
+> Messenger/Pages/Instagram products every scope onboarding requests comes
+> back `Invalid Scope`. Meanwhile login itself keeps working, so the damage
+> looks unrelated to the change.
+
+**Do not move onboarding to a newer app to tidy this up.** Business
+Verification, every Advanced Access grant, the whitelisted redirect URIs, the
+Instagram app id/secret and the Embedded Signup config id are all per-app and
+**none of them transfer** — a "clean" new app restarts §3 from zero, which is
+2–6 weeks. Keep onboarding on the app that already passed review and give the
+new app to login.
+
+`FACEBOOK_CLIENT_ID` falls back to `META_APP_ID` when blank
+(`config/services.php`), so with two apps you must set it **explicitly** —
+otherwise changing the onboarding app silently repoints the login button too.
+`php artisan auth:doctor` reports which app each one resolves to.
+
+### If you do genuinely change the onboarding app
+
+It shares **nothing** with the old one — not its whitelist, not its products,
+not its approved permissions, and not its Instagram or Embedded Signup ids.
+Every item below has to be redone on the new app.
+
+### "This redirect failed because the redirect URI is not whitelisted…"
+
+Two independent causes, and both usually apply on a fresh app:
+
+1. **Nothing is whitelisted yet.** App → **Facebook Login for Business →
+   Settings** (on a use-case app: **Use cases → <use case> → Customise →
+   Settings** — see the note in §2.3): turn on *Client OAuth Login* AND
+   *Web OAuth Login*, then add to **Valid OAuth Redirect URIs**:
+   ```
+   https://<APP_DOMAIN>/meta/oauth/callback
+   ```
+   That box is a list — this is the only URI onboarding needs there, and it
+   serves Facebook Pages, WhatsApp and Instagram-via-Facebook-Login alike.
+   The Instagram-Login callback goes on a different screen (§4b.2).
+
+   Also add `<APP_DOMAIN>` under Settings → Basic → **App Domains**, and to
+   **Allowed Domains for the JavaScript SDK** if Embedded Signup is in use.
+
+2. **We send a URI that differs from the registered one.** The redirect_uri is
+   compared byte-for-byte. It comes from `META_OAUTH_REDIRECT`, and when that
+   is blank it is derived from **`APP_URL`** — so an `APP_URL` of
+   `http://localhost` or a bare domain where the app registered `www.` fails
+   this check no matter what is whitelisted. Set both explicitly and keep them
+   identical.
+
+WhatsApp hits this first because *Connect WhatsApp* uses the Facebook redirect
+flow whenever `META_WA_CONFIG_ID` is blank — and that id belongs to the **old**
+app, so it must be recreated (§4a) or cleared.
+
+### "Invalid Scope: pages_user_profile (Please check lower letter case or delimiter)"
+
+`pages_user_profile` **is not a real permission.** The only `pages_user_*`
+permissions are `_gender`, `_locale` and `_timezone`. It was in the default
+Facebook scope list and has been removed — pull the change and clear any
+`META_SCOPES_FACEBOOK` override that still names it.
+
+Nothing is lost by dropping it: a sender's name and photo come from the
+Messenger **User Profile API** on `pages_messaging`, which we already request.
+
+More generally, `Invalid Scope` means one of four things:
+
+| Cause | Fix |
+|---|---|
+| `META_APP_ID` holds the **login** app | Point it back at the onboarding app (see the box above) |
+| The permission does not exist | Remove it from `META_SCOPES_*` |
+| The matching **product** is not added to the app | Add Facebook Login / Messenger / Instagram / WhatsApp in the dashboard |
+| The permission is not attached to the app's **use case** | App → Use cases → the use case → Permissions → add it |
+
+A single bad scope fails the whole consent screen, so this always presents as
+"onboarding is completely broken", never as a missing field.
+
+Note `public_profile` is the real permission name — **not** `user_public_profile`,
+which fails the same way `pages_user_profile` does.
+
+### Instagram still failing
+
+Instagram has **two** sets of credentials, and both must come from the
+**onboarding** app — never the login app:
+
+- `META_APP_ID`/`META_APP_SECRET` — the Facebook-Login path.
+- `INSTAGRAM_APP_ID`/`INSTAGRAM_APP_SECRET` — Instagram Login, taken from
+  **Instagram → API setup with Instagram login**, *not* Settings → Basic.
+
+A non-empty `INSTAGRAM_APP_ID` is what selects the Instagram-Login flow, so a
+mismatched pair here — an id from one app with a secret from another, or an id
+from an app with no Instagram product — sends customers to consent and fails
+there. Both values come from the same app as `META_APP_ID`, and the three URLs
+in §4b.2 must be registered on that app.
+
+Then, if consent itself is rejected, drop
+`instagram_business_manage_comments` from `INSTAGRAM_SCOPES` — it needs its own
+App Review and one unapproved scope fails the entire screen (§4b.5).
 
 ---
 

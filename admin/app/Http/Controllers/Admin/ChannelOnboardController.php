@@ -575,14 +575,28 @@ HTML;
         return response($html);
     }
 
+    /**
+     * The redirect_uri sent to Meta — and it has to match what is registered
+     * in the app dashboard BYTE-FOR-BYTE.
+     *
+     * Prefer the explicitly configured value over route(), because route()
+     * derives the URL from APP_URL: a server whose APP_URL is `http` while
+     * the app registered `https`, or bare-domain against a registered `www.`,
+     * sends a URI that does not match and Meta answers "This redirect failed
+     * because the redirect URI is not whitelisted in the app's Client OAuth
+     * Settings" — with nothing on our side to explain it. META_OAUTH_REDIRECT
+     * is the lever for that, and it was documented in .env.example while being
+     * ignored here.
+     */
     private function callbackUrl(): string
     {
-        return route('meta.oauth.callback');
+        return config('services.facebook.redirect') ?: route('meta.oauth.callback');
     }
 
+    /** Same, for the separate Instagram Login redirect (HTTPS only). */
     private function instagramCallbackUrl(): string
     {
-        return route('meta.instagram.callback');
+        return config('meta.instagram.redirect_uri') ?: route('meta.instagram.callback');
     }
 
     /**

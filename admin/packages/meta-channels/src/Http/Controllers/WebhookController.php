@@ -195,7 +195,7 @@ class WebhookController
      *
      * FAILURE IS CACHED FOR TEN MINUTES, and the difference matters. Caching
      * a failed lookup for a day means that the moment App Review grants
-     * pages_user_profile — or the customer's rate limit clears — the inbox
+     * pages_messaging — or the customer's rate limit clears — the inbox
      * still shows numbers for another 24 hours, and the operator has no way
      * to tell a permissions problem from a stale cache. The short window lets
      * it heal on its own.
@@ -229,7 +229,7 @@ class WebhookController
                 'provider' => $provider,
                 'hint'     => $provider === ChannelConnection::PROVIDER_INSTAGRAM
                     ? 'needs instagram_business_manage_messages + the customer must have messaged this account'
-                    : 'needs pages_user_profile (Advanced Access) on the Page token',
+                    : 'needs pages_messaging (Advanced Access) on the Page token, and the customer must have messaged this Page',
             ]);
         }
 
