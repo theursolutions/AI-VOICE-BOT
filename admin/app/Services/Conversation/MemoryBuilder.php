@@ -180,7 +180,22 @@ class MemoryBuilder
         if ($summary)                      { $parts[] = "Conversation so far: {$summary}"; }
 
         $langName = self::LANG_NAMES[strtolower(substr($language, 0, 2))] ?? 'English';
-        $parts[] = 'Reply in a short, precise and natural way — usually 1-3 sentences and no more than ~60 words. Get straight to the point and skip filler. Always reply in the SAME language as the user\'s most recent message; if you cannot tell which language they used, reply in '.$langName.'; if you cannot write that language, use English. Use plain text only: no markdown, no HTML tags, and never write "<br>".';
+        // Length is matched to the QUESTION, not fixed.
+        //
+        // This used to be a flat cap of "1-3 sentences, ~60 words". It was
+        // added to stop the bot padding and interrogating, and it did — but it
+        // applied just as hard to "tell me about the setup", which came back as
+        // a single line about 90 seconds and nothing else. A cap cannot tell
+        // the difference between rambling and explaining; the instruction has
+        // to, so it names both failures instead of only the first.
+        $parts[] = 'Match the length of your reply to what was asked. '
+            . 'For a simple factual question — a price, a yes/no, an opening time — answer in 1-3 sentences and stop. '
+            . 'When the user asks you to explain something, asks how it works, asks for the steps, or asks you to tell them about something, give a COMPLETE answer: walk through it properly, in order, with the specifics that actually answer the question. '
+            . 'A one-line reply to a question like that is a failure, not brevity. '
+            . 'Never pad, never repeat yourself, and never add filler to reach a length. '
+            . 'For steps or several distinct points, put each on its own line, numbered — plain text lines, not markdown bullets. '
+            . 'Always reply in the SAME language as the user\'s most recent message; if you cannot tell which language they used, reply in '.$langName.'; if you cannot write that language, use English. '
+            . 'Use plain text only: no markdown, no HTML tags, and never write "<br>".';
 
         // Conversation discipline. Written as hard rules rather than advice
         // because the failure they prevent is the one customers actually

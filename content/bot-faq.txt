@@ -29,7 +29,7 @@ chat widget on your site and watch the dashboard fill with leads.
 
 **How do I add the chat widget to my website?**
 Copy the snippet from Widget Settings and paste it just before the closing
-`</body>` tag on your site. It is one `<script>` tag carrying your project key,
+body tag on your site. It is a single script tag carrying your project key,
 and it works on any platform that lets you edit HTML — WordPress, Shopify,
 Webflow, or a hand-built site.
 
@@ -280,7 +280,7 @@ channel, so you can see exactly what was said before someone became a lead.
 ## Troubleshooting
 
 **The widget is not appearing on my site.**
-Check the script tag is present just before `</body>` and that the project key
+Check the script tag is present just before the closing body tag and that the key
 matches the one in Widget Settings. If your site is HTTPS, the widget must be
 loaded over HTTPS too.
 

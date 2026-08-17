@@ -197,6 +197,17 @@ services:
       - voice_duckdb:/app/duckdb_data
       - voice_outputs:/app/voice_outputs
       - voice_uploads:/app/uploads
+      # Uploaded documents, mounted at the SAME path Laravel writes them to.
+      # Ingestion passes an absolute path across the wire rather than the file
+      # itself — Laravel stores storage/app/data_sources/project_N/<hash>.ext
+      # and the Python ingester opens that exact string. Without this the path
+      # does not exist over here and every upload fails "document not found"
+      # while the file sits perfectly intact in the app container.
+      #
+      # Read-only: the ingester only reads. Nothing in voice-engine writes
+      # under /var/www, so anything that tries is a bug worth surfacing rather
+      # than silently allowing.
+      - app_storage:/var/www/html/storage/app:ro
     # NOTE: DuckDB is a single-writer store guarded by file locks, so the voice
     # tier cannot be scaled past ONE replica while it owns these files.
     # Keep VOICE_REPLICAS=1 (see deploy/production/.env.prod.example).
