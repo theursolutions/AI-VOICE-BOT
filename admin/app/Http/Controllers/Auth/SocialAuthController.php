@@ -353,7 +353,28 @@ class SocialAuthController extends Controller
             ]);
         }
 
-        if ($user->is_disabled || $user->trashed()) {
+        // canAuthenticate(), NOT is_disabled || trashed().
+        //
+        // trashed() does not exist on this model. User soft-deletes through
+        // App\Models\Concerns\IntSoftDeletes, because `deleted_at` here is a unix
+        // INTEGER rather than a datetime, and that trait exposes isSoftDeleted()
+        // — there is no Laravel SoftDeletes to inherit trashed() from.
+        //
+        // So this line threw BadMethodCallException on EVERY social sign-in, for
+        // every account, since the day it was written. And it threw at the worst
+        // possible point: after the authorization code had been spent, so the
+        // provider had done its part and the code could not be reused. The visitor
+        // got a generic 500, the duplicate request found the code already redeemed
+        // and blamed a proxy retry, and no log line ever mentioned sign-in.
+        //
+        // canAuthenticate() is the model's own answer to this question and is what
+        // the rest of the app uses, so the two cannot drift apart again.
+        if (! $user->canAuthenticate()) {
+            Log::info('Social sign-in refused: account not active', [
+                'provider' => $provider,
+                'user'     => $user->id,
+            ]);
+
             return redirect()->route('login')->withErrors([
                 'email' => 'This account is not active. Please contact your administrator.',
             ]);
