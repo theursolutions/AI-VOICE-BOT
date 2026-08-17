@@ -174,6 +174,13 @@ return [
 
         'brand_name'        => 'Serve AI',
 
+        // The "Powered by" line in every customer's chat widget. Platform-wide
+        // rather than per-project: it is OUR attribution, so a client cannot
+        // rebrand it, and changing it here changes it on every embed at once.
+        // Was hardcoded to a previous product name in the widget itself.
+        'powered_by_label'  => 'Serve AI',
+        'powered_by_url'    => 'https://serveai.com.pk',
+
         // What the articles section is CALLED in navigation and the footer.
         // The URL stays /blog regardless — that is the path Google expects,
         // and renaming a live URL costs redirects and ranking for nothing.
