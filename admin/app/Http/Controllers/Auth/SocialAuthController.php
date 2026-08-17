@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Services\Billing\SubscriptionService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -177,6 +178,33 @@ class SocialAuthController extends Controller
             ]);
         }
 
+        // An authorization code may be redeemed EXACTLY ONCE, so two requests
+        // carrying the same one must not both try.
+        //
+        // They do arrive: HAProxy runs `retries 3` with `option redispatch`, so a
+        // connection hiccup resends the same GET to the other app replica, and a
+        // browser prefetch or an impatient double-click has the same effect. The
+        // first request signs the user in; the second gets
+        // "This authorization code has been used" (subcode 36009) — and it is the
+        // second response that reaches the browser, so a sign-in that WORKED
+        // presented as a failure the visitor could do nothing about.
+        //
+        // Cache::add is atomic and Redis is shared across replicas, so exactly
+        // one request wins regardless of which container it lands on.
+        $claim = 'social:code:' . hash('sha256', $provider . '|' . $request->query('code'));
+
+        if (! Cache::add($claim, 1, now()->addMinutes(10))) {
+            Log::info('Social sign-in: duplicate callback ignored', [
+                'provider' => $provider,
+                'note'     => 'same authorization code already being redeemed by another request',
+            ]);
+
+            // Send them where they were going. Authenticated by the winning
+            // request → the dashboard; not yet → the login page via `auth`.
+            // Either is correct, and neither is an error message.
+            return redirect()->intended(RouteServiceProvider::HOME);
+        }
+
         try {
             $social = Socialite::driver($provider)
                 ->stateless()
@@ -220,6 +248,23 @@ class SocialAuthController extends Controller
                     'wrong client id/secret for this provider — run `php artisan auth:doctor`',
                 default => null,
             };
+
+            // A spent code that got past the claim above — the duplicate arrived
+            // more than ten minutes later, or the cache was flushed between the
+            // two. Still not the visitor's problem and still not an error: the
+            // first request already did the work.
+            $spent = str_contains($haystack, '36009')
+                || str_contains($haystack, 'authorization code has been used')
+                || str_contains($haystack, 'invalid_grant');
+
+            if ($spent) {
+                Log::info('Social sign-in: authorization code already redeemed', [
+                    'provider' => $provider,
+                    'note'     => 'duplicate callback outside the claim window',
+                ]);
+
+                return redirect()->intended(RouteServiceProvider::HOME);
+            }
 
             Log::warning('Social sign-in failed', array_filter([
                 'provider' => $provider,
