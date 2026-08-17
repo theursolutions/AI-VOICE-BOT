@@ -11,7 +11,16 @@ x-admin-env: &admin-env
   APP_DEBUG: ${APP_DEBUG:-false}
   APP_KEY: ${APP_KEY}
   APP_URL: https://${APP_DOMAIN}
-  LOG_CHANNEL: stack
+  # stderr, not stack. `stack` resolves to the `single` channel, which writes a
+  # file INSIDE each container — and the app tier runs 2+ replicas, so an
+  # exception lands in one container's file while `dc exec app` enters another.
+  # That is how a reproducible 500 stayed undiagnosable: the trace existed, in
+  # a file nobody was looking at, on a replica chosen at random.
+  #
+  # stderr goes to the Docker log driver, so `dc logs app` shows every replica's
+  # exceptions in one stream — which is the only view that matches how this is
+  # actually deployed.
+  LOG_CHANNEL: stderr
   LOG_LEVEL: info
   DB_CONNECTION: mysql
   DB_HOST: mysql
