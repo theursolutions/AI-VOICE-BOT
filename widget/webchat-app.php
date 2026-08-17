@@ -560,7 +560,25 @@
 
             <?php if (!empty($tvaConfig['show_powered_by'])): ?>
             <div style="text-align:center; font-size:10.5px; color:#94a3b8; padding:6px 10px; border-top:1px solid rgba(148,163,184,.15);">
-                Powered by <a href="https://nuerabot.io" target="_blank" rel="noopener" style="color:inherit; text-decoration:none; font-weight:600;">NueraBot</a>
+                <?php
+                    // Platform attribution, set once by a super-admin and served
+                    // to every embed through /api/v1/widget/config. Was hardcoded
+                    // to a previous product name, so every customer's site
+                    // advertised the wrong brand.
+                    $tvaPbLabel = trim((string) ($tvaConfig['powered_by_label'] ?? 'Serve AI')) ?: 'Serve AI';
+                    $tvaPbUrl   = trim((string) ($tvaConfig['powered_by_url'] ?? ''));
+                    // Only http(s) is linkable — the value comes from a setting,
+                    // and javascript: in an href here would execute on every
+                    // customer's site.
+                    $tvaPbSafe  = (bool) preg_match('#^https?://#i', $tvaPbUrl);
+                ?>
+                Powered by
+                <?php if ($tvaPbSafe): ?>
+                    <a href="<?= htmlspecialchars($tvaPbUrl, ENT_QUOTES) ?>" target="_blank" rel="noopener"
+                       style="color:inherit; text-decoration:none; font-weight:600;"><?= htmlspecialchars($tvaPbLabel) ?></a>
+                <?php else: ?>
+                    <span style="font-weight:600;"><?= htmlspecialchars($tvaPbLabel) ?></span>
+                <?php endif; ?>
             </div>
             <?php endif; ?>
         </div>
