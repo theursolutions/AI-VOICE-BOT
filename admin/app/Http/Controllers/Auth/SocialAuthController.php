@@ -8,8 +8,10 @@ use App\Models\Role;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use App\Services\Billing\SubscriptionService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -39,12 +41,61 @@ class SocialAuthController extends Controller
             ]);
         }
 
+        // stateless() + our own signed `state`, NOT Socialite's session state.
+        //
+        // Socialite's default puts a random string in the session and compares it
+        // on the way back. That makes sign-in depend on the session cookie
+        // surviving a round trip through the provider, and when it does not, the
+        // failure is InvalidStateException with an EMPTY message — which reads as
+        // a provider fault and is in fact ours. Email/password login can be
+        // working perfectly at the same time, because it never leaves the site.
+        //
+        // The `state` parameter exists to stop an attacker replaying someone
+        // else's callback, so it cannot simply be dropped. Instead we mint it
+        // ourselves: encrypted (so it cannot be forged without APP_KEY) and
+        // timestamped (so a captured callback URL is not replayable tomorrow).
+        // ChannelOnboardController has carried its context this way through the
+        // same proxy and replica setup since it was written.
         return Socialite::driver($provider)
+            ->stateless()
             ->redirectUrl(route('social.callback', ['provider' => $provider]))
+            ->with(['state' => $this->encodeState($provider)])
             ->redirect();
     }
 
-    public function callback(string $provider): RedirectResponse
+    /** Signed, short-lived CSRF token for the OAuth round trip. */
+    private function encodeState(string $provider): string
+    {
+        return Crypt::encryptString(json_encode([
+            'provider' => $provider,
+            'nonce'    => Str::random(16),
+            'ts'       => time(),
+        ]));
+    }
+
+    /**
+     * Verify the state we minted came back intact, unexpired, and for THIS
+     * provider — the last check stops a callback for one provider being replayed
+     * against the other.
+     */
+    private function stateValid(string $raw, string $provider): bool
+    {
+        if ($raw === '') {
+            return false;
+        }
+
+        try {
+            $data = json_decode(Crypt::decryptString($raw), true);
+        } catch (\Throwable $e) {
+            return false;   // not ours, or APP_KEY changed
+        }
+
+        return is_array($data)
+            && ($data['provider'] ?? null) === $provider
+            && (time() - (int) ($data['ts'] ?? 0)) <= 900;
+    }
+
+    public function callback(Request $request, string $provider): RedirectResponse
     {
         abort_unless(in_array($provider, self::PROVIDERS, true), 404);
 
@@ -54,8 +105,49 @@ class SocialAuthController extends Controller
             ]);
         }
 
+        // The provider refused BEFORE issuing a code — the user declined, or the
+        // app asked for something it may not have (a Business-type app rejects
+        // `email`, which Socialite's Facebook driver requests by default).
+        //
+        // Handled before ->user() because Socialite has no code to work with and
+        // throws a generic exception, which threw away the one useful artefact in
+        // the whole exchange: the provider's own error_description. That is why
+        // this failure was indistinguishable from a bad secret or a lost session.
+        if ($request->query('error') || ! $request->query('code')) {
+            $reason = (string) ($request->query('error_description')
+                ?: $request->query('error')
+                ?: 'no authorization code');
+
+            Log::warning('Social sign-in refused by provider', [
+                'provider' => $provider,
+                'error'    => $request->query('error'),
+                'reason'   => $reason,
+            ]);
+
+            // `access_denied` is the user changing their mind — not a fault, and
+            // it should not read like one.
+            $message = $request->query('error') === 'access_denied'
+                ? 'Sign-in with ' . ucfirst($provider) . ' was cancelled.'
+                : 'Could not sign in with ' . ucfirst($provider) . ': ' . $reason;
+
+            return redirect()->route('login')->withErrors(['email' => $message]);
+        }
+
+        // Our own CSRF check, replacing the session-backed one Socialite does.
+        if (! $this->stateValid((string) $request->query('state'), $provider)) {
+            Log::warning('Social sign-in state rejected', [
+                'provider' => $provider,
+                'reason'   => 'state missing, expired (>15 min), forged, or for another provider',
+            ]);
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'That sign-in link expired. Please try again.',
+            ]);
+        }
+
         try {
             $social = Socialite::driver($provider)
+                ->stateless()
                 ->redirectUrl(route('social.callback', ['provider' => $provider]))
                 ->user();
         } catch (\Throwable $e) {
@@ -64,11 +156,29 @@ class SocialAuthController extends Controller
             // page, which is indistinguishable from a wrong password and
             // leaves nothing to diagnose — a mismatched redirect URI, a bad
             // secret and a revoked token all look identical.
-            Log::warning('Social sign-in failed', [
+            //
+            // `hint` names the fix per failure class, because the exception text
+            // alone does not imply one. InvalidStateException in particular reads
+            // like a provider fault when it is ours: the state Socialite stashed
+            // in the session was not there on the way back, which is a session
+            // problem (lost cookie, SameSite, a session store the replicas do not
+            // share) and has nothing to do with the provider at all.
+            $hint = match (true) {
+                $e instanceof \Laravel\Socialite\Two\InvalidStateException =>
+                    'session lost between redirect and callback — check SESSION_DRIVER is shared across replicas, SESSION_SAME_SITE=lax, and SESSION_SECURE_COOKIE matches the scheme',
+                str_contains($e->getMessage(), 'redirect_uri') =>
+                    'the redirect_uri sent does not match the provider registration — run `php artisan auth:doctor`',
+                str_contains($e->getMessage(), 'client_secret') || str_contains($e->getMessage(), 'client_id') =>
+                    'wrong credentials for this provider — run `php artisan auth:doctor`',
+                default => null,
+            };
+
+            Log::warning('Social sign-in failed', array_filter([
                 'provider' => $provider,
                 'error'    => $e->getMessage(),
                 'class'    => get_class($e),
-            ]);
+                'hint'     => $hint,
+            ]));
 
             return redirect()->route('login')->withErrors([
                 'email' => 'Could not sign in with ' . ucfirst($provider) . '. Please try again.',
