@@ -45,13 +45,52 @@ _RETRYABLE_HINTS = ("ratelimit", "timeout", "connection", "internalserver",
                     "serviceunavailable", "overloaded", "apistatus")
 
 
+# Exhausted-quota / billing conditions. PERMANENT for this provider — retrying
+# it is pointless — but the whole reason a fallback chain exists, since another
+# provider is unaffected. Matched on the message as well as the class, because
+# providers express this very differently: an OpenAI-compatible endpoint may
+# raise RateLimitError(429) with "insufficient_quota", while others use 402, 403
+# or a plain 400 whose only clue is the wording.
+_FAILOVER_CODES = {401, 402, 403}
+_FAILOVER_HINTS = ("quota", "insufficient", "credit", "billing", "exceeded",
+                   "payment", "suspended", "deactivated", "expired")
+
+
+def _status_of(exc: Exception):
+    return getattr(exc, "status_code", None) or getattr(exc, "status", None)
+
+
 def _is_retryable(exc: Exception) -> bool:
-    """True for provider rate-limits / transient errors (retry or fail over)."""
-    code = getattr(exc, "status_code", None) or getattr(exc, "status", None)
+    """True for transient errors worth retrying THE SAME provider."""
+    code = _status_of(exc)
     if isinstance(code, int) and code in _RETRYABLE_CODES:
         return True
     name = type(exc).__name__.lower()
     return any(h in name for h in _RETRYABLE_HINTS)
+
+
+def _should_failover(exc: Exception) -> bool:
+    """True when ANOTHER provider is worth trying.
+
+    Broader than _is_retryable on purpose. Conflating the two was the bug: a
+    Groq daily quota running out is permanent for Groq and useless to retry, so
+    it was re-raised as "failing over won't help" and the local model was never
+    called at all — the symptom being silent empty replies on every channel
+    while ollama sat idle with no requests against it.
+
+    Everything transient qualifies, plus quota/billing/auth conditions. A
+    genuine 400 for a malformed request still does not: no provider will accept
+    it and walking the chain only multiplies the latency.
+    """
+    if _is_retryable(exc):
+        return True
+
+    code = _status_of(exc)
+    if isinstance(code, int) and code in _FAILOVER_CODES:
+        return True
+
+    blob = (str(exc) + " " + type(exc).__name__).lower()
+    return any(h in blob for h in _FAILOVER_HINTS)
 
 
 @dataclass
@@ -525,13 +564,17 @@ class LLMService:
                 return await fn(primary)
             except Exception as exc:  # noqa: BLE001
                 last = exc
-                if not _is_retryable(exc):
-                    raise   # e.g. bad request — failing over won't help
-                if attempt < self._max_retries:
+                if not _should_failover(exc):
+                    raise   # e.g. a malformed request — no provider will accept it
+                if _is_retryable(exc) and attempt < self._max_retries:
                     logger.warning("LLM %s: retryable error (%s); retry %d/%d in %.1fs",
                                    label, type(exc).__name__, attempt + 1, self._max_retries, delay)
                     await asyncio.sleep(delay)
                     delay *= 2
+                    continue
+                # Permanent for this provider (quota, billing, auth). Retrying it
+                # only burns the visitor's patience — go to the chain now.
+                break
         # Primary exhausted on a retryable error (e.g. Groq 429 rate limit) →
         # fail over once. Prefer the configured fallback; otherwise, when the
         # failed call used a per-request override (e.g. provider=groq), fall
@@ -552,9 +595,9 @@ class LLMService:
                 return await fn(alt)
             except Exception as exc:  # noqa: BLE001
                 last = exc
-                if not _is_retryable(exc):
+                if not _should_failover(exc):
                     raise
-                # Retryable on this tier too — keep walking the chain.
+                # This tier is out too — keep walking the chain.
         raise last  # type: ignore[misc]
 
     async def chat(self, messages: List[ChatMessage], generation_config=None, provider: Optional[str] = None,
@@ -587,15 +630,21 @@ class LLMService:
                     yield frame
                 return
             except Exception as exc:  # noqa: BLE001
-                if started or not _is_retryable(exc):
+                # `started` is the one hard stop: once frames have gone out we
+                # cannot switch provider mid-reply without garbling it.
+                if started or not _should_failover(exc):
                     raise
-                if attempt < self._max_retries:
+                if _is_retryable(exc) and attempt < self._max_retries:
                     attempt += 1
                     logger.warning("LLM stream: retryable pre-output error (%s); retry %d/%d",
                                    type(exc).__name__, attempt, self._max_retries)
                     await asyncio.sleep(delay)
                     delay *= 2
                     continue
+                # Permanent for this provider (quota, billing, auth) — do not
+                # retry it, fall through to the chain below. This is the path
+                # the webchat takes, since it streams over the WebSocket, so a
+                # quota error here was the one users actually hit.
                 # Walk the fallback chain, skipping tiers already tried.
                 nxt = next((b for b in self._fallbacks if b not in tried), None)
                 if nxt is not None:
