@@ -199,6 +199,20 @@ class AuthDoctor extends Command
         $this->newLine();
         $this->line('<options=bold>Recent sign-in failures</> (from the log)');
 
+        // In production LOG_CHANNEL is `stderr` so the app tier's 2+ replicas
+        // stream to the Docker log driver rather than each writing a file only
+        // one container can see. There is therefore no file to tail here, and
+        // saying "no log file" invites the reader to conclude nothing failed —
+        // when in fact the records exist, just somewhere else.
+        $channel = (string) config('logging.default');
+
+        if (in_array($channel, ['stderr', 'stdout', 'errorlog', 'syslog'], true)) {
+            $this->line("  ○  LOG_CHANNEL is '{$channel}', so failures are not written to a file.");
+            $this->line('     Read them from the container log instead — across all replicas:');
+            $this->line('       dc logs app --tail=500 | grep "Social sign-in failed"');
+            return;
+        }
+
         $path = storage_path('logs/laravel.log');
 
         if (! File::exists($path)) {
