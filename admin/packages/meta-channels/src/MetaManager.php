@@ -79,15 +79,47 @@ class MetaManager
             ->first();
     }
 
-    /** Verify the X-Hub-Signature-256 HMAC. Skips when no app secret set. */
+    /**
+     * Verify the X-Hub-Signature-256 HMAC against EVERY app secret we hold.
+     *
+     * Meta signs each delivery with the secret of the app that owns the
+     * subscription, and one installation can have two: WhatsApp and Page
+     * webhooks are signed by the channel-onboarding app (META_APP_SECRET),
+     * while Instagram-Login deliveries are signed by the separate Instagram
+     * app (INSTAGRAM_APP_SECRET). Nothing in the request says which.
+     *
+     * Checking only one secret therefore rejected every Instagram DM with a
+     * 403 while WhatsApp worked perfectly — and the symptom was "Instagram
+     * onboarded fine but no messages arrive", with `meta:subscribe` reporting
+     * everything correctly subscribed, because it WAS. SignedRequest::secrets()
+     * has always tried all three for signed_request callbacks; this path was
+     * simply never brought in line with it.
+     *
+     * Returns true when nothing is configured at all — see the caller, which
+     * logs a notice. That only happens pre-setup, when no genuine delivery can
+     * arrive anyway.
+     */
     public function signatureValid(string $rawBody, string $header): bool
     {
-        $secret = (string) config('meta.whatsapp.app_secret');
-        if ($secret === '') {
+        $secrets = Support\SignedRequest::secrets();
+
+        if (! $secrets) {
             return true; // not configured yet (pre-Meta-app); webhook logs a notice
         }
-        $expected = 'sha256=' . hash_hmac('sha256', $rawBody, $secret);
-        return $header !== '' && hash_equals($expected, $header);
+
+        if ($header === '') {
+            return false;
+        }
+
+        foreach ($secrets as $secret) {
+            // hash_equals, not ===, so a wrong secret cannot be recovered a
+            // byte at a time from response timing.
+            if (hash_equals('sha256=' . hash_hmac('sha256', $rawBody, $secret), $header)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function verifyToken(): string

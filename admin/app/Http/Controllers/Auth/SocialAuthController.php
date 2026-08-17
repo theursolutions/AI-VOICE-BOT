@@ -11,7 +11,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use App\Services\Billing\SubscriptionService;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
@@ -63,14 +62,32 @@ class SocialAuthController extends Controller
             ->redirect();
     }
 
-    /** Signed, short-lived CSRF token for the OAuth round trip. */
+    /** How long a minted state stays usable. */
+    private const STATE_TTL = 900;
+
+    /**
+     * Signed, short-lived CSRF token for the OAuth round trip.
+     *
+     * `provider.timestamp.nonce.hmac`, and deliberately NOT encrypted.
+     *
+     * State needs integrity, not secrecy: it carries nothing private, and its
+     * only job is to prove this callback answers a request we made. An HMAC
+     * gives that, and it buys something encryption cannot — every character is
+     * `[A-Za-z0-9.]`, so the token is URL-safe by construction.
+     *
+     * That matters because Crypt::encryptString returns base64, which contains
+     * `+`, `/` and `=`. A `+` that survives as a literal and is later decoded as
+     * a space corrupts the token, and only for the fraction of attempts whose
+     * random output happens to contain one — an intermittent "sign-in link
+     * expired" that reproduces for one account and not the next, with the round
+     * trip passing through two systems we do not control. Not a hazard worth
+     * keeping for a value that never needed encrypting.
+     */
     private function encodeState(string $provider): string
     {
-        return Crypt::encryptString(json_encode([
-            'provider' => $provider,
-            'nonce'    => Str::random(16),
-            'ts'       => time(),
-        ]));
+        $payload = $provider . '.' . time() . '.' . Str::random(16);
+
+        return $payload . '.' . hash_hmac('sha256', $payload, $this->stateKey());
     }
 
     /**
@@ -80,19 +97,34 @@ class SocialAuthController extends Controller
      */
     private function stateValid(string $raw, string $provider): bool
     {
-        if ($raw === '') {
+        $parts = explode('.', $raw);
+
+        if (count($parts) !== 4) {
             return false;
         }
 
-        try {
-            $data = json_decode(Crypt::decryptString($raw), true);
-        } catch (\Throwable $e) {
-            return false;   // not ours, or APP_KEY changed
+        [$who, $ts, $nonce, $mac] = $parts;
+
+        // Recompute over the received payload and compare in constant time, so
+        // a near-miss cannot be walked to a valid signature byte by byte.
+        $expected = hash_hmac('sha256', $who . '.' . $ts . '.' . $nonce, $this->stateKey());
+
+        if (! hash_equals($expected, $mac)) {
+            return false;
         }
 
-        return is_array($data)
-            && ($data['provider'] ?? null) === $provider
-            && (time() - (int) ($data['ts'] ?? 0)) <= 900;
+        return $who === $provider
+            && ctype_digit($ts)
+            && (time() - (int) $ts) <= self::STATE_TTL;
+    }
+
+    /**
+     * Keyed on APP_KEY, so a state cannot be forged without it and every
+     * replica derives the same key from the same environment.
+     */
+    private function stateKey(): string
+    {
+        return (string) config('app.key');
     }
 
     public function callback(Request $request, string $provider): RedirectResponse

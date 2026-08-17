@@ -2674,8 +2674,12 @@ async function openTemplates(){
     panel.innerHTML='<div class="text-xs text-slate-500">Loading approved templates…</div>';
     try{
         const d=await(await api(msgUrl('templates')+'?project_id='+CHAT.projectId)).json(); const list=d.templates||[];
-        if(!list.length){ panel.innerHTML='<div class="text-xs text-slate-500">'+h(d.note||'No approved templates found.')+'</div>'; return; }
-        panel.innerHTML='<div class="font-semibold text-sm mb-2">Send a template</div>'+list.map((t,i)=>`<div class="tpl-item" onclick="pickTpl(${i})" id="tpl${i}"><b>${h(t.name)}</b> <span class="text-xs text-slate-400">${h(t.language)}${t.params?(' · '+t.params+' params'):''}</span></div>`).join('')+'<div id="tplParams"></div>';
+        // "Waiting on Meta" is a different situation from "none exist", and the
+        // fix differs too: wait, versus go and create one. Say which it is.
+        const pend=d.pending?`<div class="text-xs text-amber-600 mt-2">${d.pending} template${d.pending===1?'':'s'} awaiting Meta approval — not sendable yet.</div>`:'';
+        const manage=d.manageUrl?`<a href="${h(d.manageUrl)}" class="text-xs text-emerald-600 underline mt-2 inline-block">Manage templates</a>`:'';
+        if(!list.length){ panel.innerHTML='<div class="text-xs text-slate-500">'+h(d.note||'No approved templates found.')+'</div>'+pend+manage; return; }
+        panel.innerHTML='<div class="font-semibold text-sm mb-2">Send a template</div>'+list.map((t,i)=>`<div class="tpl-item" onclick="pickTpl(${i})" id="tpl${i}"><b>${h(t.name)}</b> <span class="text-xs text-slate-400">${h(t.language)}${t.params?(' · '+t.params+' params'):''}</span></div>`).join('')+'<div id="tplParams"></div>'+pend+manage;
         window._tpls=list;
     }catch(e){ panel.innerHTML='Could not load templates.'; }
 }

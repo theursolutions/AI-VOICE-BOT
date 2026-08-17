@@ -1522,8 +1522,9 @@ class ChatController extends Controller
             return response()->json(['templates' => [], 'note' => 'No WABA id on this channel — add it on the Channels page to list templates.']);
         }
 
-        $raw = GraphClient::forConnection($conn)->listTemplates((string) $waba);
-        $templates = collect($raw)
+        $raw = collect(GraphClient::forConnection($conn)->listTemplates((string) $waba));
+
+        $templates = $raw
             ->filter(fn ($t) => ($t['status'] ?? '') === 'APPROVED')
             ->map(fn ($t) => [
                 'name'     => $t['name'] ?? '',
@@ -1532,7 +1533,21 @@ class ChatController extends Controller
                 'params'   => $this->templateBodyParamCount($t),
             ])->values();
 
-        return response()->json(['templates' => $templates]);
+        // Report what was filtered out. WhatsApp refuses to send anything but
+        // APPROVED, so the picker is right to hide the rest — but hiding them
+        // silently means someone who has just created a template sees an empty
+        // list and no reason for it, which reads as our bug rather than as Meta
+        // still reviewing. The count turns that into a visible waiting state.
+        $pending = $raw->filter(fn ($t) => ($t['status'] ?? '') === 'PENDING')->count();
+
+        return response()->json([
+            'templates' => $templates,
+            'pending'   => $pending,
+            'manageUrl' => route('whatsapp.templates', [
+                'client'     => $client->slug,
+                'project_id' => $project->id,
+            ]),
+        ]);
     }
 
     /** Send a published WhatsApp Flow (in-chat form) to capture data. */
