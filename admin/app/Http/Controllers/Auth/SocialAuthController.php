@@ -12,6 +12,7 @@ use App\Services\Billing\SubscriptionService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
 use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirect;
@@ -58,6 +59,17 @@ class SocialAuthController extends Controller
                 ->redirectUrl(route('social.callback', ['provider' => $provider]))
                 ->user();
         } catch (\Throwable $e) {
+            // The visitor gets a plain sentence; the REASON goes to the log.
+            // Without this the only signal is a generic notice on the login
+            // page, which is indistinguishable from a wrong password and
+            // leaves nothing to diagnose — a mismatched redirect URI, a bad
+            // secret and a revoked token all look identical.
+            Log::warning('Social sign-in failed', [
+                'provider' => $provider,
+                'error'    => $e->getMessage(),
+                'class'    => get_class($e),
+            ]);
+
             return redirect()->route('login')->withErrors([
                 'email' => 'Could not sign in with ' . ucfirst($provider) . '. Please try again.',
             ]);
