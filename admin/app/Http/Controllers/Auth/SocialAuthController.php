@@ -303,6 +303,44 @@ class SocialAuthController extends Controller
             ]);
         }
 
+        // Everything from here to Auth::login is wrapped, because it runs AFTER
+        // the authorization code has been spent and it is the only part that can
+        // fail without leaving a trace.
+        //
+        // Previously only the token exchange was guarded, so a throw in account
+        // creation, workspace provisioning or the subscription window became an
+        // anonymous 500 with no `Social sign-in` prefix anywhere. Meanwhile the
+        // duplicate request found the code spent with nobody authenticated and
+        // reported an interrupted sign-in — attributing our own failure to a
+        // proxy retry, and sending whoever was reading the log looking at the
+        // network instead of at this method.
+        try {
+            return $this->signIn($social, $email, $provider, $claim);
+        } catch (\Throwable $e) {
+            Log::error('Social sign-in failed after the token exchange', [
+                'provider' => $provider,
+                'email'    => $email,
+                'error'    => $e->getMessage(),
+                'class'    => get_class($e),
+                'at'       => $e->getFile() . ':' . $e->getLine(),
+            ]);
+
+            return redirect()->route('login')->withErrors([
+                'email' => 'Signed in with ' . ucfirst($provider)
+                    . ', but we could not finish setting up your account. Please try again.',
+            ]);
+        }
+    }
+
+    /**
+     * Find or build the local account, then authenticate it.
+     *
+     * Split out so the caller can wrap it: the authorization code is already
+     * spent by the time this runs, so a failure here is not retryable by the
+     * visitor without going back to the provider for a fresh one.
+     */
+    private function signIn(\Laravel\Socialite\Contracts\User $social, string $email, string $provider, string $claim): RedirectResponse
+    {
         $user = User::where('email', $email)->first();
 
         if (!$user) {
@@ -315,7 +353,28 @@ class SocialAuthController extends Controller
             ]);
         }
 
-        if ($user->is_disabled || $user->trashed()) {
+        // canAuthenticate(), NOT is_disabled || trashed().
+        //
+        // trashed() does not exist on this model. User soft-deletes through
+        // App\Models\Concerns\IntSoftDeletes, because `deleted_at` here is a unix
+        // INTEGER rather than a datetime, and that trait exposes isSoftDeleted()
+        // — there is no Laravel SoftDeletes to inherit trashed() from.
+        //
+        // So this line threw BadMethodCallException on EVERY social sign-in, for
+        // every account, since the day it was written. And it threw at the worst
+        // possible point: after the authorization code had been spent, so the
+        // provider had done its part and the code could not be reused. The visitor
+        // got a generic 500, the duplicate request found the code already redeemed
+        // and blamed a proxy retry, and no log line ever mentioned sign-in.
+        //
+        // canAuthenticate() is the model's own answer to this question and is what
+        // the rest of the app uses, so the two cannot drift apart again.
+        if (! $user->canAuthenticate()) {
+            Log::info('Social sign-in refused: account not active', [
+                'provider' => $provider,
+                'user'     => $user->id,
+            ]);
+
             return redirect()->route('login')->withErrors([
                 'email' => 'This account is not active. Please contact your administrator.',
             ]);
