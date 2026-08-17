@@ -75,10 +75,23 @@ return [
     // Laravel Socialite — Facebook driver, used for the OAuth handshake of
     // channel onboarding (the per-provider scopes + redirect are set at
     // call time in ChannelOnboardController).
+    // "Log in with Facebook" — a DIFFERENT Meta app from the one used for
+    // WhatsApp/Instagram messaging, and it has to be.
+    //
+    // The messaging app is a Business-type app. Business apps get Facebook
+    // Login for Business, which does not grant `email` at all — asking for it
+    // returns "Invalid Scopes: email" and the login comes back with no address,
+    // which this app needs as the account identity. Consumer sign-in requires
+    // a Consumer-type app with the plain Facebook Login product.
+    //
+    // Falls back to the messaging app's credentials so nothing changes for an
+    // install that has not split them yet, but FACEBOOK_CLIENT_ID is the one to
+    // set. Keeping them apart also means rotating the WhatsApp secret cannot
+    // lock every user out of signing in.
     'facebook' => [
-        'client_id'     => env('META_APP_ID'),
-        'client_secret' => env('META_APP_SECRET', env('META_WHATSAPP_APP_SECRET')),
-        'redirect'      => env('META_OAUTH_REDIRECT'),
+        'client_id'     => env('FACEBOOK_CLIENT_ID', env('META_APP_ID')),
+        'client_secret' => env('FACEBOOK_CLIENT_SECRET', env('META_APP_SECRET', env('META_WHATSAPP_APP_SECRET'))),
+        'redirect'      => env('FACEBOOK_REDIRECT', env('META_OAUTH_REDIRECT')),
     ],
 
     // Google sign-in (Socialite). Set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET

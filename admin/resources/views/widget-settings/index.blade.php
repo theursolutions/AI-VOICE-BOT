@@ -75,6 +75,17 @@
     }
     .tva-logo-preview img { width:100%; height:100%; object-fit: cover; }
 
+    /* ── FAQ editor rows ───────────────────────────────────────────── */
+    .ws-faq-row { display:grid; grid-template-columns: 1fr 32px; gap:8px; margin-bottom:10px; align-items:start; }
+    .ws-faq-row textarea { grid-column: 1; }
+    .ws-faq-del {
+        grid-row: 1 / span 2; grid-column: 2; align-self:stretch;
+        border:1px solid #e2e8f0; background:#f8fafc; border-radius:8px;
+        color:#94a3b8; font-size:18px; line-height:1; cursor:pointer;
+    }
+    .ws-faq-del:hover { background:#fef2f2; border-color:#fecaca; color:#dc2626; }
+    html.dark .ws-faq-del { background:#0f172a; border-color:#334155; }
+
     /* ── Live preview ──────────────────────────────────────────────── */
     .tva-preview-wrap {
         position: relative;
@@ -544,7 +555,8 @@
                             ['show_theme_toggle',  'Theme switch (light/dark)','Sun/moon toggle in the widget header'],
                             ['show_reply_toggle',  'Voice-reply switch',       'Header toggle for audio-vs-text bot replies'],
                             ['show_expand_button', 'Expand button',            'Lets visitors expand the widget to fullscreen'],
-                            ['show_visitor_modes', 'New / Returning tiles',    'Big buttons on the home screen'],
+                            ['show_visitor_modes', 'New / Returning tiles',    'Home screen asks who they are. Off = the widget opens straight into the chat'],
+                            ['show_faq_tab',       'FAQ tab',                 'Bottom-nav tab listing the FAQs below. Hidden automatically when there are none'],
                             ['show_history_tab',   'History tab',              'Bottom-nav tab listing past conversations'],
                             ['show_powered_by',    'Powered-by footer',        'Small "Powered by Serve AI" line at the bottom'],
                         ];
@@ -560,6 +572,110 @@
                                 <input type="checkbox" class="tva-switch__input" name="{{ $key }}" id="ws_{{ $key }}" value="1" @checked($config[$key] ?? true)>
                             </div>
                         @endforeach
+                    </div>
+                </div>
+
+                {{-- ── Home screen ──────────────────────────────────────── --}}
+                <div class="tva-ws-card mb-5">
+                    <div class="tva-ws-card__title">
+                        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Home screen
+                    </div>
+                    <p class="tva-form-help" style="margin:-8px 0 14px;">
+                        The first thing a visitor sees. Turn off <b>New / Returning tiles</b> above
+                        and the widget skips this entirely, opening straight into the chat.
+                    </p>
+
+                    <div class="tva-form-group">
+                        <label class="tva-form-label">Greeting</label>
+                        <input type="text" name="home_greeting" class="form-control"
+                               value="{{ $config['home_greeting'] ?? '' }}" maxlength="80" placeholder="Hello there.">
+                    </div>
+                    <div class="tva-form-group">
+                        <label class="tva-form-label">Subtitle</label>
+                        <input type="text" name="home_subtitle" class="form-control"
+                               value="{{ $config['home_subtitle'] ?? '' }}" maxlength="120" placeholder="How can we help?">
+                    </div>
+
+                    <div class="tva-ws-cols" style="gap:14px;">
+                        <div class="tva-form-group">
+                            <label class="tva-form-label">Start-chat card — title</label>
+                            <input type="text" name="home_cta_title" class="form-control"
+                                   value="{{ $config['home_cta_title'] ?? '' }}" maxlength="60" placeholder="Ask a question">
+                        </div>
+                        <div class="tva-form-group">
+                            <label class="tva-form-label">Start-chat card — subtext</label>
+                            <input type="text" name="home_cta_text" class="form-control"
+                                   value="{{ $config['home_cta_text'] ?? '' }}" maxlength="120" placeholder="Our AI agent answers instantly">
+                        </div>
+                    </div>
+
+                    <div class="tva-form-group" style="margin-bottom:0;">
+                        <label class="tva-form-label">Background image</label>
+                        <div class="tva-logo-row">
+                            <div class="tva-logo-preview" style="width:104px; height:72px; border-radius:10px;">
+                                @if (!empty($config['home_bg_url']))
+                                    <img src="{{ $config['home_bg_url'] }}" alt="Home background">
+                                @else
+                                    <i data-lucide="image" class="w-5 h-5" style="opacity:.4"></i>
+                                @endif
+                            </div>
+                            <div style="flex:1; min-width:0;">
+                                <input type="file" name="home_bg" accept="image/png,image/jpeg,image/webp" class="form-control">
+                                <div class="tva-form-help">
+                                    PNG, JPG or WebP, up to 4&nbsp;MB. Sits behind the greeting, darkened so
+                                    the text stays readable. SVG is not accepted — it can carry script.
+                                </div>
+                                @if (!empty($config['home_bg_url']))
+                                    <label class="tva-form-help" style="display:flex; align-items:center; gap:6px; margin-top:6px;">
+                                        <input type="checkbox" name="remove_home_bg" value="1"> Remove current image
+                                    </label>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- ── FAQs ─────────────────────────────────────────────── --}}
+                <div class="tva-ws-card mb-5">
+                    <div class="tva-ws-card__title">
+                        <i data-lucide="help-circle" class="w-4 h-4"></i> FAQs
+                    </div>
+                    <p class="tva-form-help" style="margin:-8px 0 14px;">
+                        Shown in the widget's FAQ tab. Tapping one drops it into the chat as a question,
+                        so the agent can follow up. Leave empty and the tab is hidden.
+                    </p>
+
+                    <div id="ws_faq_rows">
+                        @php $faqList = array_values((array) ($config['faqs'] ?? [])); @endphp
+                        @forelse ($faqList as $row)
+                            <div class="ws-faq-row">
+                                <input type="text" name="faq_q[]" class="form-control" placeholder="Question"
+                                       maxlength="200" value="{{ $row['q'] ?? '' }}">
+                                <textarea name="faq_a[]" class="form-control" rows="2" placeholder="Answer"
+                                          maxlength="2000">{{ $row['a'] ?? '' }}</textarea>
+                                <button type="button" class="ws-faq-del" title="Remove">&times;</button>
+                            </div>
+                        @empty
+                            <div class="ws-faq-row">
+                                <input type="text" name="faq_q[]" class="form-control" placeholder="Question" maxlength="200">
+                                <textarea name="faq_a[]" class="form-control" rows="2" placeholder="Answer" maxlength="2000"></textarea>
+                                <button type="button" class="ws-faq-del" title="Remove">&times;</button>
+                            </div>
+                        @endforelse
+                    </div>
+
+                    <button type="button" id="ws_faq_add" class="btn btn-sm btn-secondary" style="margin-top:4px;">
+                        <i data-lucide="plus" class="w-3 h-3 inline -mt-0.5"></i> Add another
+                    </button>
+
+                    <div class="tva-form-group" style="margin:16px 0 0; padding-top:14px; border-top:1px solid #e2e8f0;">
+                        <label class="tva-form-label">Or import a list</label>
+                        <input type="file" name="faq_file" accept=".csv,.tsv,.txt,.json" class="form-control">
+                        <div class="tva-form-help">
+                            CSV or TSV with <code>question,answer</code> per line (a header row is skipped),
+                            or JSON like <code>[{"q":"…","a":"…"}]</code>. Imported entries are ADDED to the
+                            ones above, not swapped in, and duplicate questions are dropped.
+                        </div>
                     </div>
                 </div>
             </div>
@@ -644,3 +760,26 @@
     })();
 </script>
 @endsection
+<script>
+(function () {
+    var wrap = document.getElementById('ws_faq_rows');
+    var add  = document.getElementById('ws_faq_add');
+    if (!wrap || !add) return;
+
+    add.addEventListener('click', function () {
+        var row = wrap.firstElementChild.cloneNode(true);
+        row.querySelectorAll('input, textarea').forEach(function (el) { el.value = ''; });
+        wrap.appendChild(row);
+        row.querySelector('input').focus();
+    });
+
+    // Delegated, so it reaches rows added after load. The last row is
+    // cleared rather than removed — cloning needs a template to copy.
+    wrap.addEventListener('click', function (e) {
+        var btn = e.target.closest('.ws-faq-del'); if (!btn) return;
+        var row = btn.closest('.ws-faq-row');
+        if (wrap.children.length > 1) { row.remove(); return; }
+        row.querySelectorAll('input, textarea').forEach(function (el) { el.value = ''; });
+    });
+})();
+</script>
