@@ -43,7 +43,17 @@ class WebhookController
     public function webhook(Request $request): JsonResponse
     {
         if (!$this->meta->signatureValid($request->getContent(), (string) $request->header('X-Hub-Signature-256', ''))) {
-            Log::warning('MetaChannels webhook: invalid signature');
+            // Name the object and the secret count. A bare "invalid signature"
+            // cannot distinguish a forged request from a genuine delivery signed
+            // by an app whose secret we do not hold — which is what happens when
+            // Instagram Login is configured and INSTAGRAM_APP_SECRET is missing
+            // or stale. The two need opposite responses, and the object tells
+            // you which app should have signed it.
+            Log::warning('MetaChannels webhook: invalid signature', [
+                'object'        => (string) data_get($request->json()->all(), 'object'),
+                'secrets_tried' => count(\Msd\MetaChannels\Support\SignedRequest::secrets()),
+                'has_header'    => $request->header('X-Hub-Signature-256') !== null,
+            ]);
             return response()->json(['error' => 'invalid signature'], 403);
         }
         if (config('meta.whatsapp.app_secret') === null || config('meta.whatsapp.app_secret') === '') {
