@@ -108,6 +108,15 @@
         .tvaibwc-chat-widget {
             display: flex !important;
             width: 360px !important;
+            /* The panel is anchored to right:0 of a container pinned 6px from
+               the right edge, so a width wider than the iframe does not clip
+               on the right — it runs off the LEFT. The loader caps the iframe
+               at calc(100vw - 28px), which on a 360px phone is ~332px, so a
+               hard 360px panel started around -34px and lost its left edge.
+               Capping to the viewport keeps 360px wherever there is room and
+               shrinks it where there is not. max-width beats width, so the
+               .expanded rule below inherits the same ceiling. */
+            max-width: calc(100vw - 12px) !important;
             right: 0 !important;
             bottom: 62px !important;
         }
