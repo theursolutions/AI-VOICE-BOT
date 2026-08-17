@@ -13,7 +13,6 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
-use Laravel\Socialite\Facades\Socialite;
 use Msd\MetaChannels\Models\ChannelConnection;
 use Msd\MetaChannels\Models\ChannelOnboardingLog;
 use Msd\MetaChannels\Models\ChannelOnboardingPayload;
@@ -496,26 +495,41 @@ class ChannelOnboardController extends Controller
         ));
     }
 
-    /** Shared Socialite redirect used by both the popup and the phone. */
-    private function redirectToFacebook(Client $client, Project $project, string $provider, ChannelOnboardingLog $log)
+    /**
+     * Shared consent redirect used by both the popup and the phone.
+     *
+     * Built by OAuthService, NOT by Socialite, and that is the whole point.
+     *
+     * Socialite's `facebook` driver is configured from `config('services.
+     * facebook')` — i.e. FACEBOOK_CLIENT_ID, the DASHBOARD SIGN-IN app. Channel
+     * onboarding is a different app (META_APP_ID), and the token exchange in
+     * OAuthService has always used that one. So driving consent through
+     * Socialite sent Facebook the login app's client_id while the exchange
+     * spoke as the onboarding app: two different apps for two halves of one
+     * flow.
+     *
+     * That stayed invisible for as long as both env vars resolved to the same
+     * value — FACEBOOK_CLIENT_ID falls back to META_APP_ID when blank, so a
+     * single-app install could never notice. The moment login and onboarding
+     * were split across two apps (which they must be: a Business app using
+     * Facebook Login for Business refuses the `email` scope that login needs),
+     * consent went out under an app that has no /meta/oauth/callback in its
+     * whitelist and Meta answered "the redirect URI is not whitelisted in the
+     * app's Client OAuth Settings" — an error that points at the whitelist,
+     * while the actual fault was the client_id sitting next to it.
+     *
+     * Using OAuthService::authUrl() keeps consent and exchange on one app by
+     * construction. It also drops Socialite's `protected $scopes = ['email']`
+     * default, which previously had to be suppressed with setScopes() or a
+     * Business app would reject the screen outright.
+     */
+    private function redirectToFacebook(Client $client, Project $project, string $provider, ChannelOnboardingLog $log): RedirectResponse
     {
-        $state = $this->encodeState($client, $project, $provider, $log);
-
-        $scopes = array_filter(explode(',', (string) (config('meta.app.scopes')[$provider] ?? '')));
-
-        // setScopes(), NOT scopes(). Socialite's Facebook driver ships with
-        // `protected $scopes = ['email']`, and scopes() MERGES into that
-        // rather than replacing it — so every request also asked for `email`.
-        // A Business-type app using Facebook Login for Business rejects that
-        // with "Invalid Scopes: email" and refuses to show the consent screen
-        // at all. setScopes() replaces the defaults with exactly what we ask
-        // for.
-        return Socialite::driver('facebook')
-            ->stateless()
-            ->setScopes($scopes)
-            ->with(['state' => $state])
-            ->redirectUrl($this->callbackUrl())
-            ->redirect();
+        return redirect()->away($this->oauth->authUrl(
+            $provider,
+            $this->callbackUrl(),
+            $this->encodeState($client, $project, $provider, $log),
+        ));
     }
 
     /** Project lookup scoped to the client — never trust the query string. */
