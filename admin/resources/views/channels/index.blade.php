@@ -530,9 +530,32 @@
         if (!WA_CONFIG_ID || !META_APP_ID || typeof FB === 'undefined') {
             return openConnect('whatsapp');       // graceful, not an error
         }
+        /* Cleared before each attempt so a stale event from a previous try
+           cannot be mistaken for this one's outcome. */
+        window.__waSignupEvent = null;
+
         FB.login(function (response) {
             var code = response && response.authResponse && response.authResponse.code;
-            if (!code) { return; }                // user closed the popup
+            if (!code) {
+                /* No code. Two very different situations, and they were
+                   previously both a bare `return` — i.e. the button did
+                   nothing and said nothing.
+
+                   If Meta posted a WA_EMBEDDED_SIGNUP event, the customer
+                   cancelled or Meta reported a real error, and the message
+                   listener below has already told them.
+
+                   If NOTHING was posted, the dialog itself refused to run —
+                   which is exactly what an app that is not yet an approved
+                   Tech Provider gets: Facebook's generic "Sorry, something
+                   went wrong". Embedded Signup is unusable until that
+                   approval lands, so falling through to the redirect flow
+                   turns a dead button into a working one. */
+                if (!window.__waSignupEvent) {
+                    return openConnect('whatsapp');
+                }
+                return;
+            }
 
             var body = new FormData();
             body.append('_token', CSRF);
@@ -585,6 +608,11 @@
         try {
             var data = JSON.parse(event.data);
             if (data.type !== 'WA_EMBEDDED_SIGNUP') return;
+
+            /* Records that the dialog reported SOMETHING, so the FB.login
+               callback can tell a deliberate cancel from a dialog that never
+               started at all. */
+            window.__waSignupEvent = data.event || 'UNKNOWN';
 
             if (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA') {
                 window.__waSignup = data.data || {};
