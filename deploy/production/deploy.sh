@@ -32,14 +32,37 @@ fi
 
 DC+=(--env-file .env)
 
-# Guard against the most common misconfiguration: a local-LLM provider selected
+# Guard against the most common misconfiguration: a local-LLM tier selected
 # without the overlay that actually provides it.
-if grep -qE '^LLM_PROVIDER=ollama' .env 2>/dev/null \
-   && ! grep -qE '^WITH_OLLAMA=1[[:space:]]*$' .env 2>/dev/null; then
-  echo "FATAL: LLM_PROVIDER=ollama but WITH_OLLAMA=1 is not set in .env." >&2
-  echo "       The ollama service would not be deployed and every LLM call" >&2
-  echo "       would fail. Add 'WITH_OLLAMA=1' to .env and re-run." >&2
-  exit 1
+#
+# This checks the FALLBACK chain as well as the primary, because the fallback
+# case is the one that actually bit us. The old guard only fired on
+# LLM_PROVIDER=ollama, so the documented topology — Groq primary, Ollama
+# fallback — deployed happily with no ollama container behind it. Nothing looked
+# wrong for as long as Groq answered; the day its free quota ran out the chain
+# walked to a host that does not exist and every channel went quiet. A fallback
+# is only worth anything if it is verified BEFORE the emergency it exists for.
+#
+# When LLM_FALLBACK_PROVIDER is empty the engine derives its own chain and always
+# ends it with ollama, so an unset value still counts as referencing it.
+if ! grep -qE '^WITH_OLLAMA=[01][[:space:]]*$' .env 2>/dev/null; then
+  fb=$(grep -E '^LLM_FALLBACK_PROVIDER=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '[:space:]')
+  if grep -qE '^LLM_PROVIDER=ollama' .env 2>/dev/null; then
+    echo "FATAL: LLM_PROVIDER=ollama but WITH_OLLAMA=1 is not set in .env." >&2
+    echo "       The ollama service would not be deployed and every LLM call" >&2
+    echo "       would fail. Add 'WITH_OLLAMA=1' to .env and re-run." >&2
+    exit 1
+  fi
+  if [ -z "$fb" ] || printf '%s' "$fb" | grep -qE '(^|,)ollama(,|$)'; then
+    echo "FATAL: ollama is in the LLM fallback chain but WITH_OLLAMA=1 is not" >&2
+    echo "       set in .env, so no ollama service is deployed. The fallback" >&2
+    echo "       would look configured and do nothing — when the primary" >&2
+    echo "       provider's quota runs out, every channel goes silent." >&2
+    echo "       Fix:  add 'WITH_OLLAMA=1' to .env, redeploy, then" >&2
+    echo "             ./deploy/production/deploy.sh ollama-pull" >&2
+    echo "       Or set 'WITH_OLLAMA=0' to accept a cloud-only chain." >&2
+    exit 1
+  fi
 fi
 
 # Roll the app tier with NO downtime and WITHOUT a big memory spike:

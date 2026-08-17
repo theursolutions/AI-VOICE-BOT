@@ -43,20 +43,31 @@ return [
             // pages_manage_metadata is what allows subscribing the app to a
             // Page's webhooks. Without it a Page connects and then silently
             // never delivers a message.
-            // pages_user_profile is what returns a sender's NAME and PHOTO.
-            // Without it the inbox can only show a 16-digit PSID, and the
-            // failure is silent: Meta returns an empty profile rather than a
-            // permissions error, so it reads as our bug rather than a missing
-            // scope. It was absent here, which meant the profile lookup could
-            // never have worked even once App Review granted it.
+            //
+            // A sender's NAME and PHOTO come from the Messenger User Profile
+            // API on `pages_messaging` — there is no separate permission for
+            // them. Do NOT add `pages_user_profile`: it does not exist (the
+            // real pages_user_* permissions are _gender, _locale, _timezone),
+            // and Meta rejects the whole consent screen with "Invalid Scope:
+            // pages_user_profile", so Facebook onboarding stops working
+            // entirely rather than just losing names.
+            // No business_management here. Page and Instagram discovery only
+            // ever calls `me/accounts`, which needs pages_show_list; the one
+            // call that genuinely requires business_management is
+            // `me/businesses` in discoverWhatsApp(). Asking for it anyway cost
+            // real money: it is an App Review permission, so it added a
+            // reviewed permission to two flows that never use it, and on a
+            // use-case app the Messenger and Instagram use cases may not offer
+            // it at all — in which case requesting it fails the ENTIRE consent
+            // screen rather than being ignored.
             'facebook_page' => env('META_SCOPES_FACEBOOK',
-                'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement,pages_user_profile,business_management'),
+                'pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement'),
 
             // Instagram messaging via Facebook Login goes through the linked
             // Page, so the Page permissions are required too. Requires the
             // Instagram product on the app.
             'instagram'     => env('META_SCOPES_INSTAGRAM',
-                'instagram_basic,instagram_manage_messages,pages_show_list,pages_manage_metadata,business_management'),
+                'instagram_basic,instagram_manage_messages,pages_show_list,pages_manage_metadata'),
 
             'whatsapp'      => env('META_SCOPES_WHATSAPP',
                 'whatsapp_business_management,whatsapp_business_messaging,business_management'),
@@ -89,6 +100,11 @@ return [
         'app_id'     => env('INSTAGRAM_APP_ID'),
         'app_secret' => env('INSTAGRAM_APP_SECRET'),
 
+        // Must match "OAuth redirect URI" under Instagram → API setup with
+        // Instagram login → Business login settings, byte-for-byte. Leave
+        // blank to derive it from APP_URL.
+        'redirect_uri' => env('INSTAGRAM_OAUTH_REDIRECT'),
+
         'authorize_base' => env('INSTAGRAM_AUTHORIZE_BASE', 'https://www.instagram.com'),
         'api_base'       => env('INSTAGRAM_API_BASE', 'https://api.instagram.com'),
         'graph_base'     => env('INSTAGRAM_GRAPH_BASE', 'https://graph.instagram.com'),
@@ -109,7 +125,15 @@ return [
         'phone_number_id'     => env('META_WHATSAPP_PHONE_NUMBER_ID'),
         'business_account_id' => env('META_WHATSAPP_BUSINESS_ACCOUNT_ID'),
         // App secret — verifies the X-Hub-Signature-256 header on webhooks.
-        'app_secret'          => env('META_WHATSAPP_APP_SECRET'),
+        //
+        // Falls back to META_APP_SECRET because it is the SAME value: WhatsApp
+        // has no separate secret, it is the app secret of the app that owns the
+        // webhook. Without the fallback, an install that set only the
+        // documented META_APP_SECRET left signatureValid() with an empty secret
+        // — and that helper FAILS OPEN, so the public webhook accepted any
+        // unsigned request and anyone who knew the URL could inject inbound
+        // messages. Nothing surfaced but a log notice.
+        'app_secret'          => env('META_WHATSAPP_APP_SECRET', env('META_APP_SECRET')),
         // Random string also entered in the Meta webhook config (GET verify).
         'verify_token'        => env('META_WHATSAPP_VERIFY_TOKEN'),
         'graph_version'       => env('META_GRAPH_VERSION', 'v21.0'),

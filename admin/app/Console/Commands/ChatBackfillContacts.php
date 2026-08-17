@@ -167,7 +167,7 @@ class ChatBackfillContacts extends Command
         if ($skipped > 0) {
             $this->warn("{$skipped} conversation(s) could not be resolved.");
             $this->line('Meta returns an empty profile when the app lacks Advanced Access for');
-            $this->line('pages_user_profile (Messenger) or instagram_business_manage_messages.');
+            $this->line('pages_messaging (Messenger) or instagram_business_manage_messages.');
             $this->line('That is expected before App Review — it is not a fault in this command.');
         }
 

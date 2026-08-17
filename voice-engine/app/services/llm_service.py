@@ -51,9 +51,18 @@ _RETRYABLE_HINTS = ("ratelimit", "timeout", "connection", "internalserver",
 # providers express this very differently: an OpenAI-compatible endpoint may
 # raise RateLimitError(429) with "insufficient_quota", while others use 402, 403
 # or a plain 400 whose only clue is the wording.
-_FAILOVER_CODES = {401, 402, 403}
+#
+# 404 belongs here too, even though it reads like a client error. From an
+# OpenAI-compatible endpoint it means the MODEL is missing, not the request:
+# Ollama answers 404 "model ... not found, try pulling it first" for a name that
+# was never pulled into its volume. That is this provider being unusable, not a
+# request no provider will accept — the distinction the old classification got
+# wrong, turning a one-model typo into a dead chain and a silent channel.
+_FAILOVER_CODES = {401, 402, 403, 404}
 _FAILOVER_HINTS = ("quota", "insufficient", "credit", "billing", "exceeded",
-                   "payment", "suspended", "deactivated", "expired")
+                   "payment", "suspended", "deactivated", "expired",
+                   "not found", "notfound", "does not exist", "try pulling",
+                   "model_not_found", "no such model")
 
 
 def _status_of(exc: Exception):
@@ -422,8 +431,10 @@ def _build_backend(provider: str, settings, timeout: float):
         return _GroqBackend(settings.groq_api_key, settings.groq_model,
                             settings.groq_max_tokens, timeout)
     if provider == "ollama":
+        # Deliberately NOT the shared timeout — see Settings.ollama_timeout.
         return _OllamaBackend(settings.ollama_base_url, settings.ollama_model,
-                              settings.ollama_max_tokens, timeout)
+                              settings.ollama_max_tokens,
+                              max(timeout, settings.ollama_timeout))
     if provider == "gemini":
         return _OpenAICompatBackend(settings.gemini_base_url, settings.gemini_api_key,
                                     settings.gemini_model, settings.gemini_max_tokens, timeout)
@@ -464,7 +475,8 @@ class LLMService:
         elif provider == "ollama":
             self._backend = _OllamaBackend(
                 settings.ollama_base_url, model or settings.ollama_model,
-                max_tokens or settings.ollama_max_tokens, timeout)
+                max_tokens or settings.ollama_max_tokens,
+                max(timeout, settings.ollama_timeout))
         else:
             # gemini / cerebras / any other OpenAI-compatible provider. Delegated
             # so the primary and fallback paths accept exactly the same names —
@@ -594,10 +606,17 @@ class LLMService:
             try:
                 return await fn(alt)
             except Exception as exc:  # noqa: BLE001
+                # Keep walking, whatever this tier said. Re-raising a
+                # non-failover error here was wrong: the "no provider will
+                # accept it" reasoning holds for the PRIMARY, where the request
+                # has not been tried anywhere yet, but by this point we already
+                # know the request is fine and are hunting for a provider that
+                # can serve it. One misconfigured tier — a model that was never
+                # pulled, a bad base_url — must not veto the tiers behind it.
+                # The chain is 1-3 entries, so the wasted latency is bounded.
+                logger.warning("LLM %s: fallback %s also failed (%s)",
+                               label, type(alt).__name__, type(exc).__name__)
                 last = exc
-                if not _should_failover(exc):
-                    raise
-                # This tier is out too — keep walking the chain.
         raise last  # type: ignore[misc]
 
     async def chat(self, messages: List[ChatMessage], generation_config=None, provider: Optional[str] = None,
@@ -632,7 +651,14 @@ class LLMService:
             except Exception as exc:  # noqa: BLE001
                 # `started` is the one hard stop: once frames have gone out we
                 # cannot switch provider mid-reply without garbling it.
-                if started or not _should_failover(exc):
+                if started:
+                    raise
+                # The "no provider will accept this request" veto only makes
+                # sense on the primary, where nothing has been tried yet. Once
+                # we are walking the chain the request is known-good, so a tier
+                # rejecting it means that tier is unusable — keep going rather
+                # than let it veto the tiers behind it.
+                if backend is self._backend and not _should_failover(exc):
                     raise
                 if _is_retryable(exc) and attempt < self._max_retries:
                     attempt += 1
