@@ -14,15 +14,19 @@
 #   docker compose -f docker-compose.yml -f deploy/production/docker-compose.prod.yml \
 #     -f deploy/production/ollama.override.yml exec ollama ollama pull qwen2.5:3b
 #
-# ── RAM on a 24 GB box ───────────────────────────────────────────────────────
-# Baseline (stack + XTTS) ≈ 10 GB. A 7B model loads ~6 GB ONLY while it's
-# actively generating (Ollama lazy-loads on first use, unloads after ~5 min
-# idle). Since Groq is primary, Ollama mostly sits idle (~few hundred MB) and
-# only spikes during a fallback — so ~16 GB peak, ~8 GB headroom. Comfortable.
-#   • 3B (qwen2.5:3b)              ≈ 3 GB  → the default, and what fits a 12GB box
-#   • 7B (qwen2.5:7b / llama3.1:8b) ≈ 6 GB  → 24GB+ hosts only (exceeds the 4096M cap here)
-#   • 13–14B                        ≈ 9 GB  → fits, slower on CPU
-#   • 70B                           ≈ 43 GB → NOT possible without a GPU host
+# ── RAM on this host (48 GB) ────────────────────────────────────────────────
+# Baseline (stack + MySQL + XTTS/Whisper) ≈ 10 GB, leaving ~38 GB. Ollama
+# lazy-loads on first use and unloads after ~5 min idle, so with Groq primary it
+# sits at a few hundred MB and only spikes during a failover.
+#   • 3B  (qwen2.5:3b)  ≈ 3 GB   → only if latency matters more than quality
+#   • 7B  (qwen2.5:7b)  ≈ 6 GB   → the default; best balance here
+#   • 14B (qwen2.5:14b) ≈ 9 GB   → better answers, slower on CPU
+#   • 32B               ≈ 20 GB  → fits RAM, but CPU latency is impractical
+#   • 70B               ≈ 43 GB  → would leave ~5 GB for everything else. No.
+#
+# RAM is NOT the binding constraint on this box — CPU throughput is. A larger
+# model does not fail, it just answers slower, and a fallback nobody waits for
+# is no better than no fallback.
 # For full local-LLM speed you still want a GPU; on CPU keep it as the fallback.
 
 services:
@@ -59,7 +63,11 @@ services:
         # HAProxy ejecting app replicas mid-request. 3 cores keeps a degraded
         # fallback usable while leaving the rest of the stack responsive.
         # If you ever make Ollama primary again, raise these back to 6 / 10240M.
-        limits: { cpus: "3", memory: 4096M }
+        # 10GB, not 4GB. The old cap could not hold the model it was configured
+        # to run: a 7B needs ~6GB while generating, so the fallback was
+        # OOM-killed the moment it was first needed. 4 cores because CPU
+        # throughput — not RAM — is what limits generation on this host.
+        limits: { cpus: "4", memory: 10240M }
 
   # Groq primary + Ollama fallback. The voice-engine retries Groq, then fails
   # over to the local model. (fallback must differ from the primary.)
@@ -68,13 +76,12 @@ services:
       LLM_PROVIDER: ${LLM_PROVIDER:-groq}
       LLM_FALLBACK_PROVIDER: ${LLM_FALLBACK_PROVIDER:-ollama}
       OLLAMA_BASE_URL: http://ollama:11434/v1
-      # 3b, not 7b. The container limit below is 4096M and a 7B model needs
-      # ~6GB while generating, so the documented default could not fit inside
-      # its own cgroup — it would be OOM-killed on first use, which is the
-      # worst possible moment for a safety net to fail. 3b fits with room and
-      # is only ever the last resort behind the cloud tiers.
-      # Raise this (with the limit) on a 24GB+ host.
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      # 7B on this host: 48GB total, ~10GB baseline, so ~6GB for the model is
+      # comfortable and it has the best Urdu/multilingual coverage of the sizes
+      # that stay usable on CPU. It only failed before because the container cap
+      # above was 4GB — the model was never the problem.
+      # 14b (~9GB) also fits if answer quality matters more than latency.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
     depends_on:
       - ollama
 
