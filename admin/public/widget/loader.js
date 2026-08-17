@@ -161,6 +161,16 @@
         });
 
     function mount(config) {
+        // Master switch, checked before anything is created. Off means the
+        // page gets no launcher, no iframe and no shadow host — the widget is
+        // simply not there, so a site can be taken off the air from the
+        // dashboard without touching its HTML.
+        //
+        // `=== false` rather than falsy: a config that failed to load is an
+        // empty object, and a network blip must not silently disable a
+        // customer's widget.
+        if (config.widget_enabled === false) return;
+
         var primary  = config.primary_color  || '#1a365d';
         var accent   = config.accent_color   || '#3b82f6';
         var position = config.position       || 'bottom-right';

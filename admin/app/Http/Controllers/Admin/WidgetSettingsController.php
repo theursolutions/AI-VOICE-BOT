@@ -44,6 +44,13 @@ class WidgetSettingsController extends Controller
         'show_history_tab'   => true,  // bottom nav tab listing past conversations
         'show_powered_by'    => true,  // small "Powered by Serve AI" line in footer
 
+        // Master switch. Off = the loader mounts nothing at all, so the widget
+        // disappears from every site it is embedded on without anyone having to
+        // edit their HTML. Deliberately separate from deleting the project:
+        // taking the widget down for a weekend should not cost the
+        // conversation history.
+        'widget_enabled'     => true,
+
         // Home screen. The widget opens here unless visitor modes are off,
         // in which case it goes straight to the conversation — a home screen
         // with nothing to choose on it is a click in the way.
@@ -132,6 +139,7 @@ class WidgetSettingsController extends Controller
             'show_visitor_modes' => 'nullable|boolean',
             'show_history_tab'   => 'nullable|boolean',
             'show_powered_by'    => 'nullable|boolean',
+            'widget_enabled'     => 'nullable|boolean',
             'avatar_emoji'       => 'nullable|string|max:8',
             'opening_hours'      => 'nullable|string|max:80',
             'placeholder'        => 'nullable|string|max:120',
@@ -224,6 +232,7 @@ class WidgetSettingsController extends Controller
             'show_reply_toggle'  => (bool) ($data['show_reply_toggle']  ?? false),
             'show_expand_button' => (bool) ($data['show_expand_button'] ?? false),
             'show_visitor_modes' => (bool) ($data['show_visitor_modes'] ?? false),
+            'widget_enabled'     => (bool) ($data['widget_enabled']     ?? false),
             'show_history_tab'   => (bool) ($data['show_history_tab']   ?? false),
             // Removing the "Powered by" badge is a paid feature
             // (`remove_branding`, Growth+). Forced back ON for plans without

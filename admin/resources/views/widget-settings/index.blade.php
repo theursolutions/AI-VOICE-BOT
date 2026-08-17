@@ -549,6 +549,7 @@
 
                     @php
                         $toggles = [
+                            ['widget_enabled',     'Widget enabled',           'Master switch. Off removes the widget from every site it is embedded on — no HTML change needed'],
                             ['show_voice',         'Voice / mic button',       'Lets visitors talk to the bot via microphone'],
                             ['show_emoji',         'Emoji picker',             'Smiley button next to the text input'],
                             ['show_attach',        'Attachment button',        'Paperclip button to send images, video, audio or files'],
