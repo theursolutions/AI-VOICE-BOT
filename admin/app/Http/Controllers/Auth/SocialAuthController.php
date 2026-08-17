@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
+use App\Models\Role;
 use App\Models\User;
 use App\Providers\RouteServiceProvider;
 use Illuminate\Http\RedirectResponse;
+use App\Services\Billing\SubscriptionService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Laravel\Socialite\Facades\Socialite;
@@ -84,6 +88,20 @@ class SocialAuthController extends Controller
             ]);
         }
 
+        // A social sign-up has to build the SAME things an email sign-up does.
+        // Creating only the user left the account with no workspace, no role
+        // and no subscription: EnsureActiveClient found zero memberships and
+        // sent them to the workspace picker with nothing to pick, so signing
+        // in with Google or Facebook produced an account that could not be
+        // used at all.
+        //
+        // Guarded on membership, not on "is new", so an account
+        // orphaned by the earlier version is repaired the next time its owner
+        // signs in, instead of staying stuck.
+        if ($user->clients()->count() === 0) {
+            $this->provisionWorkspace($user, $social->getName() ?: Str::before($email, '@'));
+        }
+
         // The provider vouches for the email → mark verified, skip OTP.
         if (!$user->hasVerifiedEmail()) {
             $user->markEmailAsVerified();
@@ -92,6 +110,64 @@ class SocialAuthController extends Controller
         Auth::login($user, true);
 
         return redirect()->intended(RouteServiceProvider::HOME);
+    }
+
+    /**
+     * Build the workspace a signed-up account needs to be usable: a client,
+     * the all-access Owner role, the membership joining them, and the free
+     * window. Mirrors RegisteredUserController::store — the only difference
+     * is that the name comes from the provider rather than a form, since a
+     * social sign-in never asks for a company name.
+     *
+     * In a transaction for the reason that controller gives: a workspace with
+     * no subscription row fails OPEN in EnsureSubscribed, so a half-created
+     * signup would become permanently free.
+     */
+    private function provisionWorkspace(User $user, string $displayName): void
+    {
+        DB::transaction(function () use ($user, $displayName) {
+            $name = trim($displayName) !== '' ? $displayName . "'s workspace" : 'My workspace';
+
+            $client = Client::create([
+                'name'           => $name,
+                'slug'           => $this->uniqueSlug($name),
+                'client_api_key' => bin2hex(random_bytes(16)),
+                'description'    => null,
+                'is_active'      => 'Yes',
+                'created_at'     => time(),
+                'updated_at'     => time(),
+            ]);
+
+            $ownerRole = Role::create([
+                'client_id'  => $client->id,
+                'name'       => 'Owner',
+                'modules'    => ['*'],
+                'is_owner'   => true,
+                'created_at' => time(),
+                'updated_at' => time(),
+            ]);
+
+            $user->attachMembership($client->id, null, $user->id, $ownerRole->id);
+
+            $user->forceFill([
+                'active_client_id' => $client->id,
+                'last_picked_at'   => time(),
+            ])->save();
+
+            app(SubscriptionService::class)->startFreeWindow($client, $user);
+        });
+    }
+
+    private function uniqueSlug(string $name): string
+    {
+        $base = Str::slug($name) ?: 'workspace';
+        $slug = $base;
+        $i = 2;
+        while (Client::where('slug', $slug)->exists()) {
+            $slug = $base . '-' . $i++;
+        }
+
+        return $slug;
     }
 
     private function configured(string $provider): bool
