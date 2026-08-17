@@ -770,6 +770,38 @@
 
         render();
 
+        /* ── Report our height to the loader ──────────────────────────
+           The iframe is a rectangle and captures every click inside it,
+           including the transparent space above the visible panel — which
+           is why buttons on the host page above the widget went dead while
+           it was open. The panel is anchored to the bottom, so the fix is
+           to make the iframe no taller than the panel actually needs.
+
+           6px container offset + 62px panel offset + the panel itself, plus
+           a few pixels so a shadow is not clipped. */
+        function reportHeight() {
+            var panel  = document.querySelector('.tvaibwc-chat-widget');
+            var toggle = document.getElementById('tvaibwc-chatToggle');
+            var h = 0;
+
+            if (panel && panel.offsetHeight) h = 6 + 62 + panel.offsetHeight + 8;
+            // With the panel closed only the launcher needs covering.
+            if (toggle && toggle.offsetHeight) h = Math.max(h, 6 + toggle.offsetHeight + 8);
+            if (!h) return;
+
+            try {
+                window.parent.postMessage({ type: 'tvaibwc:height', height: Math.ceil(h) }, '*');
+            } catch (e) {}
+        }
+
+        // On load, after fonts/images settle, and whenever the panel resizes.
+        $(reportHeight);
+        $(window).on('load resize', reportHeight);
+        setTimeout(reportHeight, 350);
+        // The expand button changes the panel's size; report the new one.
+        $(document).on('click', '#tvaibwc-expandWidget, .tvaibwc-widget-tab', function () {
+            setTimeout(reportHeight, 300);
+        });
         /* ── Home ─────────────────────────────────────────────────────
            The start-chat card, and the case where the home screen has
            nothing to offer. */
