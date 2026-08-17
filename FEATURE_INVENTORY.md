@@ -7,6 +7,58 @@ Everything here was read from `config/modules.php`, `route:list`, the `features`
 
 ---
 
+> ## ✅ Decisions applied — 2026-08-16
+>
+> | Decision | Result |
+> |---|---|
+> | Team Assistant | **Starter+** — new `assistant_access` feature gating the `assistant` module |
+> | CRM connectors | **Growth+** — new `crm_connectors` feature, enforced at OAuth `start` |
+> | Compute Mesh | **All plans** — left ungated, confirmed by test |
+> | Voices | **Starter+** — Free's `voice_cloning = "0"` row removed (a row meant "granted") |
+> | Bot Strategy | **Starter+** — module split from Brain Settings, new `bot_strategy` feature |
+> | Brain Settings (BYO LLM) | **Scale+** — unchanged tier, now its own module |
+>
+> Also fixed in the same pass — the five features that were **sold but enforced
+> nowhere** (§B3): `database_connector`, `remove_branding`, `api_access` and the
+> new `crm_connectors` now have real gates. `white_label`, `audit_export` and
+> `sso` remain display-only because no surface exists for them yet.
+>
+> Rolled out by `2026_08_16_100000_allocate_assistant_crm_and_bot_strategy`
+> (idempotent; never overwrites a hand-edited value) and mirrored in
+> `BillingSeeder` for fresh installs. **313 tests passing.**
+>
+> **Skills → every plan except Free** (added 2026-08-16, migration `…100010`).
+>
+> ### Metering now records (§A3 closed)
+>
+> `UsageRecorder` is called from the real hot paths, so allowances are no
+> longer advisory:
+>
+> | Metric | Recorded at |
+> |---|---|
+> | `conversations` | first AI reply in a session — `ConversationManager` (HTTP/all text channels) + `InternalTurnController` (WebSocket) |
+> | `voice_messages` | same seams, when the customer's last message carried audio and the channel isn't a phone call |
+> | `telephony_minutes` | Twilio terminal status webhook, `CallDuration` rounded **up** to the minute |
+> | `indexed_pages` / `storage_mb` | **reconciled hourly** by `billing:reconcile-usage`, not evented — indexing is asynchronous, so no moment in PHP knows the final page count. The command measures real state (DuckDB row counts, bytes on disk) and `setAbsolute()`s it, which makes it re-runnable and self-healing after any missed callback. |
+>
+> Structural counts are hard-stopped at creation: **seats · agents · flows ·
+> channels · phone numbers**.
+>
+> ### Add-ons (added 2026-08-16)
+>
+> Extra capacity without a tier change: **Extra team seat** $5/mo · $50/yr and
+> **Extra AI agent** $9/mo · $90/yr. Each is a `type = 'addon'` plan whose own
+> `plan_features` row says what one unit grants, so the effective limit is
+> `base + (unit × quantity)` and every existing enforcement site honours it
+> with no changes. Sold as a Stripe subscription item on the existing
+> subscription (one invoice, Stripe prorates), interval forced to match.
+> Surfaced on the customer's Billing and Choose-a-plan pages; never public.
+>
+> **Still undecided:** Contacts · a `storage_mb` cap · whether data-snapshot and
+> webhook source types should be tiered.
+
+---
+
 ## A. What exists
 
 ### A1. Admin modules — 18 total
@@ -43,17 +95,20 @@ These are the gateable sections in `config/modules.php`. **11 are gated by a pla
 | **Channels & power** (11) | `telephony` · `channels_meta` · `shared_inbox` · `flow_builder` · `team_roles` · `api_access` · `database_connector` · `remove_branding` · `white_label` · `byo_llm` · `audit_export` |
 | **Support** (3) | `support` · `overage_voice` · `sso` |
 
-### A3. Usage meters — 5 defined, 4 enforced
+### A3. Usage meters — 5 defined, all now recorded
 
 | Metric | Capped by | Recorded? |
 |---|---|---|
-| `conversations` | `conversations` | ❌ no call sites |
-| `telephony_minutes` | `telephony_minutes` | ❌ no call sites |
-| `voice_messages` | `voice_messages` | ❌ no call sites |
-| `indexed_pages` | `indexed_pages` | ❌ no call sites |
-| `storage_mb` | ⚠️ **nothing** | ❌ no call sites |
+| `conversations` | `conversations` | ✅ `ConversationManager` + `InternalTurnController` |
+| `telephony_minutes` | `telephony_minutes` | ✅ Twilio status webhook (`CallDuration`, ceil to minute) |
+| `voice_messages` | `voice_messages` | ✅ same seams as conversations, when the user's turn had audio |
+| `indexed_pages` | `indexed_pages` | ✅ hourly `billing:reconcile-usage` |
+| `storage_mb` | ⚠️ **no plan sets a cap** | ✅ hourly `billing:reconcile-usage` |
 
-> The metering engine is built and tested but **not yet called from the conversation/telephony paths** — so today every allowance is advisory. Flagged previously; still open.
+> Closed since the first pass. Every recorder call is wrapped in `safely()`, so a
+> metering failure can never break a live conversation — it logs and moves on.
+> `storage_mb` is measured and displayed but still capped by nothing; that's a
+> pricing decision, not missing code.
 
 ### A4. Capabilities *inside* modules (not currently sellable separately)
 

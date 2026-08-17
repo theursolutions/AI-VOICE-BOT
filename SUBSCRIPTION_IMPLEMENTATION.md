@@ -104,6 +104,28 @@ Collapsing these into one "voice" number would have forced Free to choose betwee
 
 **`null` means unlimited, `0` means none.** Distinguishing them matters: `if (!$limit) deny()` would lock out every unlimited plan. Enforced by a test.
 
+### Add-ons (extra seats / extra AI agents)
+
+An add-on is a **Plan with `type = 'addon'`** — not a parallel concept. Two ship today: `addon-seat` ($5/mo, $50/yr) and `addon-agent` ($9/mo, $90/yr).
+
+- Its own `plan_features` row says what **one unit** grants (`seats = 1`), so an operator changes what an add-on gives from the same matrix as everything else.
+- The effective ceiling is `base + (unit value × quantity)` — `PlanFeatureService::clientLimit()`. Every enforcement site already reads through that method, so buying a seat raises the real limit everywhere rather than just adding an invoice line.
+- Sold as a Stripe **subscription item on the existing subscription**, never a second subscription: one invoice, one renewal date, one payment method, and Stripe prorates a mid-cycle change itself.
+- The interval is **forced to match the subscription's** — Stripe rejects a monthly and an annual price on one subscription, and an annual customer shouldn't receive a separate monthly seat charge.
+- Quantity `0` removes the line and credits the unused part. Re-submitting the same quantity is a no-op, so a double-submitted form can't charge twice.
+- Unlimited can't be topped up: adding to `null` is meaningless, so the limit stays unlimited.
+- Never on the public pricing page — `scopePublic()` excludes the type, and an add-on needs a live subscription to attach to.
+
+**Buying happens on its own page** — `/c/{client}/billing/addons`. An existing subscriber who needs one more seat is never sent back through the plan ladder: "upgrade a tier" is the wrong answer to "I need one more person". The billing card and the plans band are entry points that link here; a workspace with no live subscription is redirected to choose a plan, because there is nothing for a subscription item to attach to.
+
+The page quotes the **prorated amount before committing**, via `invoices->createPreview` (`AddonService::preview()`). That figure is asked of Stripe rather than computed locally — proration depends on the second of the period, unused-time credits from earlier changes, discounts and tax. When the preview can't be fetched it shows "on your next invoice" rather than a number it can't stand behind, and never blocks the purchase.
+
+**Purchased capacity is displayed separately** from the plan's own: usage meters read `10,000 included + 5,000 added` rather than folding both into one ceiling, so a customer can see what removing an add-on would cost them.
+
+> `UsageLimitService::allowanceFor()` used `planLimit()` (plan only) while structural quotas used `clientLimit()` (plan + add-ons). Harmless while add-ons only granted seats and agents, but Super Admin can create an add-on against *any* numeric feature — a "+1,000 conversations" pack would have billed the customer and been ignored by the meter. It now reads `clientLimit()`, with a test.
+
+> **Install ordering trap, now handled:** the add-on plans arrive by migration, but the `features` table is populated by `BillingSeeder`. On a fresh `migrate && db:seed` the migration finds no `seats` feature and writes no grant — the add-on would then be perfectly billable and grant nothing. `BillingSeeder::seedAddonGrants()` creates the row once features exist, idempotently and without overwriting an operator's value.
+
 ---
 
 ## 5. The free window (approved model)
@@ -329,7 +351,9 @@ The seeder is **non-destructive**: it uses `firstOrCreate` on plans, adds a pric
 
 ## 14. Testing
 
-`php artisan test` → **165 passed, 673 assertions** (~76s). Nine billing test files under `tests/Feature/Billing/`.
+`php artisan test` → **347 passed, 1333 assertions** (~120s). Fifteen billing test files under `tests/Feature/Billing/`.
+
+**For hands-on testing against Stripe test mode — cards, `stripe listen`, the full click-through, and the list of things that must FAIL — see [`BILLING_TESTING_GUIDE.md`](BILLING_TESTING_GUIDE.md).**
 
 **No test touches the network.** Stripe is a container-bound double, geolocation is forced to the null driver, and FX rates are seeded directly. A billing suite needing live keys is a suite nobody runs.
 
