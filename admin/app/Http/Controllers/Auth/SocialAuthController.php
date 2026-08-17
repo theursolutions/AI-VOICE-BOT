@@ -195,19 +195,38 @@ class SocialAuthController extends Controller
             // in the session was not there on the way back, which is a session
             // problem (lost cookie, SameSite, a session store the replicas do not
             // share) and has nothing to do with the provider at all.
+            // The provider's response BODY, which is the only part that names
+            // the fault. Guzzle puts it in the exception message after a
+            // newline, where `docker logs | grep` cuts it off — so the one field
+            // worth having was the one nobody could read. Pulled out and logged
+            // as its own single-line value.
+            $body = '';
+            if ($e instanceof \GuzzleHttp\Exception\RequestException && $e->getResponse()) {
+                $body = trim((string) $e->getResponse()->getBody());
+            }
+
+            // Match on the body first: `error: invalid_grant` lives there, not in
+            // Guzzle's "resulted in a 400 Bad Request" summary line.
+            $haystack = $e->getMessage() . ' ' . $body;
+
             $hint = match (true) {
                 $e instanceof \Laravel\Socialite\Two\InvalidStateException =>
                     'session lost between redirect and callback — check SESSION_DRIVER is shared across replicas, SESSION_SAME_SITE=lax, and SESSION_SECURE_COOKIE matches the scheme',
-                str_contains($e->getMessage(), 'redirect_uri') =>
-                    'the redirect_uri sent does not match the provider registration — run `php artisan auth:doctor`',
-                str_contains($e->getMessage(), 'client_secret') || str_contains($e->getMessage(), 'client_id') =>
-                    'wrong credentials for this provider — run `php artisan auth:doctor`',
+                str_contains($haystack, 'redirect_uri_mismatch') || str_contains($haystack, 'redirect_uri') =>
+                    'the redirect_uri sent at token exchange does not match the one registered with the provider — compare `php artisan auth:doctor` output against the provider dashboard',
+                str_contains($haystack, 'invalid_grant') =>
+                    'the authorization code was already used or has expired — a second request replayed the callback, or the code sat unused for minutes',
+                str_contains($haystack, 'invalid_client') || str_contains($haystack, 'client_secret') || str_contains($haystack, 'client_id') =>
+                    'wrong client id/secret for this provider — run `php artisan auth:doctor`',
                 default => null,
             };
 
             Log::warning('Social sign-in failed', array_filter([
                 'provider' => $provider,
-                'error'    => $e->getMessage(),
+                // First line only: the rest is Guzzle repeating the body we log
+                // separately, and it is what pushed the useful part out of view.
+                'error'    => strtok($e->getMessage(), "\n"),
+                'response' => $body !== '' ? mb_substr($body, 0, 600) : null,
                 'class'    => get_class($e),
                 'hint'     => $hint,
             ]));
