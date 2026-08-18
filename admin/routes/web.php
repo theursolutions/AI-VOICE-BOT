@@ -117,6 +117,18 @@ Route::middleware(['auth', 'super-admin'])
         Route::get ('/modules', [App\Http\Controllers\SuperAdmin\ModulesController::class, 'index'])->name('modules.index');
         Route::post('/modules', [App\Http\Controllers\SuperAdmin\ModulesController::class, 'update'])->name('modules.update');
 
+        // The platform's pool of model backends, and the order they are used in.
+        // Replaces the per-workspace brain-settings page, which wrote to a file
+        // the voice-engine container cannot see and applied to everyone at once.
+        Route::get   ('/ai-brains',                    [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'index'])->name('ai-brains.index');
+        Route::post  ('/ai-brains',                    [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'store'])->name('ai-brains.store');
+        Route::post  ('/ai-brains/reorder',            [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'reorder'])->name('ai-brains.reorder');
+        Route::patch ('/ai-brains/{id}',               [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'update'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('ai-brains.update');
+        Route::post  ('/ai-brains/{id}/verify',        [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'verify'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('ai-brains.verify');
+        Route::post  ('/ai-brains/{id}/toggle',        [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('ai-brains.toggle');
+        Route::post  ('/ai-brains/{id}/reset-quota',   [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'resetQuota'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('ai-brains.reset-quota');
+        Route::delete('/ai-brains/{id}',               [App\Http\Controllers\SuperAdmin\AiBrainsController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('ai-brains.destroy');
+
         Route::get('/clients',                  [App\Http\Controllers\SuperAdmin\ClientsController::class, 'index'])->name('clients.index');
         Route::post('/clients/{id}/suspend',    [App\Http\Controllers\SuperAdmin\ClientsController::class, 'suspend'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('clients.suspend');
         Route::post('/clients/{id}/restore',    [App\Http\Controllers\SuperAdmin\ClientsController::class, 'restore'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('clients.restore');
