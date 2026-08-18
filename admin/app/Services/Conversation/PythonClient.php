@@ -53,13 +53,52 @@ class PythonClient
         return $res->getBody();
     }
 
+    /**
+     * One LLM call.
+     *
+     * `brain_id` and `call_type` are OURS, not the engine's — they are stripped
+     * before the request and used afterwards to attribute the tokens the engine
+     * reports back. Doing the accounting here rather than at each call site means
+     * every path through the app is metered by construction: a new caller cannot
+     * forget to record its usage, because it never had to remember.
+     */
     public function llm(array $messages, array $options = []): array
     {
-        $res = $this->http->post('llm/respond', [
-            'json' => ['messages' => $messages] + $options,
-        ]);
+        $brainId  = $options['brain_id'] ?? null;
+        $callType = $options['call_type'] ?? \App\Services\Conversation\BrainResolver::CALL_REPLY;
+        unset($options['brain_id'], $options['call_type']);
 
-        return json_decode((string) $res->getBody(), true);
+        $projectId = $options['project_id'] ?? null;
+
+        try {
+            $res  = $this->http->post('llm/respond', [
+                'json' => ['messages' => $messages] + $options,
+            ]);
+            $body = json_decode((string) $res->getBody(), true) ?: [];
+        } catch (\Throwable $e) {
+            // Record the failure before rethrowing. A brain whose key has died
+            // produces nothing but exceptions, and on token counts alone that is
+            // indistinguishable from a brain nobody used — so the operator sees
+            // an idle brain rather than a broken one.
+            if ($brainId) {
+                app(\App\Services\Conversation\BrainResolver::class)
+                    ->record((int) $brainId, $projectId ? (int) $projectId : null, $callType, 0, 0);
+            }
+
+            throw $e;
+        }
+
+        if ($brainId) {
+            app(\App\Services\Conversation\BrainResolver::class)->record(
+                (int) $brainId,
+                $projectId ? (int) $projectId : null,
+                $callType,
+                $body['tokens_in']  ?? null,
+                $body['tokens_out'] ?? null,
+            );
+        }
+
+        return $body;
     }
 
     public function extract(array $payload): array

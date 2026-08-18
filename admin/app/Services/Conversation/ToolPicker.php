@@ -26,7 +26,10 @@ class ToolPicker
     /** Sentinel tool id meaning "escalate this chat to a human agent". */
     public const HANDOFF = 'handoff';
 
-    public function __construct(private PythonClient $python) {}
+    public function __construct(
+        private PythonClient $python,
+        private BrainResolver $brains,
+    ) {}
 
     /**
      * @param array<int, array{role:string, content:string}> $recentHistory
@@ -63,11 +66,21 @@ class ToolPicker
             // message for two calls that cannot benefit from the extra quality.
             //
             // The reply keeps the project's model; only the machinery moves.
+            // A resolved brain OVERRIDES the cheap-model default, and that
+            // ordering matters for more than cost. When a client brings their own
+            // key, the whole point is that their conversations run through their
+            // provider account — routing this call to ours instead would leak the
+            // customer's message into our vendor relationship, which is exactly
+            // what bring-your-own-key exists to prevent.
+            //
+            // With no brain configured the cheap default applies as before, so
+            // tool selection still does not pay reply rates.
             $resp = $this->python->llm(
                 [['role' => 'system', 'content' => $prompt]],
-                [
+                $this->brains->optionsFor($projectId, BrainResolver::CALL_ROUTE) + [
                     'project_id'   => $projectId,
                     'respond_with' => 'text',
+                    'call_type'    => BrainResolver::CALL_ROUTE,
                     'provider'     => config('services.llm.cheap_provider', 'gemini'),
                     'model'        => config('services.llm.cheap_model'),
                 ]

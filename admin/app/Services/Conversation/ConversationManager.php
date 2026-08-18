@@ -18,6 +18,7 @@ class ConversationManager
         private DataSourceRouter $sources,
         private ToolPicker $toolPicker,
         private HumanRouter $humans,
+        private BrainResolver $brains,
     ) {}
 
     public function handle(Session $session, Message $userMessage, string $respondWith = 'text'): Message
@@ -108,12 +109,17 @@ class ConversationManager
         // channels sent nothing at all. A calm sentence is both truer and more
         // useful, and the reason still reaches the log.
         try {
+            // The brain that serves this project — the project's own choice, then
+            // its client's brains, then the platform pool by priority, skipping
+            // anything over quota. Returns [] when nothing is configured, in
+            // which case the engine uses its own default exactly as before.
             $reply = $this->python->llm($messages, [
                 'project_id'   => $session->project_id,
                 'session_id'   => $session->id,
                 'voice_id'     => $session->voice_id,
                 'respond_with' => $respondWith,
-            ]);
+                'call_type'    => BrainResolver::CALL_REPLY,
+            ] + $this->brains->optionsFor($session->project_id, BrainResolver::CALL_REPLY));
         } catch (\Throwable $e) {
             Log::error('LLM generation failed for every provider', [
                 'project_id' => $session->project_id,

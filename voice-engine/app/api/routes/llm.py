@@ -38,6 +38,10 @@ async def llm_respond(req: LLMRequest, request: Request) -> LLMResponse:
             temperature=req.temperature,
             max_tokens=req.max_tokens,
             model=req.model,
+            # Per-request credentials for an admin-configured brain. Absent for
+            # every existing caller, which keeps using this service's own env.
+            api_key=req.api_key,
+            base_url=req.base_url,
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("llm.chat failed")
