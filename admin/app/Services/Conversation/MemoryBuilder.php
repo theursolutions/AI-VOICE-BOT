@@ -28,11 +28,16 @@ class MemoryBuilder
      * about. Anything older than 8 turns still reaches the model, folded into
      * the summary in the system prompt — which is more history than 20 raw
      * turns covered, for fewer tokens.
+     *
+     * This is the DEFAULT; the live value is services.llm.recent_turns
+     * (LLM_RECENT_TURNS). It trades cost against coherence and wants tuning
+     * against real conversations, which is not something to redeploy for.
      */
     private const RECENT_TURNS = 8;
 
     /**
-     * Retrieved passages allowed into one prompt.
+     * Retrieved passages allowed into one prompt. Default for
+     * services.llm.max_passages (LLM_MAX_PASSAGES).
      *
      * Three is the working figure: enough for a cited answer, few enough that
      * the block cannot become the bulk of the prompt. Raise it only with
@@ -40,6 +45,49 @@ class MemoryBuilder
      * paid for on every turn of every conversation.
      */
     private const MAX_PASSAGES = 3;
+
+    /**
+     * Turns of verbatim history to send.
+     *
+     * Clamped, because this one is genuinely dangerous at both ends: a
+     * mistyped 0 leaves the model with no conversation at all and it starts
+     * every reply from nothing, while a stray large value silently multiplies
+     * the bill on every message of every client. The floor of 2 keeps a
+     * question and its answer together; the ceiling of 50 is well past any
+     * useful window and exists purely to stop a typo becoming an invoice.
+     */
+    private function recentTurns(): int
+    {
+        return max(2, min(50, self::setting('recent_turns', self::RECENT_TURNS)));
+    }
+
+    /** Retrieved passages per reply. An explicit 0 disables reference data. */
+    private function maxPassages(): int
+    {
+        return max(0, min(25, self::setting('max_passages', self::MAX_PASSAGES)));
+    }
+
+    /**
+     * Read a numeric knob, falling back to the coded default for anything that
+     * is not a number.
+     *
+     * The is_numeric() guard is the whole point. config()'s own default only
+     * applies when the key is ABSENT, and these keys always exist — they are
+     * declared in config/services.php reading env(). So `LLM_RECENT_TURNS=`
+     * left blank in .env yields an empty string, `(int) '' === 0`, and the
+     * window silently collapses to the floor. That is a quality outage caused by
+     * an empty line in a config file, which is not an acceptable failure mode
+     * for the single most important dial in the prompt.
+     *
+     * An explicit 0 is still honoured, because for max_passages it is a
+     * meaningful instruction rather than a mistake.
+     */
+    private static function setting(string $key, int $default): int
+    {
+        $value = config("services.llm.{$key}");
+
+        return is_numeric($value) ? (int) $value : $default;
+    }
 
     /**
      * Build the messages array sent to the LLM.
@@ -59,7 +107,7 @@ class MemoryBuilder
             ->whereIn('role', ['user', 'assistant'])
             ->whereNotNull('content')
             ->orderByDesc('id')
-            ->limit(self::RECENT_TURNS * 2)
+            ->limit($this->recentTurns() * 2)
             ->get()
             ->reverse()
             ->values();
@@ -283,7 +331,7 @@ class MemoryBuilder
                 // measurably hurts the answer.
                 //
                 // Records already had a limit of 20 rows; passages had none.
-                foreach (array_slice($r->items, 0, self::MAX_PASSAGES) as $passage) {
+                foreach (array_slice($r->items, 0, $this->maxPassages()) as $passage) {
                     $text = is_array($passage) ? ($passage['text'] ?? '') : (string) $passage;
                     if (trim($text) === '') continue;
                     $cite = $this->citationLabel($passage);

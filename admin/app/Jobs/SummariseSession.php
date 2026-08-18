@@ -54,6 +54,8 @@ class SummariseSession implements ShouldQueue
      * same message — a loss. Waiting until a batch has scrolled out means the
      * cost is amortised over many turns, and a message is only summarised once
      * it is genuinely leaving the window.
+     *
+     * Default for services.llm.summarise_after (LLM_SUMMARISE_AFTER).
      */
     private const TRIGGER_AFTER = 12;
 
@@ -86,7 +88,16 @@ class SummariseSession implements ShouldQueue
 
         // Not enough has scrolled past yet. Cheaper to wait than to summarise a
         // handful of turns the window is still showing the model in full.
-        if ($fresh->count() < self::TRIGGER_AFTER) {
+        //
+        // is_numeric, not a cast: these keys always exist (declared in
+        // config/services.php via env), so config()'s own default never fires
+        // and a blank `LLM_SUMMARISE_AFTER=` would cast to 0 — turning this into
+        // an LLM call on every single turn, the exact cost the job exists to
+        // avoid. Floored at 2 as well, for the same reason.
+        $configured = config('services.llm.summarise_after');
+        $trigger = max(2, is_numeric($configured) ? (int) $configured : self::TRIGGER_AFTER);
+
+        if ($fresh->count() < $trigger) {
             return;
         }
 

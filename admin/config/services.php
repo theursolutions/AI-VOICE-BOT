@@ -291,5 +291,32 @@ return [
     'llm' => [
         'cheap_provider' => env('LLM_CHEAP_PROVIDER', 'gemini'),
         'cheap_model'    => env('LLM_CHEAP_MODEL'),
+
+        /*
+        | The memory window. These three trade cost against answer quality and
+        | are the knobs most likely to need tuning against real traffic, so they
+        | live here rather than in code.
+        |
+        | recent_turns     verbatim turns in the reply prompt. Each turn is a
+        |                  user+assistant pair, so 8 sends 16 messages. Lower is
+        |                  cheaper; too low and the bot loses the thread of the
+        |                  current exchange. Anything older is covered by the
+        |                  rolling summary, so this is DETAIL, not memory.
+        |
+        | max_passages     retrieved reference chunks per reply. The single
+        |                  largest block in the prompt. Passages arrive ranked,
+        |                  so the tail is the most expensive and least relevant.
+        |
+        | summarise_after  unsummarised turns that accumulate before the
+        |                  summariser runs. Keep this ABOVE recent_turns —
+        |                  below it and you pay to summarise messages the window
+        |                  is still showing the model in full.
+        |
+        | Raise recent_turns if long conversations start losing coherence;
+        | lower it if cost matters more than the last few turns of nuance.
+        */
+        'recent_turns'    => env('LLM_RECENT_TURNS', 8),
+        'max_passages'    => env('LLM_MAX_PASSAGES', 3),
+        'summarise_after' => env('LLM_SUMMARISE_AFTER', 12),
     ],
 ];
