@@ -56,9 +56,21 @@ class ToolPicker
         $prompt = $this->buildPrompt($tools, $recentHistory, $userQuery, $hasHumans);
 
         try {
+            // Pinned to the cheap model. This call classifies — its entire
+            // output is a tool id and some arguments, and no customer ever reads
+            // it. Running it on whatever model the project chose for REPLIES
+            // meant a premium-tier client paid premium rates three times per
+            // message for two calls that cannot benefit from the extra quality.
+            //
+            // The reply keeps the project's model; only the machinery moves.
             $resp = $this->python->llm(
                 [['role' => 'system', 'content' => $prompt]],
-                ['project_id' => $projectId, 'respond_with' => 'text']
+                [
+                    'project_id'   => $projectId,
+                    'respond_with' => 'text',
+                    'provider'     => config('services.llm.cheap_provider', 'gemini'),
+                    'model'        => config('services.llm.cheap_model'),
+                ]
             );
         } catch (Throwable $e) {
             Log::warning('ToolPicker: LLM call failed', ['error' => $e->getMessage()]);

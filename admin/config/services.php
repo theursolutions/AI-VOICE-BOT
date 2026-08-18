@@ -272,4 +272,24 @@ return [
         'redirect_uri'  => env('ZOHO_REDIRECT_URI', 'http://127.0.0.1:8001/oauth/zoho/callback'),
         'auth_host'     => env('ZOHO_AUTH_HOST', 'https://accounts.zoho.com'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | LLM call routing
+    |--------------------------------------------------------------------------
+    |
+    | A customer message costs three model calls: pick a tool, write the reply,
+    | extract the lead. Only the middle one is read by a human. The other two
+    | are classification and compression, where a bigger model buys nothing —
+    | so they are pinned here rather than inheriting the project's reply model.
+    |
+    | Leave `cheap_model` null to use the provider's own configured default
+    | (voice-engine Settings). Set it to override, e.g. gemini-2.5-flash-lite.
+    |
+    | Consumed by ToolPicker, SummariseSession and ExtractLeadFromTurn.
+    */
+    'llm' => [
+        'cheap_provider' => env('LLM_CHEAP_PROVIDER', 'gemini'),
+        'cheap_model'    => env('LLM_CHEAP_MODEL'),
+    ],
 ];
