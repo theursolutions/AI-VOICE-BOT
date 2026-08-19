@@ -50,9 +50,16 @@ class AiBrain extends Model
         'gemini' => [
             'label'    => 'Google Gemini',
             'kind'     => self::KIND_OPENAI_COMPAT,
-            // Gemini's OpenAI-compatible surface, not the native one.
+            // Gemini's OpenAI-compatible surface, not the native one. The
+            // trailing slash matters: without it the OpenAI client builds a path
+            // one segment short and every request 404s.
             'base_url' => 'https://generativelanguage.googleapis.com/v1beta/openai/',
-            'models'   => ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'],
+            // 3.5 first. Google retires model names for NEW keys while existing
+            // ones keep working, so a list that looks fine on an old key answers
+            // "no longer available to new users" on a fresh one — which is not a
+            // configuration error anyone would think to look for. The field is a
+            // datalist, so a name absent here can still be typed.
+            'models'   => ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'],
             'needs_key' => true,
         ],
         'groq' => [

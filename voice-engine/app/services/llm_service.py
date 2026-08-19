@@ -585,10 +585,29 @@ class LLMService:
                         max(self._timeout, settings.ollama_timeout))
                 else:
                     # Everything else goes through the generic compat client.
+                    #
+                    # NO fallback to the configured Gemini endpoint here, and that
+                    # matters more than it looks. Defaulting base_url to Gemini's
+                    # meant a Groq brain saved without one was quietly sent to
+                    # Google — so a misconfigured brain failed AS A DIFFERENT
+                    # PROVIDER, and the operator got a Google "model not found"
+                    # error while testing Groq. An unusable configuration must say
+                    # so, not silently become a call to somewhere else.
+                    if not base_url:
+                        raise RuntimeError(
+                            "This brain has no endpoint URL, so there is nowhere to send the "
+                            "request. Set its Base URL (e.g. https://api.groq.com/openai/v1)."
+                        )
+                    if not model:
+                        raise RuntimeError(
+                            "This brain has no model set, and the provider needs one. "
+                            "Pick a model for it."
+                        )
+
                     backend = _OpenAICompatBackend(
-                        base_url or settings.gemini_base_url,
+                        base_url,
                         api_key or "",
-                        model or settings.gemini_model,
+                        model,
                         settings.gemini_max_tokens, self._timeout)
 
                 self._overrides[cache_key] = backend

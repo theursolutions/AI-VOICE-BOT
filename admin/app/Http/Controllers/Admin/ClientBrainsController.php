@@ -121,9 +121,10 @@ class ClientBrainsController extends Controller
             'preset'     => ['required', 'string', 'in:' . implode(',', array_keys(AiBrain::PRESETS))],
             'model'      => ['nullable', 'string', 'max:120'],
             'api_key'    => ['required', 'string', 'max:512'],
-            'base_url'   => ['nullable', 'string', 'max:255', 'url'],
+            'base_url'   => ['nullable', 'string', 'max:255', 'url', 'required_if:preset,custom'],
         ], [
-            'api_key.required' => 'An API key is needed so we can connect to your AI provider.',
+            'api_key.required'  => 'An API key is needed so we can connect to your AI provider.',
+            'base_url.required' => 'This provider needs an endpoint URL. Pick a provider from the list to fill it in automatically.',
         ]);
 
         $this->resolveProject($client, (int) $data['project_id']);
@@ -260,8 +261,24 @@ class ClientBrainsController extends Controller
         return mb_substr(strtok($e->getMessage(), "\n") ?: 'We could not reach your provider.', 0, 300);
     }
 
+    /**
+     * The project this page is about.
+     *
+     * Falls back to the workspace's active project, then its first, when no
+     * project_id is supplied. Without that, the bare URL — which is what a
+     * sidebar link, a bookmark or a pasted address gives you — cast null to 0,
+     * matched no row, and returned a 404 telling the owner their own settings
+     * page does not exist.
+     *
+     * A supplied id is still scoped to the client, so the fallback adds
+     * convenience without widening what anyone can reach.
+     */
     private function resolveProject(Client $client, int $projectId): Project
     {
-        return Project::where('client_id', $client->id)->where('id', $projectId)->firstOrFail();
+        if ($projectId > 0) {
+            return Project::where('client_id', $client->id)->where('id', $projectId)->firstOrFail();
+        }
+
+        return Project::where('client_id', $client->id)->orderBy('id')->firstOrFail();
     }
 }
