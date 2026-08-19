@@ -62,7 +62,7 @@
                 <div class="menu__title">Modules</div>
             </a></li>
             <li><a href="{{ route('ops.ai-brains.index') }}" class="menu {{ $is('ops.ai-brains.*') ? 'menu--active' : '' }}">
-                <div class="menu__icon"><i data-lucide="brain-circuit"></i></div>
+                <div class="menu__icon"><i data-lucide="cpu"></i></div>
                 <div class="menu__title">AI Brains</div>
             </a></li>
             <li class="menu__devider my-4"></li>
