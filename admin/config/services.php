@@ -272,4 +272,51 @@ return [
         'redirect_uri'  => env('ZOHO_REDIRECT_URI', 'http://127.0.0.1:8001/oauth/zoho/callback'),
         'auth_host'     => env('ZOHO_AUTH_HOST', 'https://accounts.zoho.com'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | LLM call routing
+    |--------------------------------------------------------------------------
+    |
+    | A customer message costs three model calls: pick a tool, write the reply,
+    | extract the lead. Only the middle one is read by a human. The other two
+    | are classification and compression, where a bigger model buys nothing —
+    | so they are pinned here rather than inheriting the project's reply model.
+    |
+    | Leave `cheap_model` null to use the provider's own configured default
+    | (voice-engine Settings). Set it to override, e.g. gemini-2.5-flash-lite.
+    |
+    | Consumed by ToolPicker, SummariseSession and ExtractLeadFromTurn.
+    */
+    'llm' => [
+        'cheap_provider' => env('LLM_CHEAP_PROVIDER', 'gemini'),
+        'cheap_model'    => env('LLM_CHEAP_MODEL'),
+
+        /*
+        | The memory window. These three trade cost against answer quality and
+        | are the knobs most likely to need tuning against real traffic, so they
+        | live here rather than in code.
+        |
+        | recent_turns     verbatim turns in the reply prompt. Each turn is a
+        |                  user+assistant pair, so 8 sends 16 messages. Lower is
+        |                  cheaper; too low and the bot loses the thread of the
+        |                  current exchange. Anything older is covered by the
+        |                  rolling summary, so this is DETAIL, not memory.
+        |
+        | max_passages     retrieved reference chunks per reply. The single
+        |                  largest block in the prompt. Passages arrive ranked,
+        |                  so the tail is the most expensive and least relevant.
+        |
+        | summarise_after  unsummarised turns that accumulate before the
+        |                  summariser runs. Keep this ABOVE recent_turns —
+        |                  below it and you pay to summarise messages the window
+        |                  is still showing the model in full.
+        |
+        | Raise recent_turns if long conversations start losing coherence;
+        | lower it if cost matters more than the last few turns of nuance.
+        */
+        'recent_turns'    => env('LLM_RECENT_TURNS', 8),
+        'max_passages'    => env('LLM_MAX_PASSAGES', 3),
+        'summarise_after' => env('LLM_SUMMARISE_AFTER', 12),
+    ],
 ];

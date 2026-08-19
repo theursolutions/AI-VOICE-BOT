@@ -20,8 +20,74 @@ class MemoryBuilder
      *
      * 20 turns is a few thousand tokens on a 70b model — cheap next to
      * looking like you have amnesia.
+     *
+     * Reduced from 20 to 8 once SummariseSession began writing a rolling
+     * summary. The two changes belong together and must not be separated: the
+     * window is now the DETAIL and the summary is the CONTINUITY, so cutting
+     * the window without the summary is exactly the amnesia this comment warns
+     * about. Anything older than 8 turns still reaches the model, folded into
+     * the summary in the system prompt — which is more history than 20 raw
+     * turns covered, for fewer tokens.
+     *
+     * This is the DEFAULT; the live value is services.llm.recent_turns
+     * (LLM_RECENT_TURNS). It trades cost against coherence and wants tuning
+     * against real conversations, which is not something to redeploy for.
      */
-    private const RECENT_TURNS = 20;
+    private const RECENT_TURNS = 8;
+
+    /**
+     * Retrieved passages allowed into one prompt. Default for
+     * services.llm.max_passages (LLM_MAX_PASSAGES).
+     *
+     * Three is the working figure: enough for a cited answer, few enough that
+     * the block cannot become the bulk of the prompt. Raise it only with
+     * evidence from retrieval quality, not on instinct — every extra passage is
+     * paid for on every turn of every conversation.
+     */
+    private const MAX_PASSAGES = 3;
+
+    /**
+     * Turns of verbatim history to send.
+     *
+     * Clamped, because this one is genuinely dangerous at both ends: a
+     * mistyped 0 leaves the model with no conversation at all and it starts
+     * every reply from nothing, while a stray large value silently multiplies
+     * the bill on every message of every client. The floor of 2 keeps a
+     * question and its answer together; the ceiling of 50 is well past any
+     * useful window and exists purely to stop a typo becoming an invoice.
+     */
+    private function recentTurns(): int
+    {
+        return max(2, min(50, self::setting('recent_turns', self::RECENT_TURNS)));
+    }
+
+    /** Retrieved passages per reply. An explicit 0 disables reference data. */
+    private function maxPassages(): int
+    {
+        return max(0, min(25, self::setting('max_passages', self::MAX_PASSAGES)));
+    }
+
+    /**
+     * Read a numeric knob, falling back to the coded default for anything that
+     * is not a number.
+     *
+     * The is_numeric() guard is the whole point. config()'s own default only
+     * applies when the key is ABSENT, and these keys always exist — they are
+     * declared in config/services.php reading env(). So `LLM_RECENT_TURNS=`
+     * left blank in .env yields an empty string, `(int) '' === 0`, and the
+     * window silently collapses to the floor. That is a quality outage caused by
+     * an empty line in a config file, which is not an acceptable failure mode
+     * for the single most important dial in the prompt.
+     *
+     * An explicit 0 is still honoured, because for max_passages it is a
+     * meaningful instruction rather than a mistake.
+     */
+    private static function setting(string $key, int $default): int
+    {
+        $value = config("services.llm.{$key}");
+
+        return is_numeric($value) ? (int) $value : $default;
+    }
 
     /**
      * Build the messages array sent to the LLM.
@@ -41,7 +107,7 @@ class MemoryBuilder
             ->whereIn('role', ['user', 'assistant'])
             ->whereNotNull('content')
             ->orderByDesc('id')
-            ->limit(self::RECENT_TURNS * 2)
+            ->limit($this->recentTurns() * 2)
             ->get()
             ->reverse()
             ->values();
@@ -72,10 +138,9 @@ class MemoryBuilder
             $messages[] = ['role' => 'system', 'content' => $known];
         }
 
+        // Retrieved reference data is built here but appended AFTER the history,
+        // not before it — see the note at the end of this method.
         $context = $this->formatContext($contextResults);
-        if ($context !== '') {
-            $messages[] = ['role' => 'system', 'content' => $context];
-        }
 
         foreach ($recent as $msg) {
             $content = (string) $msg->content;
@@ -90,6 +155,22 @@ class MemoryBuilder
             }
 
             $messages[] = ['role' => $msg->role, 'content' => $content];
+        }
+
+        // Reference data goes LAST, after the history, for two reasons.
+        //
+        // Cost: providers cache a prompt by its longest unchanged PREFIX. This
+        // block is rebuilt from a fresh retrieval on every single turn, so
+        // sitting third it invalidated everything after it and nothing could
+        // ever cache. Behind the history, the prefix that stays stable across a
+        // conversation is the system prompt plus the known facts — which is the
+        // part worth caching, and the part that is re-sent every turn.
+        //
+        // Quality: retrieved passages are the answer to the question being
+        // asked, and they land immediately before it here rather than several
+        // thousand tokens upstream of it.
+        if ($context !== '') {
+            $messages[] = ['role' => 'system', 'content' => $context];
         }
 
         return $messages;
@@ -242,7 +323,15 @@ class MemoryBuilder
             }
 
             if ($r->kind === ResolverResult::KIND_PASSAGES) {
-                foreach ($r->items as $i => $passage) {
+                // Capped. This loop was unbounded, so a retriever returning
+                // fifteen chunks put every one of them in the prompt — on the
+                // largest single block in it, on every turn. Passages arrive
+                // ranked, so the tail is both the most expensive part and the
+                // least relevant, and burying the good chunks among weak ones
+                // measurably hurts the answer.
+                //
+                // Records already had a limit of 20 rows; passages had none.
+                foreach (array_slice($r->items, 0, $this->maxPassages()) as $passage) {
                     $text = is_array($passage) ? ($passage['text'] ?? '') : (string) $passage;
                     if (trim($text) === '') continue;
                     $cite = $this->citationLabel($passage);

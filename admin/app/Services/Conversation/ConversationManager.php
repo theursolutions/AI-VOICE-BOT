@@ -3,6 +3,7 @@
 namespace App\Services\Conversation;
 
 use App\Jobs\ExtractLeadFromTurn;
+use App\Jobs\SummariseSession;
 use App\Models\Message;
 use App\Models\Session;
 use Illuminate\Support\Facades\Log;
@@ -17,6 +18,7 @@ class ConversationManager
         private DataSourceRouter $sources,
         private ToolPicker $toolPicker,
         private HumanRouter $humans,
+        private BrainResolver $brains,
     ) {}
 
     public function handle(Session $session, Message $userMessage, string $respondWith = 'text'): Message
@@ -41,10 +43,20 @@ class ConversationManager
             // any) should fire, and with what args?" The decision is
             // handed to WebhookResolver via context so only the picked
             // tool runs (the rest are silenced for this turn).
+            // Four messages, not twenty. This history exists only to
+            // disambiguate the current message for tool selection — "yes, that
+            // one" needs the turn before it, nothing further back. Twenty turns
+            // put a full conversation into a prompt whose entire output is one
+            // tool id, on every single message.
+            //
+            // Note orderBy(created_at) ASC with a limit takes the OLDEST rows,
+            // which for tool routing is precisely the wrong end of the thread.
             $history = Message::where('session_id', $session->id)
-                ->orderBy('created_at')
-                ->limit(20)
+                ->orderByDesc('id')
+                ->limit(4)
                 ->get(['role', 'content'])
+                ->reverse()
+                ->values()
                 ->map(fn ($m) => ['role' => $m->role, 'content' => (string) ($m->content ?? '')])
                 ->all();
 
@@ -97,12 +109,17 @@ class ConversationManager
         // channels sent nothing at all. A calm sentence is both truer and more
         // useful, and the reason still reaches the log.
         try {
+            // The brain that serves this project — the project's own choice, then
+            // its client's brains, then the platform pool by priority, skipping
+            // anything over quota. Returns [] when nothing is configured, in
+            // which case the engine uses its own default exactly as before.
             $reply = $this->python->llm($messages, [
                 'project_id'   => $session->project_id,
                 'session_id'   => $session->id,
                 'voice_id'     => $session->voice_id,
                 'respond_with' => $respondWith,
-            ]);
+                'call_type'    => BrainResolver::CALL_REPLY,
+            ] + $this->brains->optionsFor($session->project_id, BrainResolver::CALL_REPLY));
         } catch (\Throwable $e) {
             Log::error('LLM generation failed for every provider', [
                 'project_id' => $session->project_id,
@@ -185,6 +202,21 @@ class ConversationManager
                 'session_id' => $session->id,
                 'error'      => $e->getMessage(),
                 'class'      => get_class($e),
+            ]);
+        }
+
+        // Fold anything that has scrolled out of the reply window into the
+        // rolling summary. The job decides for itself whether enough has
+        // accumulated to be worth a call, so dispatching every turn is cheap —
+        // it usually returns immediately.
+        //
+        // Same guarantee as above: a missed summary must never cost the reply.
+        try {
+            SummariseSession::dispatch($session->project_id, $session->id);
+        } catch (\Throwable $e) {
+            Log::warning('Could not queue session summary', [
+                'session_id' => $session->id,
+                'error'      => $e->getMessage(),
             ]);
         }
 
