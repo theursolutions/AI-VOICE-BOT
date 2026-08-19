@@ -172,10 +172,7 @@ class AiBrainsController extends Controller
                 $options,
             );
         } catch (\Throwable $e) {
-            // First line only. Provider errors arrive as multi-line dumps and the
-            // useful part is always at the front; the whole thing in a UI field
-            // is unreadable.
-            $reason = strtok($e->getMessage(), "\n") ?: 'the provider could not be reached';
+            $reason = $this->readableFailure($e);
 
             $brain->forceFill([
                 'is_verified'  => false,
@@ -311,6 +308,42 @@ class AiBrainsController extends Controller
         AuditLog::record('ai_brain.deleted', ['target_type' => 'ai_brain', 'payload' => ['name' => $name]]);
 
         return back()->with('success', "Removed “{$name}”. Its usage history was kept.");
+    }
+
+    /**
+     * The reason a verification call failed, in a form worth showing someone.
+     *
+     * Guzzle's message is a summary line — "resulted in a 502 Bad Gateway
+     * response:" — followed by the response body on the NEXT line. Taking only
+     * the first line therefore reports the transport status and discards the one
+     * piece of information that identifies the fault, which is precisely what the
+     * provider said. The voice-engine wraps provider errors as
+     * {"detail": "llm failure: <real reason>"}, so that body is the answer.
+     */
+    private function readableFailure(\Throwable $e): string
+    {
+        $body = '';
+
+        if ($e instanceof \GuzzleHttp\Exception\RequestException && $e->getResponse()) {
+            $body = trim((string) $e->getResponse()->getBody());
+        }
+
+        if ($body !== '') {
+            $decoded = json_decode($body, true);
+            $detail  = is_array($decoded)
+                ? ($decoded['detail'] ?? $decoded['message'] ?? $decoded['error'] ?? null)
+                : null;
+
+            if (is_string($detail) && $detail !== '') {
+                // Strip the engine's own prefix; the operator does not need to be
+                // told twice that an LLM call failed.
+                return mb_substr(preg_replace('/^llm failure:\s*/i', '', $detail), 0, 400);
+            }
+
+            return mb_substr($body, 0, 400);
+        }
+
+        return mb_substr(strtok($e->getMessage(), "\n") ?: 'the provider could not be reached', 0, 400);
     }
 
     /** @return array<string, mixed> */
