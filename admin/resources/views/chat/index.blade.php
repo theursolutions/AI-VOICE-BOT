@@ -16,7 +16,12 @@
     .tva-chat { display:flex; height: calc(100vh - 160px); min-height:520px; border:1px solid #e2e8f0; border-radius:14px; overflow:hidden; background:#fff; margin-top:14px; }
     html.dark .tva-chat { background:#0f172a; border-color:#334155; }
 
-    .tva-chat__list { width:330px; min-width:290px; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; min-height:0; }
+    /* flex:0 0 330px, not width:330px. As a flex item with only a width, this
+       column was still shrinkable — so opening a thread let the message pane's
+       content squeeze it down toward its 290px min-width and clip the names and
+       previews on the right. A width is a preference; flex-shrink:0 is what makes
+       it a decision. */
+    .tva-chat__list { flex:0 0 330px; width:330px; min-width:290px; border-right:1px solid #e2e8f0; display:flex; flex-direction:column; min-height:0; }
     html.dark .tva-chat__list { border-right-color:#334155; }
     .tva-chat__listhead { padding:12px 14px; border-bottom:1px solid #e2e8f0; flex:0 0 auto; position:relative; }
     html.dark .tva-chat__listhead { border-bottom-color:#334155; }
@@ -191,7 +196,11 @@
     .tva-convo__ini { width:100%; height:100%; display:flex; align-items:center; justify-content:center;
                       font-size:14px; font-weight:600; letter-spacing:.02em; }
     .tva-convo__name { font-weight:600; font-size:13.5px; color:#0f172a; } html.dark .tva-convo__name { color:#f1f5f9; }
-    .tva-convo__last { font-size:12px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:185px; }
+    /* Truncation follows the column instead of a fixed 185px, which was wrong at
+       every width except the one it was measured at. min-width:0 on the text
+       cell is what lets a flex child actually shrink enough to ellipsize. */
+    .tva-convo__last { font-size:12px; color:#64748b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .tva-convo__name { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .tva-badge { font-size:9px; font-weight:700; padding:1px 6px; border-radius:999px; text-transform:uppercase; }
     .tva-badge--whatsapp { background:#dcfce7; color:#15803d; } .tva-badge--instagram { background:#fce7f3; color:#be185d; }
     .tva-badge--facebook,.tva-badge--messenger { background:#dbeafe; color:#1d4ed8; }
