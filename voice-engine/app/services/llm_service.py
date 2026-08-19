@@ -671,11 +671,19 @@ class LLMService:
         if primary is not self._backend and self._backend not in chain:
             chain.append(self._backend)
 
+        # The primary's MESSAGE, not just its class. What propagates from here is
+        # the LAST tier's error, so without this line the reason the primary
+        # failed is lost entirely — and that is the one worth reading, because it
+        # is the provider the operator actually configured. A Groq brain reporting
+        # a Google error was unreadable for exactly this reason.
+        if last is not None:
+            logger.warning("LLM %s: primary %s failed: %s",
+                           label, type(primary).__name__, str(last)[:400])
+
         for alt in chain:
             if alt is primary:
                 continue
-            logger.warning("LLM %s: %s failed (%s); trying %s",
-                           label, type(primary).__name__, type(last).__name__, type(alt).__name__)
+            logger.warning("LLM %s: trying fallback %s", label, type(alt).__name__)
             try:
                 return await fn(alt)
             except Exception as exc:  # noqa: BLE001
@@ -696,10 +704,33 @@ class LLMService:
                    temperature: Optional[float] = None, max_tokens: Optional[int] = None,
                    model: Optional[str] = None, api_key: Optional[str] = None,
                    base_url: Optional[str] = None) -> ChatResult:
+        primary = self._backend_for(provider, api_key=api_key, base_url=base_url, model=model)
+
+        # The per-request model applies to the PRIMARY ONLY. A model name belongs
+        # to one provider, so carrying it into a failover guarantees a request no
+        # fallback can serve — and worse, it replaces the real error with a
+        # meaningless one.
+        #
+        # That is exactly how a Groq brain reported a Google failure: Groq was
+        # called with llama-3.3-70b-versatile and failed; 404 and "not found"
+        # count as failover-worthy, so the chain moved to the env-configured
+        # Gemini backend — still asking for llama-3.3-70b-versatile — and Google
+        # answered "models/llama-3.3-70b-versatile is not found". The Groq error
+        # was never surfaced at all, which is why the symptom pointed at the wrong
+        # vendor and stayed baffling.
+        #
+        # Each fallback now uses its own configured default model, which is the
+        # only name it can be relied on to serve.
         return await self._resilient(
-            lambda b: b.chat(messages, temperature=temperature, max_tokens=max_tokens, model=model),
+            lambda b: b.chat(
+                messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model=model if b is primary else None,
+            ),
             "chat",
-            primary=self._backend_for(provider, api_key=api_key, base_url=base_url, model=model))
+            primary=primary,
+        )
 
     async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
         return await self._resilient(lambda b: b.extract(prompt, response_schema), "extract")
