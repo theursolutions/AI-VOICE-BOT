@@ -328,11 +328,15 @@ Route::middleware(['auth', 'active.client'])
         // "Bring your own Twilio" setup wizard.
 
         // Brain & compute settings (LLM provider + CPU/GPU)
-        Route::get   ('/brain-settings',                   [App\Http\Controllers\Admin\BrainSettingsController::class, 'index'])->name('brain-settings.index');
-        Route::patch ('/brain-settings',                   [App\Http\Controllers\Admin\BrainSettingsController::class, 'update'])->name('brain-settings.update');
-        Route::post  ('/brain-settings/reload',            [App\Http\Controllers\Admin\BrainSettingsController::class, 'reload'])->name('brain-settings.reload');
-        Route::post  ('/brain-settings/toggle-brain',      [App\Http\Controllers\Admin\BrainSettingsController::class, 'toggleBrain'])->name('brain-settings.toggle-brain');
-        Route::post  ('/brain-settings/toggle-device',     [App\Http\Controllers\Admin\BrainSettingsController::class, 'toggleDevice'])->name('brain-settings.toggle-device');
+        // AI brain — which model serves this workspace, and bring-your-own-key.
+        // Replaces BrainSettingsController, which wrote LLM_PROVIDER and the API
+        // keys into voice-engine/.env: a file the app container does not have and
+        // the voice-engine container cannot read, applied to every client at once.
+        Route::get   ('/brain-settings',                   [App\Http\Controllers\Admin\ClientBrainsController::class, 'index'])->name('brain-settings.index');
+        Route::post  ('/brain-settings/choose',            [App\Http\Controllers\Admin\ClientBrainsController::class, 'choose'])->name('brain-settings.choose');
+        Route::post  ('/brain-settings/brains',            [App\Http\Controllers\Admin\ClientBrainsController::class, 'store'])->name('brain-settings.brains.store');
+        Route::post  ('/brain-settings/brains/{id}/verify',[App\Http\Controllers\Admin\ClientBrainsController::class, 'verify'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('brain-settings.brains.verify');
+        Route::delete('/brain-settings/brains/{id}',       [App\Http\Controllers\Admin\ClientBrainsController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('brain-settings.brains.destroy');
 
         // Skills (call-center routing categories)
         Route::get   ('/skills',                           [App\Http\Controllers\Admin\SkillWebController::class, 'index'])->name('skills.index');

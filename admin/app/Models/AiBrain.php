@@ -267,4 +267,48 @@ class AiBrain extends Model
     {
         return self::PRESETS[$this->preset] ?? self::PRESETS['custom'];
     }
+
+    /**
+     * Brand colour and monogram for a provider tile.
+     *
+     * Monograms rather than official logo paths, deliberately. Hand-authoring
+     * nine brand SVGs produces subtly wrong shapes, and a mangled logo looks
+     * worse than no logo — it reads as carelessness about someone else's mark.
+     * A letter tile in the provider's own colour is recognisable, honest, and
+     * cannot be wrong. Swap in official SVGs here when they are to hand;
+     * everything downstream reads this one method.
+     *
+     * @return array{mark:string, color:string, tint:string}
+     */
+    public function brandTile(): array
+    {
+        return self::brandTileFor($this->preset ?? 'custom');
+    }
+
+    /** @return array{mark:string, color:string, tint:string} */
+    public static function brandTileFor(?string $preset): array
+    {
+        $brands = [
+            'openai'     => ['AI', '#10A37F'],
+            'deepseek'   => ['DS', '#4D6BFE'],
+            'gemini'     => ['G',  '#1A73E8'],
+            'groq'       => ['GQ', '#F55036'],
+            'cerebras'   => ['CB', '#F04E23'],
+            'openrouter' => ['OR', '#6467F2'],
+            'together'   => ['TG', '#0F6FFF'],
+            'anthropic'  => ['A',  '#D97757'],
+            'ollama'     => ['LM', '#0F172A'],
+            'custom'     => ['··', '#64748B'],
+        ];
+
+        [$mark, $color] = $brands[$preset] ?? $brands['custom'];
+
+        return [
+            'mark'  => $mark,
+            'color' => $color,
+            // A 12%-alpha wash of the brand colour, so every tile sits at the
+            // same weight instead of nine saturated blocks fighting each other.
+            'tint'  => $color . '1F',
+        ];
+    }
 }
