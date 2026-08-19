@@ -138,9 +138,28 @@ class MemoryBuilder
             $messages[] = ['role' => 'system', 'content' => $known];
         }
 
-        // Retrieved reference data is built here but appended AFTER the history,
-        // not before it — see the note at the end of this method.
+        // Reference data sits BEFORE the history, as the last system block.
+        //
+        // It was briefly moved to the very end, after the user turns, on the
+        // theory that a provider caches by longest unchanged prefix and this
+        // block — re-retrieved every turn — was invalidating everything behind
+        // it. That reasoning was wrong twice over.
+        //
+        // Wrong on caching: a prefix is cached from message 0 forward, so a
+        // volatile block at position 2 does not stop positions 0 and 1 caching.
+        // Nothing was gained.
+        //
+        // Wrong on correctness, which is what actually broke: Gemini's
+        // OpenAI-compatible endpoint maps `system` onto systemInstruction, and a
+        // system block arriving AFTER the user turns has no valid place in that
+        // mapping — so the system content was dropped and the bot answered as a
+        // generic assistant, describing its own capabilities instead of the
+        // customer's business. A trailing system message is not portable; keep
+        // every system block ahead of the conversation.
         $context = $this->formatContext($contextResults);
+        if ($context !== '') {
+            $messages[] = ['role' => 'system', 'content' => $context];
+        }
 
         foreach ($recent as $msg) {
             $content = (string) $msg->content;
@@ -155,22 +174,6 @@ class MemoryBuilder
             }
 
             $messages[] = ['role' => $msg->role, 'content' => $content];
-        }
-
-        // Reference data goes LAST, after the history, for two reasons.
-        //
-        // Cost: providers cache a prompt by its longest unchanged PREFIX. This
-        // block is rebuilt from a fresh retrieval on every single turn, so
-        // sitting third it invalidated everything after it and nothing could
-        // ever cache. Behind the history, the prefix that stays stable across a
-        // conversation is the system prompt plus the known facts — which is the
-        // part worth caching, and the part that is re-sent every turn.
-        //
-        // Quality: retrieved passages are the answer to the question being
-        // asked, and they land immediately before it here rather than several
-        // thousand tokens upstream of it.
-        if ($context !== '') {
-            $messages[] = ['role' => 'system', 'content' => $context];
         }
 
         return $messages;
