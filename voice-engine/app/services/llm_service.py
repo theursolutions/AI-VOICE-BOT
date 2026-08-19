@@ -253,12 +253,36 @@ class _AnthropicBackend:
 # ---------------------------------------------------------------------------
 
 def _to_openai_messages(messages: List[ChatMessage]) -> List[Dict[str, str]]:
-    """OpenAI-format keeps system as a role in the messages list."""
-    return [
+    """OpenAI-format keeps system as a role in the messages list.
+
+    With one exception, and it is not cosmetic: a request carrying ONLY system
+    messages is rejected by Gemini's OpenAI-compatible endpoint with
+    "GenerateContentRequest.contents: contents is not specified". That layer maps
+    `system` onto systemInstruction, so a system-only request leaves `contents`
+    empty and there is nothing for the model to answer.
+
+    Every control-plane caller has that exact shape — one system message holding
+    the whole instruction. Tool routing, source routing, text-to-SQL and session
+    summarising all send it, which meant switching the platform to Gemini broke
+    every one of them at once, each failing quietly in its own catch block:
+    routing returned "no tool", summaries never wrote, SQL generation gave up.
+
+    So the last system message is re-labelled `user` when nothing else would give
+    the model anything to respond to. The instruction is unchanged; it simply
+    arrives somewhere the provider will read it. Fixed here rather than at the
+    seven call sites because it is a property of the wire format, not of any
+    caller — and a caller added tomorrow would otherwise hit it again.
+    """
+    out = [
         {"role": msg.role, "content": msg.content}
         for msg in messages
         if msg.content and msg.content.strip()
     ]
+
+    if out and not any(m["role"] in ("user", "assistant") for m in out):
+        out[-1] = {"role": "user", "content": out[-1]["content"]}
+
+    return out
 
 
 class _GroqBackend:
