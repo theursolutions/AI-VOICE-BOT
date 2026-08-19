@@ -1,3 +1,33 @@
+<style>
+    /* Section headings in the ops nav.
+       They were text-white/60 at text-xs with a shared my-4 divider, which put
+       the label and the rule at almost the same visual weight — so the eye read
+       one undifferentiated column instead of grouped sections. Now the rule is
+       faint, the label is brighter and tracked out, and the space above a group
+       is larger than the space below it, which is what makes the label belong to
+       the items under it rather than float between two lists. */
+    .ops-nav-sep {
+        height: 1px;
+        margin: 22px 20px 0;
+        background: linear-gradient(to right, rgba(255,255,255,.14), rgba(255,255,255,.02));
+    }
+    .ops-nav-group { padding: 14px 0 4px; }
+    .ops-nav-group__label {
+        padding-left: 20px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: .13em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,.55);
+    }
+    /* Collapsed rail (xl:down in this theme): the label would wrap to a stripe
+       of unreadable letters, so it is hidden and only the rule survives. */
+    @media (max-width: 1279px) {
+        .ops-nav-group { padding: 8px 0 2px; }
+        .ops-nav-group__label { display: none; }
+    }
+</style>
+
 @php
     // Helper — mark active section/link by current route name.
     $is = fn (...$names) => collect($names)->some(fn ($n) => request()->routeIs($n));
@@ -33,9 +63,9 @@
             </a>
         </li>
 
-        <li class="side-nav__devider my-4"></li>
-        <li class="side-menu__title-section">
-            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Activity</div>
+        <li class="ops-nav-sep"></li>
+        <li class="side-menu__title-section ops-nav-group">
+            <div class="ops-nav-group__label">Activity</div>
         </li>
         <li>
             <a href="{{ route('ops.sessions.index') }}" class="side-menu {{ $is('ops.sessions.*') ? 'side-menu--active' : '' }}">
@@ -50,9 +80,9 @@
             </a>
         </li>
 
-        <li class="side-nav__devider my-4"></li>
-        <li class="side-menu__title-section">
-            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Resources</div>
+        <li class="ops-nav-sep"></li>
+        <li class="side-menu__title-section ops-nav-group">
+            <div class="ops-nav-group__label">Resources</div>
         </li>
         <li>
             <a href="{{ route('ops.voices.index') }}" class="side-menu {{ $is('ops.voices.*') ? 'side-menu--active' : '' }}">
@@ -67,9 +97,9 @@
             </a>
         </li>
 
-        <li class="side-nav__devider my-4"></li>
-        <li class="side-menu__title-section">
-            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Platform</div>
+        <li class="ops-nav-sep"></li>
+        <li class="side-menu__title-section ops-nav-group">
+            <div class="ops-nav-group__label">Platform</div>
         </li>
         <li>
             <a href="{{ route('ops.clients.index') }}" class="side-menu {{ $is('ops.clients.*') ? 'side-menu--active' : '' }}">
@@ -97,14 +127,14 @@
         </li>
         <li>
             <a href="{{ route('ops.ai-brains.index') }}" class="side-menu {{ $is('ops.ai-brains.*') ? 'side-menu--active' : '' }}">
-                <div class="side-menu__icon"><i data-lucide="brain-circuit"></i></div>
+                <div class="side-menu__icon"><i data-lucide="cpu"></i></div>
                 <div class="side-menu__title">AI Brains</div>
             </a>
         </li>
 
-        <li class="side-nav__devider my-4"></li>
-        <li class="side-menu__title-section">
-            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Billing</div>
+        <li class="ops-nav-sep"></li>
+        <li class="side-menu__title-section ops-nav-group">
+            <div class="ops-nav-group__label">Billing</div>
         </li>
         <li>
             <a href="{{ route('ops.billing.plans.index') }}" class="side-menu {{ $is('ops.billing.plans.*', 'ops.billing.prices.*') ? 'side-menu--active' : '' }}">
@@ -125,9 +155,9 @@
             </a>
         </li>
 
-        <li class="side-nav__devider my-4"></li>
-        <li class="side-menu__title-section">
-            <div class="side-menu__title text-white/60 text-xs uppercase tracking-wider pl-5">Marketing Site</div>
+        <li class="ops-nav-sep"></li>
+        <li class="side-menu__title-section ops-nav-group">
+            <div class="ops-nav-group__label">Marketing Site</div>
         </li>
         <li>
             <a href="{{ route('ops.visitors.index') }}" class="side-menu {{ $is('ops.visitors.*') ? 'side-menu--active' : '' }}">
