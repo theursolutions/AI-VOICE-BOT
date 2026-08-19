@@ -27,6 +27,7 @@ that's a no-op there.
 
 from __future__ import annotations
 
+import hashlib
 import asyncio
 import json
 import logging
@@ -537,11 +538,64 @@ class LLMService:
         self._timeout = timeout
         self._overrides: Dict[str, Any] = {}
 
-    def _backend_for(self, provider: Optional[str]):
-        """Resolve the backend for an optional per-request provider override."""
-        if not provider:
+    def _backend_for(self, provider: Optional[str], api_key: Optional[str] = None,
+                     base_url: Optional[str] = None, model: Optional[str] = None):
+        """Resolve the backend for an optional per-request provider override.
+
+        With api_key/base_url supplied, the caller is describing a brain
+        configured in the admin rather than one this service has env for — the
+        bring-your-own-key path. provider="openai_compat" plus those two fields
+        fully specify any provider speaking the OpenAI chat-completions format,
+        which is why a client pasting a DeepSeek key needs no code here.
+
+        Those backends are cached under a key that includes the credentials, so
+        two clients on the same provider with different keys never share a
+        client object. Getting that wrong would route one tenant's conversation
+        through another tenant's account — a billing and privacy failure, not a
+        performance one.
+        """
+        if not provider and not api_key:
             return self._backend
-        provider = provider.lower()
+
+        provider = (provider or "").lower()
+
+        # A per-request credential means we cannot reuse the env-configured
+        # backend even when the provider name matches.
+        if api_key or base_url:
+            # Hashed rather than raw: this key is logged on build and held in a
+            # dict for the process lifetime, and neither is a place for a
+            # customer's API key to sit in cleartext.
+            fingerprint = hashlib.sha256(
+                f"{provider}|{base_url or ''}|{api_key or ''}|{model or ''}".encode()
+            ).hexdigest()[:16]
+            cache_key = f"byok:{fingerprint}"
+
+            if cache_key not in self._overrides:
+                settings = get_settings()
+                if provider == "anthropic":
+                    backend: Any = _AnthropicBackend(
+                        api_key or settings.anthropic_api_key,
+                        model or settings.anthropic_model,
+                        settings.anthropic_max_tokens, self._timeout)
+                elif provider == "ollama":
+                    backend = _OllamaBackend(
+                        base_url or settings.ollama_base_url,
+                        model or settings.ollama_model,
+                        settings.ollama_max_tokens,
+                        max(self._timeout, settings.ollama_timeout))
+                else:
+                    # Everything else goes through the generic compat client.
+                    backend = _OpenAICompatBackend(
+                        base_url or settings.gemini_base_url,
+                        api_key or "",
+                        model or settings.gemini_model,
+                        settings.gemini_max_tokens, self._timeout)
+
+                self._overrides[cache_key] = backend
+                logger.info("LLM per-request backend built: provider=%s fp=%s", provider, fingerprint)
+
+            return self._overrides[cache_key]
+
         if provider == self.provider:
             return self._backend
         if provider not in self._overrides:
@@ -621,10 +675,12 @@ class LLMService:
 
     async def chat(self, messages: List[ChatMessage], generation_config=None, provider: Optional[str] = None,
                    temperature: Optional[float] = None, max_tokens: Optional[int] = None,
-                   model: Optional[str] = None) -> ChatResult:
+                   model: Optional[str] = None, api_key: Optional[str] = None,
+                   base_url: Optional[str] = None) -> ChatResult:
         return await self._resilient(
             lambda b: b.chat(messages, temperature=temperature, max_tokens=max_tokens, model=model),
-            "chat", primary=self._backend_for(provider))
+            "chat",
+            primary=self._backend_for(provider, api_key=api_key, base_url=base_url, model=model))
 
     async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
         return await self._resilient(lambda b: b.extract(prompt, response_schema), "extract")

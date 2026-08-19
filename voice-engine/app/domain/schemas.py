@@ -55,6 +55,19 @@ class LLMRequest(BaseModel):
     # calls request a stronger local model (e.g. qwen2.5:7b) while chat stays
     # on a fast one. None = the provider's configured default model.
     model: Optional[str] = None
+    # Per-request CREDENTIALS, for brains configured in the admin rather than in
+    # this service's env.
+    #
+    # This is what makes bring-your-own-brain work without a code change per
+    # vendor: with provider="openai_compat", these two fields fully describe any
+    # provider speaking the OpenAI chat-completions wire format — DeepSeek,
+    # OpenRouter, Together, Cerebras, Gemini. The caller owns the key; this
+    # service never stores it.
+    #
+    # Absent = fall back to the configured provider and its env key, so every
+    # existing caller is unaffected.
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 class LLMResponse(BaseModel):

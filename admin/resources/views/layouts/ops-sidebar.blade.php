@@ -95,6 +95,12 @@
                 <div class="side-menu__title">Modules</div>
             </a>
         </li>
+        <li>
+            <a href="{{ route('ops.ai-brains.index') }}" class="side-menu {{ $is('ops.ai-brains.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="brain-circuit"></i></div>
+                <div class="side-menu__title">AI Brains</div>
+            </a>
+        </li>
 
         <li class="side-nav__devider my-4"></li>
         <li class="side-menu__title-section">
