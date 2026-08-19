@@ -185,6 +185,19 @@ class ClientBrainsController extends Controller
             if ($text === '') {
                 throw new \RuntimeException('Your provider answered but sent no text back. Check the model name.');
             }
+
+            // Confirm THEIR provider answered, not our fallback chain. Without
+            // this a dead key still "connects" — the engine quietly falls back to
+            // a platform brain, the client believes their account is serving their
+            // conversations, and we pay for every message they send.
+            $used = (string) ($resp['model'] ?? '');
+
+            if ($brain->model && $used !== '' && ! str_contains(strtolower($used), strtolower($brain->model))) {
+                throw new \RuntimeException(
+                    "The reply came from “{$used}”, not your “{$brain->model}” — so your provider "
+                    . 'refused the request. Check the API key and model name.'
+                );
+            }
         } catch (\Throwable $e) {
             $reason = $this->readableFailure($e);
 

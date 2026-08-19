@@ -190,6 +190,38 @@ class AiBrainsController extends Controller
 
         $text = trim((string) ($resp['text'] ?? ''));
 
+        // Did THIS brain answer, or did the chain answer for it?
+        //
+        // The engine falls back to another provider when the primary fails, so a
+        // 200 with text proves only that SOMETHING replied. That is how a Groq
+        // brain with an invalid key came to be marked verified: Groq returned 401,
+        // the chain fell through to another backend, text came back, and this
+        // method called it a pass. The brain then went live at the top of the
+        // priority order and degraded every message to a slow fallback.
+        //
+        // The engine reports the model it actually used, so a mismatch against the
+        // model we asked for means a different backend served the request — which
+        // is a failed verification, however good the text was.
+        $used = (string) ($resp['model'] ?? '');
+
+        if ($brain->model && $used !== '' && ! str_contains(strtolower($used), strtolower($brain->model))) {
+            $brain->forceFill([
+                'is_verified'  => false,
+                'is_active'    => false,
+                'verify_error' => "This brain did not answer — the request fell back to “{$used}”. "
+                    . 'Check its key, model name and endpoint.',
+                'updated_at'   => time(),
+            ])->save();
+
+            BrainResolver::forget();
+
+            return response()->json([
+                'ok'      => false,
+                'message' => "Not this brain: the reply came from “{$used}” instead of “{$brain->model}”, "
+                    . 'so the request fell back to another provider. Check the key, model and endpoint.',
+            ]);
+        }
+
         // A 200 with no text is still a failure. Some providers answer an
         // unusable request cleanly, and treating that as success would let a
         // brain that returns nothing sit at the top of the chain.
