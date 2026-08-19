@@ -353,7 +353,10 @@ class AiBrainsController extends Controller
             'name'         => ['required', 'string', 'max:120'],
             'preset'       => ['required', 'string', 'in:' . implode(',', array_keys(AiBrain::PRESETS))],
             'kind'         => ['required', 'string', 'in:openai_compat,anthropic,ollama'],
-            'base_url'     => ['nullable', 'string', 'max:255', 'url'],
+            // Required for the generic compat kind, because there is no sane
+            // default: the engine cannot guess an endpoint, and silently picking
+            // one sends the request to the wrong vendor entirely.
+            'base_url'     => ['nullable', 'string', 'max:255', 'url', 'required_if:kind,openai_compat'],
             'model'        => ['nullable', 'string', 'max:120'],
             'api_key'      => ['nullable', 'string', 'max:512'],
             'max_tokens'   => ['required', 'integer', 'min:256', 'max:32000'],
