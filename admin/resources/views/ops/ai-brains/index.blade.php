@@ -149,7 +149,9 @@
     .brn-fld small { font-size:10.5px; color:#94a3b8; line-height:1.45; }
 </style>
 
-<div class="brn-head">
+<div class="content">
+
+<div class="brn-head mt-6">
     <div>
         <h1 class="brn-head__t">AI Brains</h1>
         <p class="brn-head__d">
@@ -280,6 +282,8 @@
                     @endif
 
                     <div class="brn-c__acts">
+                        @php $edit = $b->only(['id', 'name', 'preset', 'kind', 'base_url', 'model', 'max_tokens', 'priority', 'quota_tokens', 'quota_window', 'public_label']); @endphp
+                        <button class="brn-b" onclick='brnEdit(@json($edit))'>Edit</button>
                         <button class="brn-b" onclick="brnTest({{ $b->id }}, this)">Test</button>
 
                         <form method="POST" action="{{ route('ops.ai-brains.toggle', $b->id) }}" style="display:inline;">
@@ -347,11 +351,15 @@
 </div>
 @endif
 
+</div>{{-- /.content --}}
+
 {{-- ── add-brain modal ───────────────────────────────────────────────── --}}
 <div class="brn-ov" id="brnOverlay" role="dialog" aria-modal="true" aria-labelledby="brnModalTitle">
     <div class="brn-m" role="document">
-        <form method="POST" action="{{ route('ops.ai-brains.store') }}">
+        <form method="POST" action="{{ route('ops.ai-brains.store') }}" id="brnForm">
             @csrf
+            {{-- Swapped to PATCH by brnEdit(); Laravel reads _method to route it. --}}
+            <input type="hidden" name="_method" id="brnMethod" value="POST">
             <div class="brn-m__head">
                 <span class="brn-m__t" id="brnModalTitle">Add a brain</span>
                 <button type="button" class="brn-m__x" onclick="brnClose()" aria-label="Close">&times;</button>
@@ -392,7 +400,7 @@
                     <div class="brn-fld">
                         <label for="api_key">API key</label>
                         <input name="api_key" id="api_key" maxlength="512" autocomplete="off" placeholder="sk-…">
-                        <small>Encrypted at rest. Never shown again after saving.</small>
+                        <small id="brnKeyNote">Encrypted at rest. Never shown again after saving.</small>
                     </div>
 
                     <div class="brn-fld brn-fld--wide">
@@ -436,7 +444,7 @@
 
             <div class="brn-m__foot">
                 <button type="button" class="brn-b" onclick="brnClose()">Cancel</button>
-                <button class="brn-cta" style="box-shadow:none;">Add brain</button>
+                <button class="brn-cta" style="box-shadow:none;" id="brnSubmit">Add brain</button>
             </div>
         </form>
     </div>
@@ -452,12 +460,55 @@ const BRN_PRESETS = @json($presets);
    the form is usable without a mouse. */
 let brnLastFocus = null;
 
+const BRN_STORE_URL = '{{ route('ops.ai-brains.store') }}';
+const BRN_BASE_URL  = '{{ url('admin/ai-brains') }}';
+
 function brnOpen() {
     brnLastFocus = document.activeElement;
+    document.getElementById('brnModalTitle').textContent = 'Add a brain';
+    document.getElementById('brnSubmit').textContent = 'Add brain';
+    document.getElementById('brnForm').action = BRN_STORE_URL;
+    document.getElementById('brnMethod').value = 'POST';
+    document.getElementById('brnForm').reset();
+    document.getElementById('brnKeyNote').textContent = 'Encrypted at rest. Never shown again after saving.';
+    brnShow();
+    brnPreset(document.getElementById('preset').value);
+}
+
+/* Edit reuses the same modal. The key field stays EMPTY and blank means "leave it
+   alone" — the server never sends a stored key back to the browser, so
+   pre-filling is impossible and treating empty as "delete" would wipe a working
+   credential on every unrelated edit. */
+function brnEdit(b) {
+    brnLastFocus = document.activeElement;
+    document.getElementById('brnModalTitle').textContent = 'Edit ' + b.name;
+    document.getElementById('brnSubmit').textContent = 'Save changes';
+    document.getElementById('brnForm').action = BRN_BASE_URL + '/' + b.id;
+    document.getElementById('brnMethod').value = 'PATCH';
+
+    document.getElementById('preset').value       = b.preset || 'custom';
+    brnPreset(b.preset || 'custom');
+
+    document.getElementById('name').value         = b.name || '';
+    document.getElementById('kind').value         = b.kind || 'openai_compat';
+    document.getElementById('base_url').value     = b.base_url || '';
+    document.getElementById('model').value        = b.model || '';
+    document.getElementById('max_tokens').value   = b.max_tokens || 4096;
+    document.getElementById('priority').value     = b.priority || 10;
+    document.getElementById('quota_tokens').value = b.quota_tokens || '';
+    document.getElementById('quota_window').value = b.quota_window || 'month';
+    document.getElementById('public_label').value = b.public_label || '';
+    document.getElementById('api_key').value      = '';
+    document.getElementById('brnKeyNote').textContent =
+        'Leave blank to keep the current key. Changing it requires testing again.';
+
+    brnShow();
+}
+
+function brnShow() {
     document.getElementById('brnOverlay').classList.add('is-open');
     document.body.style.overflow = 'hidden';
-    brnPreset(document.getElementById('preset').value);
-    document.getElementById('preset').focus();
+    document.getElementById('name').focus();
 }
 
 function brnClose() {

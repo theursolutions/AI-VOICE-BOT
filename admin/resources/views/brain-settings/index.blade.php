@@ -2,580 +2,378 @@
 
 @section('content')
 <style>
-    /* ── Page chrome ───────────────────────────────────────────────── */
-    .tva-bs-page  { padding-bottom: 100px; }
+    .cb-hero {
+        background: var(--tva-gradient); color:#fff; border-radius:14px;
+        padding:22px 26px; margin-bottom:22px; display:flex; align-items:center; gap:18px;
+        box-shadow:0 10px 30px -10px rgba(0,0,0,.35);
+    }
+    .cb-hero__icon {
+        width:56px; height:56px; border-radius:14px; flex-shrink:0;
+        background:rgba(255,255,255,.18); border:2px solid rgba(255,255,255,.3);
+        display:flex; align-items:center; justify-content:center; font-size:26px;
+    }
+    .cb-hero h1 { font-size:19px; font-weight:700; margin:0; }
+    .cb-hero p { font-size:12.5px; opacity:.92; margin:4px 0 0; line-height:1.55; max-width:70ch; }
 
-    .tva-bs-hero {
-        background: var(--tva-gradient);
-        color: #fff;
-        border-radius: 14px;
-        padding: 22px 26px;
-        margin-bottom: 22px;
-        box-shadow: 0 10px 30px -10px rgba(0,0,0,.35);
-        display: flex; align-items: center; gap: 18px;
-    }
-    .tva-bs-hero__icon {
-        width: 56px; height: 56px; border-radius: 14px;
-        background: rgba(255,255,255,.18); color: #fff;
-        display:flex; align-items:center; justify-content:center;
-        flex-shrink:0; font-size: 28px;
-        border: 2px solid rgba(255,255,255,.3);
-    }
-    .tva-bs-hero__title { font-size: 20px; font-weight: 700; }
-    .tva-bs-hero__sub   { font-size: 13px; opacity: .9; margin-top: 4px; }
+    .cb-sec { margin-bottom:26px; }
+    .cb-sec__head { display:flex; align-items:baseline; justify-content:space-between; gap:14px; margin-bottom:12px; flex-wrap:wrap; }
+    .cb-sec__t { font-size:14.5px; font-weight:650; color:#0f172a; }
+    .cb-sec__n { font-size:11.5px; color:#94a3b8; }
 
-    /* ── Card primitive ────────────────────────────────────────────── */
-    .tva-bs-card {
-        background:#fff; border:1px solid #e2e8f0; border-radius:14px;
-        padding: 22px 24px;
-        margin-bottom: 18px;
+    /* ── current brain, stated once and plainly ─────────────────────────── */
+    .cb-now {
+        background:#fff; border:1px solid #e6ecf1; border-left:3px solid var(--tva-accent, #0b6e5b);
+        border-radius:13px; padding:20px 22px; display:flex; align-items:center; gap:18px; flex-wrap:wrap;
     }
-    .tva-bs-card__head {
-        display:flex; align-items:center; gap:10px;
-        margin-bottom: 18px; padding-bottom: 14px;
-        border-bottom: 1px solid #e2e8f0;
-    }
-    .tva-bs-card__icon {
-        width: 36px; height: 36px; border-radius: 10px;
-        background: #eef2ff; color: #6366f1;
-        display:flex; align-items:center; justify-content:center;
-        flex-shrink:0;
-    }
-    .tva-bs-card__title    { font-size:15px; font-weight:600; color:#0f172a; line-height: 1.2; }
-    .tva-bs-card__subtitle { font-size:12px; color:#64748b; margin-top: 2px; }
+    .cb-now__l { font:600 10.5px ui-monospace,Menlo,monospace; letter-spacing:.1em; text-transform:uppercase; color:#94a3b8; }
+    .cb-now__v { font-size:20px; font-weight:700; color:#0f172a; margin-top:5px; }
+    .cb-now__s { font-size:12.5px; color:#64748b; margin-top:4px; line-height:1.5; }
 
-    /* ── Provider grid ─────────────────────────────────────────────── */
-    .tva-providers { display:grid; grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
-    @media (min-width: 768px) { .tva-providers { grid-template-columns: repeat(4, 1fr); } }
+    /* ── brain cards ───────────────────────────────────────────────────── */
+    .cb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(268px,1fr)); gap:14px; }
 
-    .tva-prov-card {
-        position: relative;
-        background:#fff; border:2px solid #e2e8f0; border-radius:12px;
-        padding: 16px 14px;
-        text-align: center;
-        cursor: pointer;
-        transition: all .15s;
+    .cb-c {
+        position:relative; background:#fff; border:1.5px solid #e6ecf1; border-radius:14px;
+        padding:18px; text-align:left; cursor:pointer; width:100%;
+        font-family:inherit; transition:border-color .15s, box-shadow .15s, transform .1s;
     }
-    .tva-prov-card:hover { border-color:#a5b4fc; background:#fafbff; }
-    .tva-prov-card.is-selected {
-        border-color: var(--tva-primary, #6366f1);
-        background: linear-gradient(135deg,#eef2ff,#faf5ff);
-        box-shadow: 0 6px 18px -6px rgba(99,102,241,.35);
+    .cb-c:hover { border-color:#cbd5e1; box-shadow:0 2px 4px rgba(15,23,42,.04), 0 14px 28px -18px rgba(15,23,42,.3); }
+    .cb-c:active { transform:translateY(1px); }
+    .cb-c.is-on { border-color:#0b6e5b; box-shadow:0 0 0 3px rgba(11,110,91,.1); }
+    .cb-c:focus-visible { outline:none; border-color:#0b6e5b; box-shadow:0 0 0 3px rgba(11,110,91,.22); }
+
+    /* Brand tile: the provider's monogram in its own colour on a 12% wash of the
+       same hue, so nine providers sit at one visual weight instead of nine
+       saturated blocks competing. */
+    .cb-c__tile {
+        width:44px; height:44px; border-radius:11px; display:flex; align-items:center;
+        justify-content:center; font:700 15px ui-monospace,Menlo,monospace; margin-bottom:13px;
     }
-    .tva-prov-card__logo {
-        width: 44px; height: 44px; border-radius: 10px;
-        margin: 0 auto 8px;
-        display:flex; align-items:center; justify-content:center;
-        font-size: 22px; font-weight: 700;
+    .cb-c__name { font-size:14.5px; font-weight:650; color:#0f172a; line-height:1.3; word-break:break-word; }
+    .cb-c__sub { font-size:12px; color:#94a3b8; margin-top:3px; }
+
+    .cb-c__foot { margin-top:14px; padding-top:12px; border-top:1px solid #f1f5f9; display:flex; align-items:center; justify-content:space-between; gap:10px; }
+    .cb-tag { font:700 9.5px ui-monospace,Menlo,monospace; letter-spacing:.06em; text-transform:uppercase; padding:3px 8px; border-radius:5px; }
+    .cb-tag--on { background:#dcfce7; color:#15803d; }
+    .cb-tag--yours { background:#e0f2fe; color:#0369a1; }
+    .cb-tag--auto { background:#eef2f6; color:#64748b; }
+    .cb-tag--wait { background:#fdf3d7; color:#92400e; }
+    .cb-tag--bad { background:#fee2e2; color:#b91c1c; }
+    .cb-c__pick { font:600 11.5px system-ui,sans-serif; color:#0b6e5b; }
+
+    .cb-c__err {
+        margin-top:12px; padding:8px 10px; border-radius:7px; background:#fef6f6;
+        border:1px solid #f7d9d9; color:#b91c1c; font-size:11.5px; line-height:1.45; word-break:break-word;
     }
-    .tva-prov-card__name { font-size:13px; font-weight:600; color:#0f172a; }
-    .tva-prov-card__tag  { font-size:10px; color:#64748b; margin-top:2px; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
-    .tva-prov-card__check {
-        position: absolute; top: 8px; right: 8px;
-        width: 18px; height: 18px; border-radius: 50%;
-        background:#10b981; color:#fff;
-        display:none; align-items:center; justify-content:center;
-        font-size: 10px;
+
+    .cb-b {
+        font:600 11.5px system-ui,sans-serif; padding:6px 11px; border-radius:7px;
+        border:1px solid #e2e8f0; background:#fff; color:#334155; cursor:pointer;
     }
-    .tva-prov-card.is-selected .tva-prov-card__check { display:flex; }
+    .cb-b:hover { background:#f8fafc; }
+    .cb-b--go { background:#0b6e5b; border-color:#0b6e5b; color:#fff; }
+    .cb-b--del { color:#b91c1c; }
 
-    .tva-prov-logo--groq      { background:#fff5d1; color:#92400e; border:1px solid #fde68a; }
-    .tva-prov-logo--anthropic { background:#ffedd5; color:#9a3412; border:1px solid #fed7aa; }
-    .tva-prov-logo--gemini    { background:#dbeafe; color:#1e40af; border:1px solid #93c5fd; }
-    .tva-prov-logo--ollama    { background:#dcfce7; color:#166534; border:1px solid #86efac; }
-
-    /* ── Field group ───────────────────────────────────────────────── */
-    .tva-bs-field { margin-bottom: 14px; }
-    .tva-bs-label {
-        font-size:11px; color:#64748b; text-transform:uppercase;
-        letter-spacing:.05em; font-weight:600; margin-bottom:6px; display:block;
+    /* ── add-your-own ──────────────────────────────────────────────────── */
+    .cb-add {
+        background:#fff; border:1.5px dashed #d8e2de; border-radius:14px; padding:18px;
+        display:flex; flex-direction:column; align-items:flex-start; justify-content:center;
+        gap:8px; cursor:pointer; width:100%; font-family:inherit; text-align:left;
+        transition:border-color .15s, background .15s;
     }
-    .tva-bs-help { font-size:11px; color:#94a3b8; margin-top:5px; line-height: 1.45; }
-    .tva-bs-help code { background:#f1f5f9; color:#475569; padding:1px 6px; border-radius:4px; font-size:11px; }
-
-    /* ── Device pill row ───────────────────────────────────────────── */
-    .tva-pill-row { display:grid; grid-template-columns: repeat(2, 1fr); gap:10px; }
-    .tva-pill {
-        background:#f8fafc; border:2px solid #e2e8f0; border-radius:10px;
-        padding: 14px 12px; text-align:center; cursor:pointer;
-        transition: all .15s; font-size:13px; font-weight:600; color:#334155;
+    .cb-add:hover { border-color:#0b6e5b; background:#f6fbf9; }
+    .cb-add__plus {
+        width:44px; height:44px; border-radius:11px; background:#e2f0eb; color:#0b6e5b;
+        display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:300;
     }
-    .tva-pill:hover { background:#f1f5f9; }
-    .tva-pill.is-selected {
-        background:#eef2ff; border-color: var(--tva-primary, #6366f1);
-        color:#3730a3; box-shadow: 0 4px 12px -4px rgba(99,102,241,.3);
+    .cb-add__t { font-size:14px; font-weight:650; color:#0f172a; }
+    .cb-add__d { font-size:12px; color:#94a3b8; line-height:1.45; }
+
+    .cb-note { padding:12px 14px; border-radius:10px; font-size:12.5px; line-height:1.55; margin-bottom:16px; }
+    .cb-note--ok   { background:#f0fdf4; border:1px solid #bbf7d0; color:#15803d; }
+    .cb-note--err  { background:#fef2f2; border:1px solid #fecaca; color:#b91c1c; }
+    .cb-note--info { background:#f8fafc; border:1px solid #e6ecf1; color:#475569; }
+
+    /* ── modal ─────────────────────────────────────────────────────────── */
+    .cb-ov {
+        position:fixed; inset:0; z-index:9998; display:none; background:rgba(15,30,36,.55);
+        backdrop-filter:blur(2px); align-items:flex-start; justify-content:center;
+        padding:40px 18px; overflow-y:auto;
     }
-    .tva-pill__icon { font-size: 20px; margin-bottom: 4px; opacity: .7; }
-    .tva-pill.is-selected .tva-pill__icon { opacity: 1; }
+    .cb-ov.is-open { display:flex; }
+    .cb-m { background:#fff; border-radius:15px; width:100%; max-width:640px; box-shadow:0 24px 60px -18px rgba(15,23,42,.5); overflow:hidden; }
+    .cb-m__head { display:flex; align-items:center; justify-content:space-between; padding:18px 22px; border-bottom:1px solid #e6ecf1; }
+    .cb-m__t { font-size:16px; font-weight:650; color:#0f172a; }
+    .cb-m__x { background:none; border:none; font-size:22px; color:#94a3b8; cursor:pointer; padding:2px 6px; border-radius:6px; }
+    .cb-m__x:hover { background:#f1f5f9; color:#0f172a; }
+    .cb-m__body { padding:20px 22px; }
+    .cb-m__foot { display:flex; justify-content:flex-end; gap:9px; padding:15px 22px; border-top:1px solid #e6ecf1; background:#fbfcfd; }
 
-    /* ── Toggle row ────────────────────────────────────────────────── */
-    .tva-toggle {
-        display:flex; align-items:center; gap:14px;
-        padding: 14px 16px; background:#f8fafc;
-        border:1px solid #e2e8f0; border-radius:10px;
+    .cb-f { display:grid; grid-template-columns:1fr 1fr; gap:15px; }
+    @media (max-width:600px) { .cb-f { grid-template-columns:1fr; } }
+    .cb-fld { display:flex; flex-direction:column; gap:5px; }
+    .cb-fld--wide { grid-column:1/-1; }
+    .cb-fld label { font:600 11.5px system-ui,sans-serif; color:#334155; }
+    .cb-fld input, .cb-fld select {
+        padding:9px 11px; border:1px solid #dfe6ec; border-radius:8px;
+        font-size:13px; font-family:inherit; color:#0f172a; background:#fff; width:100%;
     }
-    .tva-toggle__main  { flex:1; }
-    .tva-toggle__label { font-size:13px; font-weight:600; color:#0f172a; }
-    .tva-toggle__hint  { font-size:11px; color:#64748b; margin-top:2px; line-height: 1.45; }
-    .tva-toggle__sw {
-        width:46px; height:26px; appearance:none;
-        background:#cbd5e1; border-radius:999px; cursor:pointer;
-        position:relative; transition: background .15s; flex-shrink:0;
-    }
-    .tva-toggle__sw::before {
-        content:''; position:absolute; top:3px; left:3px;
-        width:20px; height:20px; background:#fff; border-radius:50%;
-        transition: left .15s; box-shadow: 0 1px 3px rgba(0,0,0,.25);
-    }
-    .tva-toggle__sw:checked { background:#10b981; }
-    .tva-toggle__sw:checked::before { left:23px; }
-
-    /* ── Sticky save bar ───────────────────────────────────────────── */
-    .tva-bs-savebar {
-        position: sticky; bottom: 0; z-index: 10;
-        margin: 0 -16px -16px;
-        padding: 14px 24px;
-        background: rgba(255,255,255,.96);
-        backdrop-filter: blur(8px);
-        border-top: 1px solid #e2e8f0;
-        display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-    }
-    .tva-bs-savebar__status { font-size:12px; color:#64748b; }
-
-    /* ── Dark mode ─────────────────────────────────────────────────── */
-    html.dark .tva-bs-card { background:#1e293b; border-color:#334155; }
-    html.dark .tva-bs-card__head { border-bottom-color:#334155; }
-    html.dark .tva-bs-card__title { color:#f1f5f9; }
-    html.dark .tva-bs-card__subtitle { color:#94a3b8; }
-    html.dark .tva-bs-card__icon { background:#312e81; color:#a5b4fc; }
-
-    html.dark .tva-prov-card { background:#1e293b; border-color:#334155; }
-    html.dark .tva-prov-card:hover { background:#283449; }
-    html.dark .tva-prov-card.is-selected { background: linear-gradient(135deg,#312e81,#3b0764); }
-    html.dark .tva-prov-card__name { color:#f1f5f9; }
-    html.dark .tva-prov-card__tag  { color:#94a3b8; }
-
-    html.dark .tva-bs-label { color:#94a3b8; }
-    html.dark .tva-bs-help  { color:#64748b; }
-    html.dark .tva-bs-help code { background:#334155; color:#cbd5e1; }
-
-    html.dark .tva-pill { background:#0f172a; border-color:#334155; color:#cbd5e1; }
-    html.dark .tva-pill:hover { background:#1e293b; }
-    html.dark .tva-pill.is-selected { background:#312e81; color:#c7d2fe; }
-
-    html.dark .tva-toggle { background:#0f172a; border-color:#334155; }
-    html.dark .tva-toggle__label { color:#f1f5f9; }
-    html.dark .tva-toggle__hint { color:#94a3b8; }
-
-    html.dark .tva-bs-savebar { background: rgba(15,23,42,.92); border-top-color:#334155; }
-    html.dark .tva-bs-savebar__status { color:#94a3b8; }
+    .cb-fld input:focus, .cb-fld select:focus { outline:none; border-color:#0b6e5b; box-shadow:0 0 0 3px rgba(11,110,91,.13); }
+    .cb-fld small { font-size:10.5px; color:#94a3b8; line-height:1.45; }
 </style>
 
-@php
-    // Tiny helper so the providers grid can render concisely.
-    $provLogos = [
-        'groq'      => 'G',
-        'anthropic' => 'A',
-        'gemini'    => 'G',
-        'ollama'    => 'O',
-    ];
-    $provTags = [
-        'groq'      => 'Free · Fast',
-        'anthropic' => 'Paid · Best quality',
-        'gemini'    => 'Free tier',
-        'ollama'    => 'Local · Private',
-    ];
-@endphp
+<div class="content">
 
-<div class="content tva-bs-page">
+<div class="cb-hero mt-6">
+    <div class="cb-hero__icon">🧠</div>
+    <div>
+        <h1>AI Brain</h1>
+        <p>
+            The AI that reads and answers your customers' messages. We manage one for you by
+            default — or connect your own provider account and we will use that instead.
+        </p>
+    </div>
+</div>
 
-    {{-- ── Hero ─────────────────────────────────────────────────────── --}}
-    <div class="tva-bs-hero mt-6">
-        <div class="tva-bs-hero__icon">🧠</div>
-        <div class="flex-1">
-            <div class="tva-bs-hero__title">Brain & compute</div>
-            <div class="tva-bs-hero__sub">Pick which AI powers your bot and where it runs. Switch any time without code changes.</div>
+@if (session('success')) <div class="cb-note cb-note--ok">{{ session('success') }}</div> @endif
+@if (session('error'))   <div class="cb-note cb-note--err">{{ session('error') }}</div> @endif
+@if ($errors->any())     <div class="cb-note cb-note--err">{{ $errors->first() }}</div> @endif
+
+<div class="cb-sec">
+    <div class="cb-now">
+        <div style="flex:1;min-width:200px;">
+            <div class="cb-now__l">Answering your customers</div>
+            <div class="cb-now__v">
+                {{ $serving ? $serving->labelFor($client->id) : 'Managed by us' }}
+            </div>
+            <div class="cb-now__s">
+                @if ($serving && $serving->client_id)
+                    Running on your own provider account, so usage is billed to you directly.
+                @elseif ($serving)
+                    Included in your plan. Nothing to configure.
+                @else
+                    We are handling this for you. Nothing to configure.
+                @endif
+            </div>
         </div>
+        @if ($chosenId)
+            <form method="POST" action="{{ route('brain-settings.choose', ['client' => $client->slug]) }}">
+                @csrf
+                <input type="hidden" name="project_id" value="{{ $projectId }}">
+                <input type="hidden" name="brain" value="">
+                <button class="cb-b">Back to automatic</button>
+            </form>
+        @endif
+    </div>
+</div>
+
+<div class="cb-sec">
+    <div class="cb-sec__head">
+        <span class="cb-sec__t">Choose your AI</span>
+        <span class="cb-sec__n">Applies to new messages straight away</span>
     </div>
 
-    {{-- ── Quick switches (one-click, no save needed) ─────────────── --}}
-    @php
-        $isLocal  = $current['provider'] === 'ollama';
-        $isGpu    = $current['whisper_device'] === 'cuda';
-    @endphp
-    <style>
-        .tva-quick-row {
-            display:grid; gap:14px; grid-template-columns: 1fr;
-            margin-bottom: 22px;
-        }
-        @media (min-width: 768px) { .tva-quick-row { grid-template-columns: 1fr 1fr; } }
-
-        .tva-quick {
-            background:#fff; border:1px solid #e2e8f0; border-radius:14px;
-            padding: 18px 20px;
-            display:flex; align-items:center; gap:14px;
-            transition: all .15s;
-            box-shadow: 0 4px 10px -6px rgba(0,0,0,.1);
-        }
-        .tva-quick__icon {
-            width:48px; height:48px; border-radius:12px;
-            display:flex; align-items:center; justify-content:center;
-            font-size: 24px; flex-shrink:0;
-        }
-        .tva-quick__main  { flex:1; min-width:0; }
-        .tva-quick__label { font-size:12px; color:#64748b; text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
-        .tva-quick__value { font-size:18px; font-weight:700; color:#0f172a; margin-top:2px; }
-        .tva-quick__hint  { font-size:11px; color:#94a3b8; margin-top:2px; }
-
-        .tva-quick-btn {
-            border:none; border-radius:999px;
-            padding: 9px 16px; font-size:12px; font-weight:600;
-            cursor:pointer; flex-shrink:0;
-            background: var(--tva-gradient); color:#fff;
-            transition: transform .15s, box-shadow .15s, opacity .2s;
-        }
-        .tva-quick-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 14px -4px rgba(0,0,0,.25); }
-        .tva-quick-btn:disabled { opacity:.5; cursor:wait; }
-
-        .tva-quick--local  .tva-quick__icon { background:#dcfce7; color:#166534; }
-        .tva-quick--cloud  .tva-quick__icon { background:#fff5d1; color:#92400e; }
-        .tva-quick--cpu    .tva-quick__icon { background:#e0e7ff; color:#4338ca; }
-        .tva-quick--gpu    .tva-quick__icon { background:#fef3c7; color:#b45309; }
-
-        html.dark .tva-quick { background:#1e293b; border-color:#334155; }
-        html.dark .tva-quick__value { color:#f1f5f9; }
-    </style>
-
-    <div class="tva-quick-row">
-        {{-- Brain quick toggle --}}
-        <div class="tva-quick tva-quick--{{ $isLocal ? 'local' : 'cloud' }}" id="quick-brain">
-            <div class="tva-quick__icon">{{ $isLocal ? '🖥️' : '☁️' }}</div>
-            <div class="tva-quick__main">
-                <div class="tva-quick__label">Brain</div>
-                <div class="tva-quick__value" id="quick-brain-value">
-                    {{ $isLocal ? 'Local · Ollama' : 'Cloud · ' . ucfirst($current['provider']) }}
-                </div>
-                <div class="tva-quick__hint" id="quick-brain-hint">
-                    {{ $isLocal ? 'Switch to your last cloud provider' : 'Switch to local Ollama' }}
-                </div>
-            </div>
-            <button type="button" class="tva-quick-btn" data-action="brain">
-                <i data-lucide="arrow-left-right" class="w-3 h-3 inline -mt-0.5 mr-1"></i>
-                Switch
-            </button>
-        </div>
-
-        {{-- Device quick toggle --}}
-        <div class="tva-quick tva-quick--{{ $isGpu ? 'gpu' : 'cpu' }}" id="quick-device">
-            <div class="tva-quick__icon">{{ $isGpu ? '⚡' : '🖥️' }}</div>
-            <div class="tva-quick__main">
-                <div class="tva-quick__label">Compute</div>
-                <div class="tva-quick__value" id="quick-device-value">
-                    {{ $isGpu ? 'GPU (CUDA)' : 'CPU' }}
-                </div>
-                <div class="tva-quick__hint" id="quick-device-hint">
-                    {{ $isGpu ? 'Switch back to CPU' : 'Switch to GPU (faster replies)' }}
-                </div>
-            </div>
-            <button type="button" class="tva-quick-btn" data-action="device">
-                <i data-lucide="arrow-left-right" class="w-3 h-3 inline -mt-0.5 mr-1"></i>
-                Switch
-            </button>
-        </div>
-    </div>
-
-    <script>
-        (function () {
-            var routes = {
-                brain:  '{{ route('brain-settings.toggle-brain',  ['client' => $client->slug]) }}',
-                device: '{{ route('brain-settings.toggle-device', ['client' => $client->slug]) }}',
-            };
-            document.querySelectorAll('.tva-quick-btn').forEach(function (btn) {
-                btn.addEventListener('click', function () {
-                    var action = btn.dataset.action;
-                    var url = routes[action];
-                    var card = btn.closest('.tva-quick');
-                    var oldLabel = btn.innerHTML;
-                    btn.disabled = true;
-                    btn.innerHTML = '<i data-lucide="loader" class="w-3 h-3 inline -mt-0.5 mr-1"></i> Switching…';
-                    if (window.lucide) try { window.lucide.createIcons(); } catch(_) {}
-
-                    var fd = new FormData();
-                    fd.append('_token', '{{ csrf_token() }}');
-
-                    fetch(url, { method: 'POST', body: fd, credentials: 'same-origin' })
-                        .then(function (r) { return r.json(); })
-                        .then(function (data) {
-                            if (data.ok) {
-                                // Reload the page so all panels reflect new state.
-                                window.location.reload();
-                            } else {
-                                btn.disabled = false;
-                                btn.innerHTML = oldLabel;
-                                if (window.lucide) try { window.lucide.createIcons(); } catch(_) {}
-                                var msg = (data.reload && data.reload.error) || 'Reload failed';
-                                alert('Switch failed: ' + msg);
-                            }
-                        })
-                        .catch(function (err) {
-                            btn.disabled = false;
-                            btn.innerHTML = oldLabel;
-                            if (window.lucide) try { window.lucide.createIcons(); } catch(_) {}
-                            alert('Switch failed: ' + err.message);
-                        });
-                });
-            });
-        })();
-    </script>
-
-    @if (session('success'))
-        <div class="alert alert-success-soft show mb-4 flex items-center">
-            <i data-lucide="check-circle" class="w-4 h-4 mr-2"></i>
-            {{ session('success') }}
-        </div>
-    @endif
-
-    @if ($errors->any())
-        <div class="alert alert-danger-soft show mb-4">
-            @foreach ($errors->all() as $err) <div>{{ $err }}</div> @endforeach
-        </div>
-    @endif
-
-    <form method="POST" action="{{ route('brain-settings.update', ['client' => $client->slug]) }}" id="brain-form">
-        @csrf
-        @method('PATCH')
-
-        {{-- ── LLM provider card ────────────────────────────────────── --}}
-        <div class="tva-bs-card">
-            <div class="tva-bs-card__head">
-                <div class="tva-bs-card__icon" style="background:#fef3c7; color:#b45309;">
-                    <i data-lucide="wand" class="w-4 h-4"></i>
-                </div>
-                <div>
-                    <div class="tva-bs-card__title">Choose the AI brain</div>
-                    <div class="tva-bs-card__subtitle">Which LLM should answer the bot's messages?</div>
-                </div>
-            </div>
-
-            {{-- Provider cards --}}
-            <div class="tva-providers" id="provider-grid">
-                @foreach ($providers as $key => $meta)
-                    <label class="tva-prov-card {{ $current['provider']===$key ? 'is-selected' : '' }}" data-provider="{{ $key }}">
-                        <input type="radio" name="provider" value="{{ $key }}" hidden {{ $current['provider']===$key ? 'checked' : '' }}>
-                        <div class="tva-prov-card__check"><i data-lucide="check" class="w-3 h-3"></i></div>
-                        <div class="tva-prov-card__logo tva-prov-logo--{{ $key }}">{{ $provLogos[$key] ?? '?' }}</div>
-                        <div class="tva-prov-card__name">{{ $meta['label'] }}</div>
-                        <div class="tva-prov-card__tag">{{ $provTags[$key] ?? '' }}</div>
-                    </label>
-                @endforeach
-            </div>
-
-            {{-- Per-provider field blocks --}}
-            <div class="provider-section" data-provider="groq" style="display:none;">
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Groq API key</label>
-                    <input type="password" name="groq_api_key" value="{{ $current['groq_api_key'] }}" class="form-control" placeholder="gsk_...">
-                    <div class="tva-bs-help">Get a free key at <code>console.groq.com</code>.</div>
-                </div>
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Model</label>
-                    <input type="text" name="groq_model" value="{{ $current['groq_model'] }}" class="form-control">
-                    <div class="tva-bs-help">Try <code>llama-3.3-70b-versatile</code> for quality or <code>llama-3.1-8b-instant</code> for speed.</div>
-                </div>
-            </div>
-            <div class="provider-section" data-provider="anthropic" style="display:none;">
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Anthropic API key</label>
-                    <input type="password" name="anthropic_api_key" value="{{ $current['anthropic_api_key'] }}" class="form-control" placeholder="sk-ant-...">
-                </div>
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Model</label>
-                    <input type="text" name="anthropic_model" value="{{ $current['anthropic_model'] }}" class="form-control">
-                    <div class="tva-bs-help">e.g. <code>claude-opus-4-7</code>, <code>claude-sonnet-4-6</code>, <code>claude-haiku-4-5-20251001</code>.</div>
-                </div>
-            </div>
-            <div class="provider-section" data-provider="gemini" style="display:none;">
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Google API key</label>
-                    <input type="password" name="gemini_api_key" value="{{ $current['gemini_api_key'] }}" class="form-control" placeholder="AIza...">
-                </div>
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Model</label>
-                    <input type="text" name="gemini_model" value="{{ $current['gemini_model'] }}" class="form-control">
-                    <div class="tva-bs-help">e.g. <code>gemini-2.0-flash-lite</code> for cheap traffic, <code>gemini-2.5-flash</code> for quality.</div>
-                </div>
-            </div>
-            <div class="provider-section" data-provider="ollama" style="display:none;">
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Ollama base URL</label>
-                    <input type="text" name="ollama_base_url" value="{{ $current['ollama_base_url'] }}" class="form-control">
-                    <div class="tva-bs-help">Default <code>http://localhost:11434/v1</code>. Make sure Ollama is running.</div>
-                </div>
-                <div class="tva-bs-field">
-                    <label class="tva-bs-label">Model</label>
-                    <input type="text" name="ollama_model" value="{{ $current['ollama_model'] }}" class="form-control">
-                    <div class="tva-bs-help">Pull first with <code>ollama pull qwen2.5:7b</code>, then enter the model name here.</div>
-                </div>
-            </div>
-        </div>
-
-        {{-- ── Voice compute card ───────────────────────────────────── --}}
-        <div class="tva-bs-card">
-            <div class="tva-bs-card__head">
-                <div class="tva-bs-card__icon" style="background:#ecfdf5; color:#10b981;">
-                    <i data-lucide="cpu" class="w-4 h-4"></i>
-                </div>
-                <div>
-                    <div class="tva-bs-card__title">Voice compute</div>
-                    <div class="tva-bs-card__subtitle">Where speech recognition and text-to-speech run. GPU is ~10× faster.</div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
-                    <label class="tva-bs-label">Whisper STT device</label>
-                    <div class="tva-pill-row" id="device-row">
-                        <label class="tva-pill {{ $current['whisper_device']==='cpu' ? 'is-selected' : '' }}" data-device="cpu">
-                            <input type="radio" name="whisper_device" value="cpu" hidden {{ $current['whisper_device']==='cpu' ? 'checked' : '' }}>
-                            <div class="tva-pill__icon">🖥️</div>
-                            <div>CPU</div>
-                        </label>
-                        <label class="tva-pill {{ $current['whisper_device']==='cuda' ? 'is-selected' : '' }}" data-device="cuda">
-                            <input type="radio" name="whisper_device" value="cuda" hidden {{ $current['whisper_device']==='cuda' ? 'checked' : '' }}>
-                            <div class="tva-pill__icon">⚡</div>
-                            <div>GPU (CUDA)</div>
-                        </label>
+    <div class="cb-grid">
+        @foreach ($available as $b)
+            @php
+                $tile  = $b->brandTile();
+                $mine  = $b->client_id !== null;
+                $isNow = $serving && $serving->id === $b->id;
+                $picked = $chosenId === $b->id;
+            @endphp
+            <form method="POST" action="{{ route('brain-settings.choose', ['client' => $client->slug]) }}">
+                @csrf
+                <input type="hidden" name="project_id" value="{{ $projectId }}">
+                <input type="hidden" name="brain" value="{{ $b->id }}">
+                <button class="cb-c {{ $isNow ? 'is-on' : '' }}" type="submit">
+                    <div class="cb-c__tile" style="background:{{ $tile['tint'] }};color:{{ $tile['color'] }};">
+                        {{ $tile['mark'] }}
                     </div>
+                    <div class="cb-c__name">{{ $b->labelFor($client->id) }}</div>
+                    <div class="cb-c__sub">
+                        {{ $mine ? ($b->presetConfig()['label'] ?? 'Your provider') . ' · your account' : 'Included in your plan' }}
+                    </div>
+                    <div class="cb-c__foot">
+                        @if ($isNow)      <span class="cb-tag cb-tag--on">In use</span>
+                        @elseif ($mine)   <span class="cb-tag cb-tag--yours">Yours</span>
+                        @else             <span class="cb-tag cb-tag--auto">Available</span>
+                        @endif
+                        <span class="cb-c__pick">{{ $isNow ? ($picked ? 'Pinned' : 'Automatic') : 'Use this' }}</span>
+                    </div>
+                </button>
+            </form>
+        @endforeach
+
+        <button class="cb-add" onclick="cbOpen()" type="button">
+            <div class="cb-add__plus">+</div>
+            <div class="cb-add__t">Use your own AI</div>
+            <div class="cb-add__d">Connect an OpenAI, DeepSeek, Gemini, Claude or other account with your own API key.</div>
+        </button>
+    </div>
+</div>
+
+@if ($ownBrains->isNotEmpty())
+<div class="cb-sec">
+    <div class="cb-sec__head">
+        <span class="cb-sec__t">Your connected providers</span>
+        <span class="cb-sec__n">Billed directly to you</span>
+    </div>
+
+    <div class="cb-grid">
+        @foreach ($ownBrains as $b)
+            @php $tile = $b->brandTile(); @endphp
+            <div class="cb-c" style="cursor:default;">
+                <div class="cb-c__tile" style="background:{{ $tile['tint'] }};color:{{ $tile['color'] }};">{{ $tile['mark'] }}</div>
+                <div class="cb-c__name">{{ $b->name }}</div>
+                <div class="cb-c__sub">{{ $b->presetConfig()['label'] ?? $b->preset }} · {{ $b->model ?: 'default model' }}</div>
+
+                @if ($b->verify_error)
+                    <div class="cb-c__err">{{ $b->verify_error }}</div>
+                @endif
+
+                <div class="cb-c__foot">
+                    @if ($b->is_verified && $b->is_active) <span class="cb-tag cb-tag--on">Connected</span>
+                    @elseif ($b->verify_error)             <span class="cb-tag cb-tag--bad">Not connected</span>
+                    @else                                  <span class="cb-tag cb-tag--wait">Needs testing</span>
+                    @endif
+
+                    <span style="display:flex;gap:6px;">
+                        <button class="cb-b {{ $b->is_verified ? '' : 'cb-b--go' }}" type="button"
+                                onclick="cbTest({{ $b->id }}, this)">
+                            {{ $b->is_verified ? 'Re-test' : 'Test &amp; connect' }}
+                        </button>
+                        <form method="POST" action="{{ route('brain-settings.brains.destroy', ['client' => $client->slug, 'id' => $b->id]) }}"
+                              onsubmit="return confirm('Disconnect “{{ $b->name }}”? We will handle your AI again.');">
+                            @csrf @method('DELETE')
+                            <button class="cb-b cb-b--del">Remove</button>
+                        </form>
+                    </span>
+                </div>
+            </div>
+        @endforeach
+    </div>
+</div>
+@endif
+
+</div>{{-- /.content --}}
+
+{{-- ── connect-your-own modal ────────────────────────────────────────── --}}
+<div class="cb-ov" id="cbOverlay" role="dialog" aria-modal="true" aria-labelledby="cbTitle">
+    <div class="cb-m">
+        <form method="POST" action="{{ route('brain-settings.brains.store', ['client' => $client->slug]) }}">
+            @csrf
+            <input type="hidden" name="project_id" value="{{ $projectId }}">
+
+            <div class="cb-m__head">
+                <span class="cb-m__t" id="cbTitle">Use your own AI</span>
+                <button type="button" class="cb-m__x" onclick="cbClose()" aria-label="Close">&times;</button>
+            </div>
+
+            <div class="cb-m__body">
+                <div class="cb-note cb-note--info" style="margin-bottom:18px;">
+                    Your key is encrypted and used only for your own conversations. Usage is billed by
+                    your provider directly to you, and we never charge for messages it handles.
                 </div>
 
-                <div>
-                    <label class="tva-bs-label">Whisper compute type</label>
-                    <select name="whisper_compute_type" class="form-select">
-                        @foreach ($computeTypes as $t)
-                            <option value="{{ $t }}" @selected($current['whisper_compute_type']===$t)>{{ $t }}</option>
-                        @endforeach
-                    </select>
-                    <div class="tva-bs-help">CPU → <code>int8</code> · GPU → <code>float16</code></div>
-                </div>
+                <div class="cb-f">
+                    <div class="cb-fld">
+                        <label for="cbPreset">Provider</label>
+                        <select name="preset" id="cbPreset" onchange="cbPreset(this.value)" required>
+                            @foreach ($presets as $key => $p)
+                                @if ($key !== 'ollama')
+                                    <option value="{{ $key }}">{{ $p['label'] }}</option>
+                                @endif
+                            @endforeach
+                        </select>
+                    </div>
 
-                <div>
-                    <label class="tva-bs-label">Whisper model size</label>
-                    <select name="whisper_model" class="form-select">
-                        @foreach ($whisperModels as $m)
-                            <option value="{{ $m }}" @selected($current['whisper_model']===$m)>{{ $m }}</option>
-                        @endforeach
-                    </select>
-                    <div class="tva-bs-help"><code>base</code> for speed, <code>large-v3</code> for best accuracy on GPU.</div>
-                </div>
+                    <div class="cb-fld">
+                        <label for="cbName">Name it</label>
+                        <input name="name" id="cbName" required maxlength="120" placeholder="Our OpenAI account">
+                        <small>So you recognise it later.</small>
+                    </div>
 
-                <div>
-                    <label class="tva-bs-label">Coqui TTS</label>
-                    <div class="tva-toggle">
-                        <div class="tva-toggle__main">
-                            <div class="tva-toggle__label">Run on GPU</div>
-                            <div class="tva-toggle__hint">Needs CUDA torch + ~2 GB VRAM.</div>
-                        </div>
-                        <input type="hidden" name="coqui_use_gpu" id="coqui_use_gpu_hidden" value="{{ $current['coqui_use_gpu'] }}">
-                        <input type="checkbox" class="tva-toggle__sw" id="coqui_use_gpu_chk" {{ $current['coqui_use_gpu']==='true' ? 'checked' : '' }}>
+                    <div class="cb-fld cb-fld--wide">
+                        <label for="cbKey">API key</label>
+                        <input name="api_key" id="cbKey" required maxlength="512" autocomplete="off" placeholder="sk-…">
+                        <small>Encrypted immediately. We never show it again, not even to you.</small>
+                    </div>
+
+                    <div class="cb-fld">
+                        <label for="cbModel">Model <span style="color:#94a3b8;font-weight:400;">(optional)</span></label>
+                        <input name="model" id="cbModel" list="cbModels" maxlength="120">
+                        <datalist id="cbModels"></datalist>
+                        <small>Leave blank for your provider's default.</small>
+                    </div>
+
+                    <div class="cb-fld">
+                        <label for="cbBase">Endpoint <span style="color:#94a3b8;font-weight:400;">(optional)</span></label>
+                        <input name="base_url" id="cbBase" maxlength="255">
+                        <small>Only change this for a custom or self-hosted endpoint.</small>
                     </div>
                 </div>
             </div>
-        </div>
 
-        {{-- ── Sticky save bar ──────────────────────────────────────── --}}
-        <div class="tva-bs-savebar">
-            <button type="submit" class="btn btn-primary shadow-md">
-                <i data-lucide="save" class="w-4 h-4 mr-2 inline"></i> Save settings
-            </button>
-            <button type="button" id="reload-btn" class="btn btn-warning shadow-md">
-                <i data-lucide="refresh-cw" class="w-4 h-4 mr-2 inline"></i> Reload Python
-            </button>
-            <span id="reload-status" class="tva-bs-savebar__status"></span>
-            <span class="ml-auto tva-bs-savebar__status">
-                <i data-lucide="info" class="w-3 h-3 inline -mt-0.5"></i>
-                Save first, then reload to apply.
-            </span>
-        </div>
-    </form>
+            <div class="cb-m__foot">
+                <button type="button" class="cb-b" onclick="cbClose()">Cancel</button>
+                <button class="cb-b cb-b--go" style="padding:9px 16px;">Add and continue</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
-    if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        try { window.lucide.createIcons(); }
-        catch (_) { if (window.lucide.icons) window.lucide.createIcons({ icons: window.lucide.icons }); }
-    }
+const CB_PRESETS = @json($presets);
+let cbLastFocus = null;
 
-    // Provider selection
-    (function () {
-        function apply(provider) {
-            document.querySelectorAll('.tva-prov-card').forEach(function (c) {
-                c.classList.toggle('is-selected', c.dataset.provider === provider);
-            });
-            document.querySelectorAll('.provider-section').forEach(function (s) {
-                s.style.display = (s.dataset.provider === provider) ? '' : 'none';
-            });
-        }
-        apply(document.querySelector('input[name="provider"]:checked')?.value || 'groq');
-        document.querySelectorAll('.tva-prov-card').forEach(function (c) {
-            c.addEventListener('click', function () {
-                c.querySelector('input').checked = true;
-                apply(c.dataset.provider);
-            });
-        });
-    })();
+function cbOpen() {
+    cbLastFocus = document.activeElement;
+    document.getElementById('cbOverlay').classList.add('is-open');
+    document.body.style.overflow = 'hidden';
+    cbPreset(document.getElementById('cbPreset').value);
+    document.getElementById('cbName').focus();
+}
 
-    // Device pills
-    (function () {
-        document.querySelectorAll('#device-row .tva-pill').forEach(function (t) {
-            t.addEventListener('click', function () {
-                document.querySelectorAll('#device-row .tva-pill').forEach(function (x) {
-                    x.classList.remove('is-selected');
-                });
-                t.classList.add('is-selected');
-                t.querySelector('input').checked = true;
-            });
-        });
-    })();
+function cbClose() {
+    document.getElementById('cbOverlay').classList.remove('is-open');
+    document.body.style.overflow = '';
+    if (cbLastFocus) cbLastFocus.focus();
+}
 
-    // GPU toggle ↔ hidden input
-    (function () {
-        var chk = document.getElementById('coqui_use_gpu_chk');
-        var hidden = document.getElementById('coqui_use_gpu_hidden');
-        chk.addEventListener('change', function () {
-            hidden.value = chk.checked ? 'true' : 'false';
-        });
-    })();
+/* mousedown, not click: a text selection that happens to end outside the panel
+   must not dismiss the form and discard a pasted API key. */
+document.getElementById('cbOverlay').addEventListener('mousedown', e => {
+    if (e.target.id === 'cbOverlay') cbClose();
+});
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && document.getElementById('cbOverlay').classList.contains('is-open')) cbClose();
+});
 
-    // Reload Python button
-    (function () {
-        var btn = document.getElementById('reload-btn');
-        var status = document.getElementById('reload-status');
-        btn.addEventListener('click', function () {
-            btn.disabled = true;
-            status.textContent = 'Reloading… up to 30 s if device changed';
-            status.style.color = '#64748b';
-            var fd = new FormData();
-            fd.append('_token', '{{ csrf_token() }}');
-            fetch('{{ route('brain-settings.reload', ['client' => $client->slug]) }}', {
-                method: 'POST', body: fd, credentials: 'same-origin'
-            })
-            .then(function (r) { return r.json(); })
-            .then(function (data) {
-                btn.disabled = false;
-                if (data.ok) {
-                    status.textContent = '✓ Reloaded';
-                    status.style.color = '#15803d';
-                } else {
-                    status.textContent = '✗ ' + (data.error || ('HTTP ' + data.code));
-                    status.style.color = '#b91c1c';
-                }
-            })
-            .catch(function (err) {
-                btn.disabled = false;
-                status.textContent = '✗ ' + err.message;
-                status.style.color = '#b91c1c';
-            });
-        });
-    })();
+function cbPreset(key) {
+    const p = CB_PRESETS[key];
+    if (!p) return;
+    document.getElementById('cbBase').value = p.base_url || '';
+    document.getElementById('cbModels').innerHTML =
+        (p.models || []).map(m => '<option value="' + m + '"></option>').join('');
+    const model = document.getElementById('cbModel');
+    if (!model.value && (p.models || []).length) model.value = p.models[0];
+}
+
+/* Test and connect in one action. A client has one intent — "use my AI" — and
+   splitting it into test-then-enable creates a state where they believe they are
+   on their own key and are not. */
+function cbTest(id, btn) {
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.textContent = 'Connecting…';
+
+    fetch('{{ url('c/' . $client->slug . '/brain-settings/brains') }}/' + id + '/verify', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' },
+    })
+    .then(r => r.json())
+    .then(d => { alert(d.ok ? d.message : 'Could not connect.\n\n' + d.message); window.location.reload(); })
+    .catch(() => { alert('Could not reach the server.'); btn.disabled = false; btn.innerHTML = original; });
+}
 </script>
 @endsection
