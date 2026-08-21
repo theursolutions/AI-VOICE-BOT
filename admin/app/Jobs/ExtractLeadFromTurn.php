@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Lead;
 use App\Models\Message;
 use App\Models\Session;
+use App\Services\Conversation\BrainResolver;
 use App\Services\Conversation\PythonClient;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Bus\Queueable;
@@ -144,12 +145,20 @@ class ExtractLeadFromTurn implements ShouldQueue
 
         $existing = Lead::where('session_id', $session->id)->first();
 
-        $result = $python->extract([
-            'session_id'      => $session->id,
-            'project_id'      => $session->project_id,
-            'history'         => $history,
-            'existing_fields' => $existing?->fields ?? new \stdClass(),
-        ]);
+        // Routed through the brain that serves machinery, and metered against it.
+        // The brain's keys go on the LEFT so they win the duplicate-key merge —
+        // written the other way round the resolution would be dead code that
+        // still recorded a brain_id, attributing spend to a brain that never saw
+        // the call.
+        $result = $python->extract(
+            app(BrainResolver::class)->optionsFor($this->projectId, BrainResolver::CALL_CAPTURE) + [
+                'session_id'      => $session->id,
+                'project_id'      => $session->project_id,
+                'history'         => $history,
+                'existing_fields' => $existing?->fields ?? new \stdClass(),
+                'call_type'       => BrainResolver::CALL_CAPTURE,
+            ]
+        );
 
         $fields     = $result['fields']     ?? [];
         $confidence = (float) ($result['confidence'] ?? 0.0);

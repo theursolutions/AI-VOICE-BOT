@@ -226,6 +226,14 @@ return [
     |
     */
     'metrics' => [
+        // The metered unit. One AI reply = one message, which is the unit our
+        // cost is actually incurred in: a reply costs four LLM calls whether it
+        // is the first of a session or the two hundredth.
+        'messages'          => ['label' => 'AI messages', 'unit' => 'message'],
+        // Recorded alongside, as a statistic. Plans are still SOLD in
+        // conversations because that is the unit a customer can picture; whether
+        // it also CAPS anything depends on a feature row claiming
+        // metric_key = conversations, which is data, not code.
         'conversations'     => ['label' => 'AI conversations', 'unit' => 'conversation'],
         'telephony_minutes' => ['label' => 'Phone call minutes', 'unit' => 'minute'],
         'voice_messages'    => ['label' => 'Widget voice messages', 'unit' => 'message'],

@@ -393,6 +393,11 @@ class AiBrainsController extends Controller
             'api_key'      => ['nullable', 'string', 'max:512'],
             'max_tokens'   => ['required', 'integer', 'min:256', 'max:32000'],
             'priority'     => ['required', 'integer', 'min:1', 'max:9999'],
+            // Which calls this brain may take. Only the reply is ever read by a
+            // customer, so pointing the other three at a cheaper model is ~22%
+            // off the per-message cost for no perceptible change. Defaults to
+            // 'any', which is how every brain behaved before the column existed.
+            'serves'       => ['required', 'string', 'in:' . implode(',', array_keys(AiBrain::SERVES))],
             // Blank = unlimited. Expressed in tokens because that is what every
             // provider bills on and what the engine reports back to us.
             'quota_tokens' => ['nullable', 'integer', 'min:1000'],

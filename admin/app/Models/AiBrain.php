@@ -20,6 +20,31 @@ class AiBrain extends Model
     public const KIND_OLLAMA        = 'ollama';
 
     /**
+     * Which calls a brain may serve.
+     *
+     * Of the four LLM calls a customer message costs, only the reply is read by
+     * a human. Letting a cheap model take the other three cut ~22% off the
+     * per-message cost with nothing customer-visible changing.
+     *
+     *   SERVES_ANY        replies and machinery. The default, and the behaviour
+     *                     of every brain that existed before this column.
+     *   SERVES_REPLY      only the answer the customer reads. Put your best
+     *                     model here.
+     *   SERVES_MACHINERY  tool selection, lead extraction, summarisation. All
+     *                     produce JSON or internal prose. Put your cheapest
+     *                     model here.
+     */
+    public const SERVES_ANY       = 'any';
+    public const SERVES_REPLY     = 'reply';
+    public const SERVES_MACHINERY = 'machinery';
+
+    public const SERVES = [
+        self::SERVES_ANY       => 'Replies and background tasks',
+        self::SERVES_REPLY     => 'Customer replies only',
+        self::SERVES_MACHINERY => 'Background tasks only',
+    ];
+
+    /**
      * Providers offered in the UI, with the base_url and models pre-filled.
      *
      * Nearly all of these are one `kind` — openai_compat — because they all
@@ -115,7 +140,7 @@ class AiBrain extends Model
 
     protected $fillable = [
         'client_id', 'name', 'kind', 'preset', 'base_url', 'model', 'api_key',
-        'max_tokens', 'priority', 'is_active', 'is_verified', 'verified_at',
+        'max_tokens', 'priority', 'serves', 'is_active', 'is_verified', 'verified_at',
         'verify_error', 'quota_tokens', 'quota_window', 'tokens_used',
         'quota_reset_at', 'public_label', 'created_at', 'updated_at',
     ];
@@ -197,6 +222,41 @@ class AiBrain extends Model
     public function scopeUsable(Builder $q): Builder
     {
         return $q->where('is_active', true)->where('is_verified', true);
+    }
+
+    /**
+     * Brains allowed to serve a given call type.
+     *
+     * A dedicated brain outranks a general-purpose one for the calls it claims:
+     * ordering by `serves = 'any'` puts the specialists first, so a pool holding
+     * one reply brain, one machinery brain and one catch-all sends each call to
+     * the brain that was chosen for it and still has the catch-all behind both
+     * as cover. Callers add their own `orderBy('priority')` after this.
+     */
+    /**
+     * Brains allowed to serve a given role (SERVES_REPLY or SERVES_MACHINERY).
+     *
+     * A dedicated brain outranks a general-purpose one for the calls it claims:
+     * ordering by `serves = 'any'` puts specialists first, so a pool holding one
+     * reply brain, one machinery brain and one catch-all sends each call to the
+     * brain chosen for it and still has the catch-all behind both as cover.
+     *
+     * Specificity beats priority here, deliberately. The alternative — priority
+     * alone — means marking a brain "background tasks only" does nothing until
+     * its priority is also reordered above every catch-all, so the setting would
+     * appear to have no effect. Callers add their own orderBy('priority') after
+     * this, which then breaks ties within each group.
+     */
+    public function scopeServing(Builder $q, string $role): Builder
+    {
+        return $q->whereIn('serves', [$role, self::SERVES_ANY])
+            ->orderByRaw('serves = ?', [self::SERVES_ANY]);
+    }
+
+    /** Human label for what this brain serves. */
+    public function servesLabel(): string
+    {
+        return self::SERVES[$this->serves] ?? self::SERVES[self::SERVES_ANY];
     }
 
     /** Has this brain spent its allowance? Unlimited when quota_tokens is null. */

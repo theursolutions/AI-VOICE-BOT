@@ -252,6 +252,15 @@
                         @if ($b->public_label)
                             <div class="brn-kv"><span class="brn-kv__k">Clients see</span><span class="brn-kv__v is-tier">{{ $b->public_label }}</span></div>
                         @endif
+                        @if ($b->serves !== \App\Models\AiBrain::SERVES_ANY)
+                            <div class="brn-kv">
+                                <span class="brn-kv__k">Handles</span>
+                                <span class="brn-kv__v is-tier">
+                                    {{ $b->serves === \App\Models\AiBrain::SERVES_REPLY ? 'Replies only' : 'Background only' }}
+                                </span>
+                            </div>
+                        @endif
+
                         @if ($used)
                             <div class="brn-kv">
                                 <span class="brn-kv__k">Used · 30d</span>
@@ -282,7 +291,7 @@
                     @endif
 
                     <div class="brn-c__acts">
-                        @php $edit = $b->only(['id', 'name', 'preset', 'kind', 'base_url', 'model', 'max_tokens', 'priority', 'quota_tokens', 'quota_window', 'public_label']); @endphp
+                        @php $edit = $b->only(['id', 'name', 'preset', 'kind', 'base_url', 'model', 'max_tokens', 'priority', 'serves', 'quota_tokens', 'quota_window', 'public_label']); @endphp
                         <button class="brn-b" onclick='brnEdit(@json($edit))'>Edit</button>
                         <button class="brn-b" onclick="brnTest({{ $b->id }}, this)">Test</button>
 
@@ -421,6 +430,22 @@
                         <small>Lower is tried first.</small>
                     </div>
 
+                    <div class="brn-fld brn-fld--wide">
+                        <label for="serves">Handles</label>
+                        <select name="serves" id="serves">
+                            @foreach (\App\Models\AiBrain::SERVES as $value => $label)
+                                <option value="{{ $value }}">{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        <small>
+                            Every customer message costs four AI calls, and only the reply is ever read
+                            by a person — the rest pick tools, capture leads and compress history.
+                            Put your best model on replies and your cheapest on background tasks to cut
+                            roughly a fifth off the bill without changing a word the customer sees.
+                            A client using their own key always gets all four on their key.
+                        </small>
+                    </div>
+
                     <div class="brn-fld">
                         <label for="quota_tokens">Token quota</label>
                         <input type="number" name="quota_tokens" id="quota_tokens" min="1000" placeholder="150000000">
@@ -495,6 +520,7 @@ function brnEdit(b) {
     document.getElementById('model').value        = b.model || '';
     document.getElementById('max_tokens').value   = b.max_tokens || 4096;
     document.getElementById('priority').value     = b.priority || 10;
+    document.getElementById('serves').value       = b.serves || 'any';
     document.getElementById('quota_tokens').value = b.quota_tokens || '';
     document.getElementById('quota_window').value = b.quota_window || 'month';
     document.getElementById('public_label').value = b.public_label || '';
