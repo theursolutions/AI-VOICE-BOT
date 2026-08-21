@@ -109,6 +109,20 @@
 
     @include('billing._flash')
 
+    {{-- The page renders for anyone on a paid plan, but completing the purchase
+         needs a live Stripe subscription for the add-on to be a line on. Saying
+         which of those is missing, here, beats the old behaviour of redirecting
+         to the plan ladder and telling a paying customer to choose a plan. --}}
+    @if (! ($canBuy ?? true))
+        <div class="bl-alert bl-alert--info" style="margin-bottom:18px">
+            <i data-lucide="clock" class="w-5 h-5" style="flex:none"></i>
+            <div>
+                <strong>Not quite yet</strong>
+                {{ $blockedWhy }}
+            </div>
+        </div>
+    @endif
+
     <div class="ad-grid">
 
         {{-- ── Choose quantities ──────────────────────────────── --}}
@@ -154,10 +168,15 @@
                         <small>per {{ $perShort }}</small>
                     </div>
 
-                    @if ($checkoutOpen)
+                    @if ($checkoutOpen && ($canBuy ?? true))
+                        {{-- Starts disabled and is enabled by the stepper script
+                             once the quantity differs from what they own, so
+                             "Save" is never offered for a no-op. --}}
                         <button type="submit" class="bl-btn bl-btn--primary bl-btn--sm js-submit" disabled>
                             Save
                         </button>
+                    @elseif (! ($canBuy ?? true))
+                        <span style="font-size:12px;color:#98a2b3">Unlocks when active</span>
                     @else
                         <span style="font-size:12px;color:#98a2b3">Available soon</span>
                     @endif

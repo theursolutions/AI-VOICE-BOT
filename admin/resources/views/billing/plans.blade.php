@@ -46,6 +46,45 @@
         border-radius:999px; background:#ecfdf3; color:#067647; border:1px solid #abefc6;
     }
 
+    /* ── Build your own ──
+       Deliberately not card-shaped: a fourth thing that looks like the three
+       plan cards invites comparison on price, which is the one axis it has no
+       number for until you configure it. */
+    .pk-byo {
+        display:flex; align-items:center; gap:16px; text-decoration:none;
+        margin:0 auto 26px; max-width:760px; padding:18px 22px; border-radius:16px;
+        border:1px solid #c7d2fe; background:linear-gradient(135deg,#f5f3ff,#eef2ff 60%,#fff);
+        box-shadow:0 1px 2px rgba(16,24,40,.04), 0 18px 40px -28px rgba(99,102,241,.55);
+        transition:transform .18s, box-shadow .18s, border-color .18s;
+    }
+    .pk-byo:hover {
+        transform:translateY(-2px); border-color:#a5b4fc;
+        box-shadow:0 1px 2px rgba(16,24,40,.05), 0 24px 50px -26px rgba(99,102,241,.7);
+    }
+    .pk-byo__icon {
+        flex:none; width:42px; height:42px; border-radius:11px; display:flex;
+        align-items:center; justify-content:center; color:#fff;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        box-shadow:0 6px 16px -8px rgba(99,102,241,.9);
+    }
+    .pk-byo__icon svg { width:19px; height:19px; }
+    .pk-byo__text { flex:1; font-size:12.5px; color:#667085; line-height:1.6; }
+    .pk-byo__text strong { display:block; font-size:15.5px; font-weight:800; color:#0b1220; letter-spacing:-.01em; margin-bottom:3px; }
+    .pk-byo__go {
+        flex:none; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+        font:750 12.5px system-ui,sans-serif; color:#4f46e5;
+    }
+    .pk-byo__go svg { width:14px; height:14px; }
+    @media (max-width:620px) {
+        .pk-byo { flex-wrap:wrap; gap:12px; }
+        .pk-byo__go { width:100%; justify-content:flex-end; }
+    }
+
+    html.dark .pk-byo { background:linear-gradient(135deg,#1e1b4b,#1e293b 70%); border-color:#4f46e5; }
+    html.dark .pk-byo__text strong { color:#f8fafc; }
+    html.dark .pk-byo__text { color:#a5b4fc; }
+    html.dark .pk-byo__go { color:#c7d2fe; }
+
     /* ── Cards ── */
     .pk-grid {
         display:grid; gap:20px; margin-top:34px; align-items:stretch;
@@ -186,6 +225,23 @@
     </p>
 </div>
 
+{{-- Build your own plan, ABOVE the ladder.
+     It was a quiet link underneath the cards, which is the wrong place for the
+     one option that fits a workspace none of the fixed tiers do: by the time
+     someone has read three cards and rejected all of them, they have usually
+     picked the least-bad one instead. Leading with it costs a comparison shopper
+     nothing — the cards are directly below — and saves everyone else the
+     comparison entirely. --}}
+<a href="{{ route('billing.custom', ['client' => $client->slug]) }}" class="pk-byo intro-y">
+    <span class="pk-byo__icon"><i data-lucide="sliders-horizontal"></i></span>
+    <span class="pk-byo__text">
+        <strong>Build your own plan</strong>
+        Set your own conversations, team size and AI agents, and we price it from what it costs to
+        run &mdash; for when none of the plans below is the right shape.
+    </span>
+    <span class="pk-byo__go">Start <i data-lucide="arrow-right"></i></span>
+</a>
+
 @if (count($intervals) > 1)
     <div class="intro-y" style="display:flex;justify-content:center;margin-bottom:4px">
         <div class="pk-seg" id="pk-seg">
@@ -287,19 +343,6 @@
             </ul>
         </div>
     @endforeach
-</div>
-
-{{-- The escape hatch for a workspace no tier fits.
-     Placed after the cards, not among them: it is not a fourth option to
-     compare, it is what to do when comparing has not worked. --}}
-<div class="intro-y" style="margin-top:20px;text-align:center;">
-    <a href="{{ route('billing.custom', ['client' => $client->slug]) }}"
-       style="display:inline-flex;align-items:center;gap:8px;font:650 13px system-ui,sans-serif;
-              color:#6366f1;text-decoration:none;border:1px solid #d6dbe7;border-radius:10px;
-              padding:11px 20px;background:#fff;">
-        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
-        None of these the right shape? Build your own plan
-    </a>
 </div>
 
 {{-- The relationship between the two volume figures.

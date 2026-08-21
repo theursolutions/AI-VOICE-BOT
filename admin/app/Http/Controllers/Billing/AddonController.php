@@ -43,11 +43,26 @@ class AddonController extends Controller
 
         $subscription = $client->currentSubscription();
 
-        if (! $subscription?->stripe_subscription_ref || ! $subscription->grantsAccess()) {
+        // Only a workspace with no plan at all is sent away. Anyone on a plan
+        // sees the add-ons.
+        //
+        // This used to bounce anyone without a LIVE STRIPE subscription to the
+        // plan ladder with "choose a plan first" — which is what a customer on
+        // Growth was told when they clicked Add-ons, because their subscription
+        // was merely not yet active at Stripe. Being shown the plan ladder in
+        // answer to "I need one more seat", and told to pick the plan you are
+        // already paying for, is the whole problem.
+        if (! $subscription || $subscription->isFree()) {
             return redirect()
                 ->route('billing.plans', ['client' => $client->slug])
-                ->with('info', 'Choose a plan first — add-ons attach to an existing subscription.');
+                ->with('info', 'Add-ons sit on top of a paid plan — pick one and they unlock.');
         }
+
+        // Whether the purchase can COMPLETE is a separate question from whether
+        // the page should render. An add-on is a line on a Stripe subscription,
+        // so there has to be one; when there is not, the page still shows the
+        // prices and the arithmetic and says precisely what is missing.
+        $canBuy = $subscription->stripe_subscription_ref && $subscription->grantsAccess();
 
         $cards = app(\App\Services\Billing\PaymentMethodService::class)->all($client);
 
@@ -61,6 +76,20 @@ class AddonController extends Controller
             'cards'        => $cards,
             'defaultCard'  => collect($cards)->firstWhere('is_default', true) ?: ($cards[0] ?? null),
             'checkoutOpen' => (bool) config('billing.checkout.enabled', false),
+            'canBuy'       => $canBuy,
+            // Named rather than generic, because each of these has a different
+            // next step and "unavailable" tells the customer none of them.
+            'blockedWhy'   => $canBuy ? null : match (true) {
+                ! $subscription->stripe_subscription_ref
+                    => 'Your subscription is still being set up with our payment provider. '
+                     . 'Add-ons unlock as soon as that finishes — usually a few minutes.',
+                $subscription->isPastDue()
+                    => 'Your last payment didn’t go through. Update your card and add-ons are '
+                     . 'available again straight away.',
+                default
+                    => 'Add-ons unlock once your subscription is active — currently '
+                     . lcfirst($subscription->statusLabel()) . '.',
+            },
         ]);
     }
 

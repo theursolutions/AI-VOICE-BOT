@@ -21,11 +21,19 @@
     <h2 class="text-lg font-medium mr-auto">Billing &amp; plan</h2>
 
     @if ($isOwner && $canBuy)
-        {{-- The upgrade path the customer is most likely to want, kept at the
-             top of the page where it's found without scrolling. --}}
+        {{-- Two separate intentions, so two buttons.
+             "I need one more seat" and "I need a bigger plan" are different
+             problems, and routing the first through the plan ladder made the
+             customer do the matching themselves — then land on a page that told
+             them to choose a plan they already had. --}}
+        @if ($sub && ! $sub->isFree())
+            <a href="{{ route('billing.addons', ['client' => $client->slug]) }}" class="bl-btn bl-btn--ghost">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Add-ons
+            </a>
+        @endif
+
         <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary">
-            <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
-            {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Upgrade plan' }}
+            <i data-lucide="arrow-up-circle" class="w-4 h-4"></i> Upgrade plan
         </a>
     @endif
 </div>
@@ -43,18 +51,19 @@
     </div>
 @endif
 
-@if ($degraded)
-    <div class="bl-alert bl-alert--warn">
-        <i data-lucide="pause-circle" class="w-5 h-5" style="flex:none"></i>
+{{-- The "your agent is paused" banner was removed at the owner's request: it
+     read as an alarm on a page people open to check a figure, and the state it
+     announced is already legible from the status pill on the plan card.
+
+     The past-due case is the one that still needs a nudge, because it is the
+     only one the customer can fix and the fix is one click away — so it stays,
+     as an ordinary prompt rather than a warning about a paused product. --}}
+@if ($sub?->isPastDue())
+    <div class="bl-alert bl-alert--info">
+        <i data-lucide="credit-card" class="w-5 h-5" style="flex:none"></i>
         <div>
-            <strong>Your agent is paused</strong>
-            @if ($sub->isExpired())
-                Your free access ended{{ $sub->free_ends_at ? ' on ' . $sub->free_ends_at->format('j M Y') : '' }}.
-                Everything is still here — leads, conversations and settings are untouched and exportable.
-                @if ($sub->purge_after) Data is kept until {{ $sub->purge_after->format('j M Y') }}. @endif
-            @elseif ($sub->isPastDue())
-                We couldn’t take your last payment. Update your card to resume service.
-            @endif
+            <strong>Your last payment didn’t go through</strong>
+            Update your card below and everything carries on as normal.
         </div>
     </div>
 @elseif ($sub?->onGracePeriod())
@@ -160,13 +169,10 @@
 
         @if ($isOwner)
             <div class="bl-plan__cta">
-                @if ($canBuy)
-                    <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary">
-                        <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
-                        {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Choose a plan' }}
-                    </a>
-                @endif
-
+                {{-- No plan button here. It duplicated the one in the page
+                     header two screens above, so the same action appeared twice
+                     with different wording. Cancel and resume stay, because this
+                     is the only place they belong. --}}
                 @if ($sub?->onGracePeriod() || $sub?->cancel_at_period_end)
                     <form method="POST" action="{{ route('billing.resume', ['client' => $client->slug]) }}">
                         @csrf
@@ -454,7 +460,7 @@
                 $blAddonBlocked = match (true) {
                     ! $subscription                          => 'Choose a plan first — add-ons sit on top of a paid subscription.',
                     $subscription->isFree()                  => 'Add-ons are available on paid plans. Upgrade to add extra seats or agents.',
-                    ! $subscription->stripe_subscription_ref => 'Your subscription isn\'t set up with our payment provider yet.',
+                    ! $subscription->stripe_subscription_ref => 'Your subscription is still being set up with our payment provider — add-ons unlock shortly.',
                     $subscription->isPastDue()               => 'Your last payment failed. Update your card and add-ons will be available again.',
                     default                                  => 'Available once your subscription is active — ' . lcfirst($subscription->statusLabel()) . '.',
                 };
@@ -487,9 +493,17 @@
                     </div>
                     @if ($subscription?->isPastDue())
                         <a href="#payment-methods" class="btn btn-primary btn-sm w-full">Update payment method</a>
+                    @elseif ($subscription && ! $subscription->isFree())
+                        {{-- Already on a paid plan: the add-ons page itself, not
+                             the plan ladder. It renders for them and explains
+                             what is still pending — sending someone to "choose a
+                             plan" when they have one is the bug this replaces. --}}
+                        <a href="{{ route('billing.addons', ['client' => $client->slug]) }}" class="btn btn-primary btn-sm w-full">
+                            See add-ons
+                        </a>
                     @else
                         <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="btn btn-primary btn-sm w-full">
-                            {{ $subscription && ! $subscription->isFree() ? 'Complete your subscription' : 'Choose a plan' }}
+                            Choose a plan
                         </a>
                     @endif
                 </div>
