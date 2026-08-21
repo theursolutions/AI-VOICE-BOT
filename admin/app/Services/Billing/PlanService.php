@@ -4,6 +4,7 @@ namespace App\Services\Billing;
 
 use App\Models\Billing\Plan;
 use App\Models\Billing\PlanPrice;
+use App\Models\Client;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -97,7 +98,7 @@ class PlanService
      *
      * @throws \RuntimeException when the selection isn't purchasable.
      */
-    public function resolvePrice(string $planSlug, string $interval): PlanPrice
+    public function resolvePrice(string $planSlug, string $interval, ?Client $for = null): PlanPrice
     {
         $plan = $this->findBySlug($planSlug);
 
@@ -107,6 +108,19 @@ class PlanService
 
         if (! $plan->isPurchasable()) {
             throw new \RuntimeException("Plan [{$planSlug}] is not purchasable.");
+        }
+
+        // Custom plans belong to one workspace. Enforced HERE rather than in each
+        // controller because this method is the single point every purchase path
+        // funnels through — checkout, subscribe and swap all arrive at it — and a
+        // rule spread across three call sites is a rule that will be missing from
+        // the fourth. See Plan::isAvailableTo().
+        //
+        // $for is nullable so internal callers with no workspace in hand (a
+        // console command, a webhook replay) still work; it only ever tightens
+        // the check when a workspace IS known.
+        if ($for !== null && ! $plan->isAvailableTo($for)) {
+            throw new \RuntimeException("Plan [{$planSlug}] is not available to this workspace.");
         }
 
         if (! in_array($interval, (array) config('billing.intervals.supported', []), true)) {

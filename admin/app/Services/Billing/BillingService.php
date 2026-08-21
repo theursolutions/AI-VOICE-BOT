@@ -91,7 +91,7 @@ class BillingService
     ): CheckoutSession {
         // Server-side resolution. Nothing from the request survives past here
         // except the two opaque identifiers.
-        $price = $this->plans->resolvePrice($planSlug, $interval);
+        $price = $this->plans->resolvePrice($planSlug, $interval, $client);
         $plan  = $price->plan;
 
         if ($price->isStripeModeMismatched()) {
@@ -194,7 +194,7 @@ class BillingService
         string $paymentMethodRef,
         ?User $actor = null,
     ): array {
-        $price = $this->plans->resolvePrice($planSlug, $interval);
+        $price = $this->plans->resolvePrice($planSlug, $interval, $client);
         $plan  = $price->plan;
 
         if ($price->isStripeModeMismatched()) {
@@ -409,7 +409,7 @@ class BillingService
             throw new \RuntimeException('No active Stripe subscription to change. Use checkout instead.');
         }
 
-        $price = $this->plans->resolvePrice($planSlug, $interval);
+        $price = $this->plans->resolvePrice($planSlug, $interval, $client);
 
         $stripe  = $this->factory->make();
         $current = $stripe->subscriptions->retrieve($sub->stripe_subscription_ref, []);

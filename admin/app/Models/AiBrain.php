@@ -63,6 +63,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.openai.com/v1',
             'models'   => ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'],
+            'rate_in' => '0.1500', 'rate_out' => '0.6000',
             'needs_key' => true,
         ],
         'deepseek' => [
@@ -70,6 +71,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.deepseek.com/v1',
             'models'   => ['deepseek-chat', 'deepseek-reasoner'],
+            'rate_in' => '0.2700', 'rate_out' => '1.1000',
             'needs_key' => true,
         ],
         'gemini' => [
@@ -85,6 +87,7 @@ class AiBrain extends Model
             // configuration error anyone would think to look for. The field is a
             // datalist, so a name absent here can still be typed.
             'models'   => ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'],
+            'rate_in' => '0.1000', 'rate_out' => '0.4000',
             'needs_key' => true,
         ],
         'groq' => [
@@ -92,6 +95,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.groq.com/openai/v1',
             'models'   => ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+            'rate_in' => '0.0500', 'rate_out' => '0.0800',
             'needs_key' => true,
         ],
         'cerebras' => [
@@ -99,6 +103,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.cerebras.ai/v1',
             'models'   => ['llama-3.3-70b', 'llama3.1-8b'],
+            'rate_in' => '0.1000', 'rate_out' => '0.1000',
             'needs_key' => true,
         ],
         'openrouter' => [
@@ -106,6 +111,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://openrouter.ai/api/v1',
             'models'   => ['meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat'],
+            'rate_in' => '0.0000', 'rate_out' => '0.0000',
             'needs_key' => true,
         ],
         'together' => [
@@ -113,6 +119,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.together.xyz/v1',
             'models'   => ['meta-llama/Llama-3.3-70B-Instruct-Turbo'],
+            'rate_in' => '0.2000', 'rate_out' => '0.2000',
             'needs_key' => true,
         ],
         'anthropic' => [
@@ -120,6 +127,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_ANTHROPIC,
             'base_url' => null,
             'models'   => ['claude-haiku-4-5', 'claude-sonnet-4-5'],
+            'rate_in' => '0.2500', 'rate_out' => '1.2500',
             'needs_key' => true,
         ],
         'ollama' => [
@@ -127,6 +135,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OLLAMA,
             'base_url' => 'http://voice-engine:11434',
             'models'   => ['qwen2.5:7b', 'llama3.1:8b'],
+            'rate_in' => '0.0000', 'rate_out' => '0.0000',
             'needs_key' => false,
         ],
         'custom' => [
@@ -134,13 +143,14 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => null,
             'models'   => [],
+            'rate_in' => '0.0000', 'rate_out' => '0.0000',
             'needs_key' => true,
         ],
     ];
 
     protected $fillable = [
         'client_id', 'name', 'kind', 'preset', 'base_url', 'model', 'api_key',
-        'max_tokens', 'priority', 'serves', 'is_active', 'is_verified', 'verified_at',
+        'max_tokens', 'rate_in', 'rate_out', 'priority', 'serves', 'is_active', 'is_verified', 'verified_at',
         'verify_error', 'quota_tokens', 'quota_window', 'tokens_used',
         'quota_reset_at', 'public_label', 'created_at', 'updated_at',
     ];
@@ -150,6 +160,10 @@ class AiBrain extends Model
         'is_active'      => 'boolean',
         'is_verified'    => 'boolean',
         'max_tokens'     => 'integer',
+        // Kept as strings by the decimal cast so nothing rounds on the way
+        // through PHP; arithmetic converts explicitly at the point of use.
+        'rate_in'        => 'decimal:4',
+        'rate_out'       => 'decimal:4',
         'priority'       => 'integer',
         'quota_tokens'   => 'integer',
         'tokens_used'    => 'integer',

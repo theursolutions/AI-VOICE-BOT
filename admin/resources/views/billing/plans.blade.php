@@ -289,6 +289,19 @@
     @endforeach
 </div>
 
+{{-- The escape hatch for a workspace no tier fits.
+     Placed after the cards, not among them: it is not a fourth option to
+     compare, it is what to do when comparing has not worked. --}}
+<div class="intro-y" style="margin-top:20px;text-align:center;">
+    <a href="{{ route('billing.custom', ['client' => $client->slug]) }}"
+       style="display:inline-flex;align-items:center;gap:8px;font:650 13px system-ui,sans-serif;
+              color:#6366f1;text-decoration:none;border:1px solid #d6dbe7;border-radius:10px;
+              padding:11px 20px;background:#fff;">
+        <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+        None of these the right shape? Build your own plan
+    </a>
+</div>
+
 {{-- The relationship between the two volume figures.
      Both numbers are on every card, and without this the pair reads as a
      contradiction — "1,000 conversations" next to "20,000 messages" invites the

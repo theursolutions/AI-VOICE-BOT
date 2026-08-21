@@ -143,6 +143,34 @@ class Plan extends Model
         return $this->is_active && in_array($this->type, ['standard', 'custom'], true);
     }
 
+    /**
+     * May this workspace buy this plan?
+     *
+     * Only custom plans are restricted, and they are restricted absolutely: a
+     * custom plan is priced for one workspace's configuration and nobody else's.
+     *
+     * This is a REVENUE control, not a data one. Plan slugs are guessable
+     * (`custom-1-1`), findBySlug() does not filter on is_public, and
+     * isPurchasable() has always allowed `custom` — so without this check any
+     * workspace could subscribe to another's negotiated plan and inherit both
+     * its price and, through the inherited template, its entitlements. A
+     * hand-agreed rate is exactly the kind of plan someone would go looking for.
+     *
+     * Refuses when the plan claims no owner at all rather than treating that as
+     * public: a custom plan with no client_id is a bug, and the safe reading of
+     * a bug in a pricing record is "nobody".
+     */
+    public function isAvailableTo(?\App\Models\Client $client): bool
+    {
+        if ($this->type !== 'custom') {
+            return true;
+        }
+
+        $owner = (int) data_get($this->metadata, 'client_id');
+
+        return $owner > 0 && $client !== null && $owner === (int) $client->id;
+    }
+
     public function hasTrial(): bool
     {
         return (int) $this->trial_days > 0;

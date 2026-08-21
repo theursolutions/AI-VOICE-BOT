@@ -183,7 +183,7 @@ class CheckoutController extends Controller
         $interval = (string) $request->query('interval', 'monthly');
 
         try {
-            $price = $this->plans->resolvePrice($planSlug, $interval);
+            $price = $this->plans->resolvePrice($planSlug, $interval, $client);
         } catch (\RuntimeException $e) {
             return redirect()
                 ->route('billing.plans', ['client' => $client->slug])

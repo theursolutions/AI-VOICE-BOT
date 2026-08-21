@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\CheckoutController;
+use App\Http\Controllers\Billing\CustomPlanController;
 use App\Http\Controllers\Billing\AddonController;
 use App\Http\Controllers\Billing\PaymentMethodController;
 use App\Http\Controllers\PricingController;
@@ -85,7 +86,15 @@ Route::middleware(['auth', 'active.client'])
         Route::get ('/billing/checkout/cancel',  [CheckoutController::class, 'cancel'])->name('billing.checkout.cancel');
 
         Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
-        // How many AI replies each conversation gets before a human takes over.
+        // ── Build your own plan ─────────────────────────────────────────
+    // For the workspace no published tier fits. Owner-only, and the price is
+    // always recomputed server-side from the posted CONFIGURATION — the browser
+    // sends what it wants, never what it should cost.
+    Route::get ('/billing/custom', [CustomPlanController::class, 'show'])->name('billing.custom');
+    Route::post('/billing/custom/quote', [CustomPlanController::class, 'quote'])->name('billing.custom.quote');
+    Route::post('/billing/custom', [CustomPlanController::class, 'store'])->name('billing.custom.store');
+
+    // How many AI replies each conversation gets before a human takes over.
     // Lives here rather than in project settings because it decides how far the
     // plan's message allowance stretches, which is a billing decision.
     Route::post('/billing/conversation-budget', [BillingController::class, 'conversationBudget'])
