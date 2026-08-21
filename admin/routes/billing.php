@@ -113,6 +113,7 @@ Route::middleware(['auth', 'super-admin'])
         $prices   = \App\Http\Controllers\SuperAdmin\Billing\PlanPricesController::class;
         $features = \App\Http\Controllers\SuperAdmin\Billing\FeaturesController::class;
         $subs     = \App\Http\Controllers\SuperAdmin\Billing\SubscriptionsController::class;
+        $spaces   = \App\Http\Controllers\SuperAdmin\Billing\WorkspacePlansController::class;
 
         // Plans
         Route::get ('/plans',              [$plans, 'index'])->name('plans.index');
@@ -149,4 +150,17 @@ Route::middleware(['auth', 'super-admin'])
         Route::post('/subscriptions/{id}/extend-free',     [$subs, 'extendFreeWindow'])->where('id', Hashid::ROUTE_PATTERN)->name('subscriptions.extend-free');
         Route::post('/subscriptions/{id}/reconcile',       [$subs, 'reconcile'])->where('id', Hashid::ROUTE_PATTERN)->name('subscriptions.reconcile');
         Route::post('/clients/{clientId}/waive-trial',     [$subs, 'waiveFingerprints'])->where('clientId', Hashid::ROUTE_PATTERN)->name('subscriptions.waive-trial');
+
+        // Workspace plans — assign any plan at no charge, and grant allowances
+        // beyond what a plan includes. The operator counterpart to the
+        // customer's own billing page.
+        Route::get ('/workspaces',                       [$spaces, 'index'])->name('workspaces.index');
+        Route::get ('/workspaces/{id}',                  [$spaces, 'show'])->where('id', Hashid::ROUTE_PATTERN)->name('workspaces.show');
+        Route::post('/workspaces/{id}/assign',           [$spaces, 'assign'])->where('id', Hashid::ROUTE_PATTERN)->name('workspaces.assign');
+        Route::post('/workspaces/{id}/grant',            [$spaces, 'grant'])->where('id', Hashid::ROUTE_PATTERN)->name('workspaces.grant');
+        // feature_key is a slug, not an id, so it is NOT run through the hashid
+        // pattern — doing so would reject every real key.
+        Route::delete('/workspaces/{id}/grant/{featureKey}', [$spaces, 'revoke'])
+            ->where(['id' => Hashid::ROUTE_PATTERN, 'featureKey' => '[a-z0-9_]+'])
+            ->name('workspaces.revoke');
     });

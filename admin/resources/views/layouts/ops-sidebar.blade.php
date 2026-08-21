@@ -154,6 +154,12 @@
                 <div class="side-menu__title">Subscriptions</div>
             </a>
         </li>
+        <li>
+            <a href="{{ route('ops.billing.workspaces.index') }}" class="side-menu {{ $is('ops.billing.workspaces.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="building-2"></i></div>
+                <div class="side-menu__title">Workspace plans</div>
+            </a>
+        </li>
 
         <li class="ops-nav-sep"></li>
         <li class="side-menu__title-section ops-nav-group">
