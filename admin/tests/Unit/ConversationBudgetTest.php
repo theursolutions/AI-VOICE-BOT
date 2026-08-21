@@ -106,17 +106,139 @@ class ConversationBudgetTest extends TestCase
      */
     public function test_the_boundary_is_inclusive(): void
     {
-        $source = file_get_contents(
-            (new \ReflectionClass(ConversationBudget::class))->getFileName()
-        );
-
-        $body = substr($source, strpos($source, 'public function reached'));
+        $body = substr($this->source(), strpos($this->source(), 'public function reached'));
 
         $this->assertStringContainsString('>=', $body);
         $this->assertStringNotContainsString(
-            '> $this->limitFor',
+            '> $limit',
             $body,
             'A strict > allows one reply more than the plan is costed for',
         );
+    }
+
+    /**
+     * Skip loudly rather than pass vacuously.
+     *
+     * These assert the SEEDED catalogue, which arrives from BillingSeeder rather
+     * than a migration — so a freshly migrated test database has no plans at
+     * all. Iterating with `continue` made both tests pass while asserting
+     * nothing, which is the one outcome worse than failing: a guard on the
+     * pricing arithmetic that silently stops guarding.
+     */
+    private function requireCatalogue(array $slugs): void
+    {
+        $found = \App\Models\Billing\Plan::whereIn('slug', $slugs)->count();
+
+        if ($found !== count($slugs)) {
+            $this->markTestSkipped(
+                'Plan catalogue not seeded in this database (' . $found . '/' . count($slugs)
+                . ' plans). Run the billing seeder to check the pricing arithmetic.'
+            );
+        }
+    }
+
+    private function source(): string
+    {
+        return file_get_contents(
+            (new \ReflectionClass(ConversationBudget::class))->getFileName()
+        );
+    }
+
+    // ── Resolution order ────────────────────────────────────────────────
+
+    /**
+     * Every tier's advertised conversation count is its message allowance
+     * divided by this figure, so these must match the seeded plan_features or
+     * the cards contradict the arithmetic they came from.
+     */
+    public function test_each_tier_resolves_to_the_figure_its_card_was_derived_from(): void
+    {
+        $features = app(\App\Services\Billing\PlanFeatureService::class);
+        $features->flush();
+
+        $expected = ['free' => 20, 'starter' => 20, 'growth' => 30, 'scale' => 30];
+
+        $this->requireCatalogue(array_keys($expected));
+
+        foreach ($expected as $slug => $replies) {
+            $plan = \App\Models\Billing\Plan::where('slug', $slug)->first();
+
+            $this->assertSame(
+                $replies,
+                $features->planLimit($plan, 'replies_per_conversation'),
+                "{$slug} must default to {$replies} replies per conversation",
+            );
+        }
+    }
+
+    /**
+     * The advertised conversation count must be exactly messages ÷ replies. If
+     * these drift, a card promises conversations the message allowance cannot
+     * cover — or quietly under-sells the plan.
+     */
+    public function test_the_advertised_conversation_count_matches_the_message_allowance(): void
+    {
+        $features = app(\App\Services\Billing\PlanFeatureService::class);
+        $features->flush();
+
+        $slugs = ['free', 'starter', 'growth', 'scale'];
+        $this->requireCatalogue($slugs);
+
+        foreach ($slugs as $slug) {
+            $plan = \App\Models\Billing\Plan::where('slug', $slug)->first();
+
+            $messages = $features->planLimit($plan, 'messages');
+            $convs    = $features->planLimit($plan, 'conversations');
+            $replies  = $features->planLimit($plan, 'replies_per_conversation');
+
+            $this->assertNotNull($messages, "{$slug} has no message allowance seeded");
+            $this->assertNotNull($convs, "{$slug} has no conversation figure seeded");
+            $this->assertNotNull($replies, "{$slug} has no replies-per-conversation seeded");
+
+            $this->assertSame(
+                $messages,
+                $convs * $replies,
+                "{$slug}: {$convs} conversations x {$replies} replies must equal {$messages} messages",
+            );
+        }
+    }
+
+    /**
+     * Enterprise grants unlimited replies, which must mean "no automatic
+     * handoff" rather than a cap of zero.
+     */
+    public function test_an_unlimited_plan_resolves_to_no_cap(): void
+    {
+        $features = app(\App\Services\Billing\PlanFeatureService::class);
+        $features->flush();
+
+        $plan = \App\Models\Billing\Plan::where('slug', 'enterprise')->first();
+
+        if (! $plan) {
+            $this->markTestSkipped('No enterprise plan seeded.');
+        }
+
+        $this->assertNull(
+            $features->planLimit($plan, 'replies_per_conversation'),
+            'Unlimited must resolve to null, which reached() reads as never escalating on count',
+        );
+    }
+
+    /**
+     * A plan with NO replies_per_conversation row must fall back to the coded
+     * default, not to the floor. planLimit() reads an absent feature as 0 —
+     * "not granted" — and clamp() would turn that into 5, so every conversation
+     * would escalate after five replies because of a missing row.
+     */
+    public function test_a_missing_plan_row_falls_back_to_the_default_not_the_floor(): void
+    {
+        $body = substr($this->source(), strpos($this->source(), 'private static function planDefaultFor'));
+
+        $this->assertStringContainsString(
+            'self::DEFAULT_LIMIT',
+            $body,
+            'planDefaultFor must fall back to the coded default when the plan grants 0',
+        );
+        $this->assertStringContainsString('> 0', $body);
     }
 }

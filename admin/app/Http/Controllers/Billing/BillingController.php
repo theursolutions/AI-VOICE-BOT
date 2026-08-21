@@ -63,9 +63,7 @@ class BillingController extends Controller
             // How the message allowance divides into conversations. Plans are
             // sold in conversations and billed in messages, so this is the
             // number that connects the two — and it is the owner's to set.
-            'perConversation' => ConversationBudget::clamp(
-                data_get($client->json_data, ConversationBudget::SETTING_KEY)
-            ),
+            'perConversation' => app(ConversationBudget::class)->limitForClient($client),
             'budgetBounds'    => [
                 'min'     => ConversationBudget::MIN_LIMIT,
                 'max'     => ConversationBudget::MAX_LIMIT,
@@ -107,9 +105,7 @@ class BillingController extends Controller
             'pricing'        => $this->presenter->build($request, $current?->interval),
             // The divisor behind every conversation figure on this page, so the
             // note can state the real number rather than a generic "depends".
-            'perConversation' => ConversationBudget::clamp(
-                data_get($client->json_data, ConversationBudget::SETTING_KEY)
-            ),
+            'perConversation' => app(ConversationBudget::class)->limitForClient($client),
             'checkoutOpen'   => (bool) config('billing.checkout.enabled', false),
 
             // Extra seats / AI agents are bought here too, not only from the

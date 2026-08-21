@@ -63,21 +63,42 @@ class ConversationBudget
     /** Where the owner's choice lives on the client record. */
     public const SETTING_KEY = 'messages_per_conversation';
 
+    /**
+     * Stands in for "no cap" inside the cache.
+     *
+     * Cache::remember treats a null payload as a miss and re-resolves on every
+     * single call, which on the reply path means two queries per inbound message
+     * for the one plan that needs none.
+     */
+    private const NO_LIMIT = 'none';
+
     private const CACHE_TTL = 300;
 
     /**
-     * The limit for a project's workspace.
+     * The limit for a project's workspace. NULL means no automatic handoff.
      *
-     * Cached briefly because this is read on every inbound message, and the
-     * value changes about once in a workspace's lifetime.
+     * Three sources, in order:
+     *
+     *   1. the owner's own setting, if they have chosen one
+     *   2. their plan's `replies_per_conversation`, which is what each tier is
+     *      priced and advertised against
+     *   3. DEFAULT_LIMIT
+     *
+     * The plan tier has to sit in the middle, not be replaced by a single global
+     * default. Growth's 75,000 messages divided by a fixed 20 advertises 3,750
+     * conversations where the plan was designed and sold as 2,500 — the cards
+     * would contradict the arithmetic they came from.
+     *
+     * Cached briefly: read on every inbound message, changed about once in a
+     * workspace's lifetime.
      */
-    public function limitFor(?int $projectId): int
+    public function limitFor(?int $projectId): ?int
     {
         if (! $projectId) {
             return self::DEFAULT_LIMIT;
         }
 
-        return (int) Cache::remember(
+        $value = Cache::remember(
             "conv-budget:{$projectId}",
             self::CACHE_TTL,
             function () use ($projectId) {
@@ -87,11 +108,77 @@ class ConversationBudget
                     return self::DEFAULT_LIMIT;
                 }
 
-                return self::clamp(
-                    data_get(Client::find($project->client_id)?->json_data, self::SETTING_KEY)
-                );
+                return self::resolveFor(Client::find($project->client_id));
             }
         );
+
+        // Cache::remember cannot store null (it would re-resolve every call), so
+        // "no cap" round-trips as a sentinel.
+        return $value === self::NO_LIMIT ? null : (int) $value;
+    }
+
+    /**
+     * The limit for a workspace, uncached. NULL means no automatic handoff.
+     *
+     * The billing pages read through here rather than reaching for the stored
+     * setting directly. They used to, and it was wrong the moment tiers gained
+     * their own default: a Growth workspace that had never touched the control
+     * would have been shown 20 while its conversations actually ran to 30, so
+     * the page contradicted both the plan card and the behaviour.
+     */
+    public function limitForClient(?Client $client): ?int
+    {
+        $value = self::resolveFor($client);
+
+        return $value === self::NO_LIMIT ? null : (int) $value;
+    }
+
+    /** Owner's choice, else the plan's, else the coded default. */
+    private static function resolveFor(?Client $client): int|string
+    {
+        if (! $client) {
+            return self::DEFAULT_LIMIT;
+        }
+
+        $own = data_get($client->json_data, self::SETTING_KEY);
+
+        if (is_numeric($own)) {
+            return self::clamp($own);
+        }
+
+        return self::planDefaultFor($client);
+    }
+
+    /**
+     * The tier's starting figure.
+     *
+     * Two values need care, and both would be silent:
+     *
+     *   null    the plan grants unlimited replies (-1, i.e. Enterprise). Real,
+     *           and means no automatic handoff — returned as a sentinel because
+     *           the cache cannot hold null.
+     *   0       the plan has NO replies_per_conversation row. planLimit() reads
+     *           an absent feature as "not granted" rather than "unset", so this
+     *           is a plan that predates the feature, not a plan that wants a cap
+     *           of zero. Falling through clamp() would give it 5 — every
+     *           conversation escalating after five replies, from a missing row.
+     */
+    private static function planDefaultFor(Client $client): int|string
+    {
+        $plan = $client->currentPlan();
+
+        if (! $plan) {
+            return self::DEFAULT_LIMIT;
+        }
+
+        $limit = app(\App\Services\Billing\PlanFeatureService::class)
+            ->planLimit($plan, 'replies_per_conversation');
+
+        if ($limit === null) {
+            return self::NO_LIMIT;
+        }
+
+        return $limit > 0 ? self::clamp($limit) : self::DEFAULT_LIMIT;
     }
 
     /**
@@ -125,10 +212,20 @@ class ConversationBudget
      *
      * Compared with >=, so a limit of 20 permits exactly 20 replies and the
      * twenty-first inbound message is the one that escalates.
+     *
+     * A null limit is a plan with unlimited replies — never escalates on count.
+     * Checked before the count so an uncapped workspace does not pay for a query
+     * whose answer cannot matter.
      */
     public function reached(Session $session): bool
     {
-        return $this->repliesIn($session) >= $this->limitFor((int) $session->project_id);
+        $limit = $this->limitFor((int) $session->project_id);
+
+        if ($limit === null) {
+            return false;
+        }
+
+        return $this->repliesIn($session) >= $limit;
     }
 
     /** After the owner changes the setting, so the next message sees it. */

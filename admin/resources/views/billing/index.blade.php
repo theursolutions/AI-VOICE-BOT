@@ -294,6 +294,8 @@
             $msgAllowance = data_get($usage, 'messages.allowance');
             $msgUnlimited = (bool) data_get($usage, 'messages.unlimited', false);
             $convCount    = data_get($usage, 'conversations.used', 0);
+            // Null perConversation is a plan with no automatic handoff, so
+            // there is no divisor and no conversation estimate to show.
             $estConvs     = ($msgAllowance && $perConversation)
                 ? intdiv((int) $msgAllowance, (int) $perConversation)
                 : null;
@@ -306,10 +308,16 @@
 
             <div style="padding:4px 0 2px;">
                 <p style="font-size:13px;color:#475569;line-height:1.65;margin:0 0 14px;">
-                    Each conversation gets
-                    <strong>{{ $perConversation }} AI replies</strong>.
-                    After that the assistant stops and the conversation moves to your inbox
-                    for a person to answer — it is never left unanswered.
+                    @if ($perConversation === null)
+                        Your plan places <strong>no limit</strong> on how long the assistant keeps
+                        answering, so conversations are only handed over when the AI decides to or
+                        someone on your team steps in.
+                    @else
+                        Each conversation gets
+                        <strong>{{ $perConversation }} AI replies</strong>.
+                        After that the assistant stops and the conversation moves to your inbox
+                        for a person to answer — it is never left unanswered.
+                    @endif
                     @if ($estConvs)
                         At this setting your plan covers about
                         <strong>{{ number_format($estConvs) }} conversations</strong>
@@ -328,7 +336,7 @@
                                 AI replies per conversation
                             </label>
                             <input type="number" name="messages_per_conversation" id="mpc"
-                                   value="{{ old('messages_per_conversation', $perConversation) }}"
+                                   value="{{ old('messages_per_conversation', $perConversation ?? \App\Services\Conversation\ConversationBudget::DEFAULT_LIMIT) }}"
                                    min="{{ $budgetBounds['min'] }}" max="{{ $budgetBounds['max'] }}" required
                                    style="width:120px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;
                                           font:13px ui-monospace,Menlo,monospace;color:#0f172a;">
