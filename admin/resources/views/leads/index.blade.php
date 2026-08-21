@@ -187,7 +187,7 @@
             <div><div class="tva-stat__label">New</div><div class="tva-stat__value">{{ number_format($counts['new']) }}</div></div>
         </a>
         <a href="{{ $linkQualified }}" class="tva-stat {{ $status === 'qualified' ? 'is-active' : '' }}" style="text-decoration:none;">
-            <div class="tva-stat__icon" style="background:#e0e7ff; color:#3730a3;"><i data-lucide="check-circle" class="w-4 h-4"></i></div>
+            <div class="tva-stat__icon" style="background:#e0e7ff; color:#3730a3;"><i data-lucide="check-circle-2" class="w-4 h-4"></i></div>
             <div><div class="tva-stat__label">Qualified</div><div class="tva-stat__value">{{ number_format($counts['qualified']) }}</div></div>
         </a>
         <a href="{{ $linkConverted }}" class="tva-stat {{ $status === 'converted' ? 'is-active' : '' }}" style="text-decoration:none;">

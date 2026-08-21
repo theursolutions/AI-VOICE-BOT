@@ -50,7 +50,7 @@
             </div>
         </div>
         <a href="{{ route('ops.analytics.index') }}" style="background:rgba(255,255,255,.18); padding:10px 16px; border-radius:10px; color:#fff; font-weight:600; font-size:13px; text-decoration:none;">
-            <i data-lucide="bar-chart" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Deep analytics →
+            <i data-lucide="bar-chart-2" class="w-4 h-4 inline -mt-0.5 mr-1"></i> Deep analytics →
         </a>
     </div>
 

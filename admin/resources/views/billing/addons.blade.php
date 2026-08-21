@@ -99,7 +99,7 @@
 
     <div class="ad-head intro-y">
         <div class="ad-chip">
-            <i data-lucide="check-circle" class="w-3.5 h-3.5"></i>
+            <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
             You’re on {{ $plan?->name ?? 'a plan' }} · billed {{ $per }}ly
         </div>
         <h1>Add extra capacity</h1>

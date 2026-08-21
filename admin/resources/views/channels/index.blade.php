@@ -336,7 +336,7 @@
                             </label>
                         </form>
                         <button type="button" class="tva-ch-del" data-tva-modal-open="channel-delete-{{ $conn->id }}" title="Delete channel">
-                            <i data-lucide="trash" class="w-4 h-4"></i>
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
                         </button>
                     </div>
                 </div>
@@ -346,7 +346,7 @@
                     <div class="tva-modal__backdrop" data-tva-modal-close></div>
                     <div class="tva-modal__panel" style="max-width:420px;">
                         <div class="tva-modal__head">
-                            <i data-lucide="trash" class="w-4 h-4 mr-2 inline" style="color:#b91c1c;"></i>
+                            <i data-lucide="trash-2" class="w-4 h-4 mr-2 inline" style="color:#b91c1c;"></i>
                             Remove channel
                             <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
                         </div>

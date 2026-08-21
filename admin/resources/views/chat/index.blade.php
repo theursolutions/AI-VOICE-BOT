@@ -1169,7 +1169,7 @@
                     </div>
 
                     <div class="tva-recbar" id="recBar" style="display:none;">
-                        <button class="tva-iconbtn" id="recCancel" title="Cancel"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                        <button class="tva-iconbtn" id="recCancel" title="Cancel"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                         <span class="tva-rec-dot"></span>
                         <span id="recTime" style="font-variant-numeric:tabular-nums;">0:00</span>
                         <div class="tva-rec-wave" id="recWave"></div>

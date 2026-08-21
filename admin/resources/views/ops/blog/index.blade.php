@@ -136,7 +136,7 @@
                           onsubmit="return confirm('Delete “{{ addslashes($post->title) }}”?\n\nIt will disappear from /blog and the sitemap. If it is already indexed, Google will show a 404 until it re-crawls.');">
                         @csrf
                         <button type="submit" class="btn btn-sm" style="border:1px solid #fecaca; color:#dc2626; background:#fff;" title="Delete">
-                            <i data-lucide="trash" class="w-3.5 h-3.5"></i>
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
                         </button>
                     </form>
                 </div>

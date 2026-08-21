@@ -211,7 +211,7 @@
                                 @method('DELETE')
                                 <input type="hidden" name="project_id" value="{{ $projectId }}">
                                 <button class="text-danger inline-flex items-center justify-center w-8 h-8 rounded hover:bg-danger/10" title="Remove">
-                                    <i data-lucide="trash" class="w-4 h-4"></i>
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
                                 </button>
                             </form>
                         </div>

@@ -58,7 +58,7 @@
         </li>
         <li>
             <a href="{{ route('ops.analytics.index') }}" class="side-menu {{ $is('ops.analytics.*') ? 'side-menu--active' : '' }}">
-                <div class="side-menu__icon"><i data-lucide="bar-chart"></i></div>
+                <div class="side-menu__icon"><i data-lucide="bar-chart-2"></i></div>
                 <div class="side-menu__title">Analytics</div>
             </a>
         </li>

@@ -128,7 +128,7 @@
                                 @error('password', 'userDeletion') <div class="text-danger mt-1 text-xs">{{ $message }}</div> @enderror
                             </div>
                             <button type="submit" class="btn btn-danger mt-3 sm:mt-0">
-                                <i data-lucide="trash" class="w-4 h-4 mr-2"></i> Delete account
+                                <i data-lucide="trash-2" class="w-4 h-4 mr-2"></i> Delete account
                             </button>
                         </div>
                     </form>

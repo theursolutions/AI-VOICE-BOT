@@ -46,7 +46,7 @@
             <span class="text-white text-base ml-2 font-semibold">Serve AI</span>
         </a>
         <a href="javascript:;" class="mobile-menu-toggler">
-            <i data-lucide="bar-chart" class="w-8 h-8 text-white transform -rotate-90"></i>
+            <i data-lucide="bar-chart-2" class="w-8 h-8 text-white transform -rotate-90"></i>
         </a>
     </div>
 
