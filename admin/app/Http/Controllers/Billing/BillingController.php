@@ -9,6 +9,7 @@ use App\Services\Billing\BillingService;
 use App\Services\Billing\PlanService;
 use App\Services\Billing\PricingPresenter;
 use App\Services\Billing\UsageLimitService;
+use App\Services\Conversation\ConversationBudget;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -58,6 +59,18 @@ class BillingController extends Controller
                 : null,
 
             'usage'         => $this->usage->summaryFor($client),
+
+            // How the message allowance divides into conversations. Plans are
+            // sold in conversations and billed in messages, so this is the
+            // number that connects the two — and it is the owner's to set.
+            'perConversation' => ConversationBudget::clamp(
+                data_get($client->json_data, ConversationBudget::SETTING_KEY)
+            ),
+            'budgetBounds'    => [
+                'min'     => ConversationBudget::MIN_LIMIT,
+                'max'     => ConversationBudget::MAX_LIMIT,
+                'default' => ConversationBudget::DEFAULT_LIMIT,
+            ],
             'invoices'      => $this->billing->invoices($client),
             'paymentMethod' => $this->billing->paymentMethod($client),
             'cards'         => app(\App\Services\Billing\PaymentMethodService::class)->all($client),
@@ -92,6 +105,11 @@ class BillingController extends Controller
             // Same presenter as /pricing, so the numbers here and on the
             // marketing site can never disagree.
             'pricing'        => $this->presenter->build($request, $current?->interval),
+            // The divisor behind every conversation figure on this page, so the
+            // note can state the real number rather than a generic "depends".
+            'perConversation' => ConversationBudget::clamp(
+                data_get($client->json_data, ConversationBudget::SETTING_KEY)
+            ),
             'checkoutOpen'   => (bool) config('billing.checkout.enabled', false),
 
             // Extra seats / AI agents are bought here too, not only from the
@@ -261,6 +279,60 @@ class BillingController extends Controller
 
             return back()->with('error', 'We couldn’t change your plan. Please try again.');
         }
+    }
+
+    /**
+     * Set how many AI replies each conversation gets before a human takes over.
+     *
+     * Owner-only, like every other write here: it decides how far the plan's
+     * message allowance stretches, and how much of the team's time the AI hands
+     * back. Not a per-agent preference.
+     *
+     * Validated AND clamped. The rules reject an out-of-range submit with a
+     * message the owner can act on; the clamp is what protects the reply path
+     * from a value that arrives any other way — a seeded row, a fixture, a hand
+     * edit — because a stored 0 would hand every conversation to a human on its
+     * first message and the AI would look completely dead.
+     */
+    public function conversationBudget(Request $request, Client $client): RedirectResponse
+    {
+        $this->authorizeOwner($request, $client);
+
+        $data = $request->validate([
+            'messages_per_conversation' => [
+                'required', 'integer',
+                'min:' . ConversationBudget::MIN_LIMIT,
+                'max:' . ConversationBudget::MAX_LIMIT,
+            ],
+        ], [
+            'messages_per_conversation.min' => 'Below ' . ConversationBudget::MIN_LIMIT
+                . ' replies the assistant cannot finish a greeting and an answer, so every'
+                . ' conversation would go straight to a person.',
+            'messages_per_conversation.max' => 'Above ' . ConversationBudget::MAX_LIMIT
+                . ' replies a single conversation can consume a whole month of messages.',
+        ]);
+
+        $limit = ConversationBudget::clamp($data['messages_per_conversation']);
+
+        $json = is_array($client->json_data) ? $client->json_data : [];
+        $json[ConversationBudget::SETTING_KEY] = $limit;
+        $client->json_data = $json;
+        $client->save();
+
+        // Every project in the workspace, since the setting is workspace-wide
+        // and each project caches its own copy.
+        ConversationBudget::forgetClient((int) $client->id);
+
+        AuditLog::record('billing.conversation_budget', [
+            'target_type' => 'client',
+            'target_id'   => $client->id,
+            'payload'     => ['messages_per_conversation' => $limit],
+        ]);
+
+        return back()->with(
+            'success',
+            "Saved. Each conversation now gets {$limit} AI replies before a team member takes over."
+        );
     }
 
     private function authorizeOwner(Request $request, Client $client): void

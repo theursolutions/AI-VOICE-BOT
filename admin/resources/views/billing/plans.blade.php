@@ -289,6 +289,19 @@
     @endforeach
 </div>
 
+{{-- The relationship between the two volume figures.
+     Both numbers are on every card, and without this the pair reads as a
+     contradiction — "1,000 conversations" next to "20,000 messages" invites the
+     question of which one actually runs out. Stating the divisor, and that it is
+     theirs to move, turns two numbers into one sentence. --}}
+<p class="pk-note intro-y" style="text-align:center;font-size:12.5px;color:#64748b;line-height:1.65;margin:18px auto 0;max-width:64ch;">
+    Conversation counts assume <strong>{{ $perConversation }} AI replies</strong> each.
+    After that a conversation moves to your inbox for a person to answer.
+    You can change this on your
+    <a href="{{ route('billing.index', ['client' => $client->slug]) }}" style="color:#0b6e5b;font-weight:600;">billing page</a>,
+    which raises or lowers how many conversations your messages cover.
+</p>
+
 {{-- ── Add-ons ──────────────────────────────────────────────────────
      Top up one thing instead of moving up a whole tier. Shown here as well
      as on the billing overview because this is the page people reach when

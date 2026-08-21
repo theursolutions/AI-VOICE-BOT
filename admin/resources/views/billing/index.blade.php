@@ -284,6 +284,83 @@
             @endif
         </div>
 
+        {{-- Conversation length.
+             The bridge between the two units. The plan is sold in
+             conversations and metered in messages, so this control is what
+             makes "1,000 conversations" a real number rather than a hope: it
+             is the divisor. Shown next to the meters because that is where
+             someone asks "why is my allowance going so fast". --}}
+        @php
+            $msgAllowance = data_get($usage, 'messages.allowance');
+            $msgUnlimited = (bool) data_get($usage, 'messages.unlimited', false);
+            $convCount    = data_get($usage, 'conversations.used', 0);
+            $estConvs     = ($msgAllowance && $perConversation)
+                ? intdiv((int) $msgAllowance, (int) $perConversation)
+                : null;
+        @endphp
+        <div class="bl-card intro-y">
+            <div class="bl-card__head">
+                <i data-lucide="message-square" class="w-4 h-4" style="color:#6366f1"></i>
+                <div class="bl-card__title">Conversation length</div>
+            </div>
+
+            <div style="padding:4px 0 2px;">
+                <p style="font-size:13px;color:#475569;line-height:1.65;margin:0 0 14px;">
+                    Each conversation gets
+                    <strong>{{ $perConversation }} AI replies</strong>.
+                    After that the assistant stops and the conversation moves to your inbox
+                    for a person to answer — it is never left unanswered.
+                    @if ($estConvs)
+                        At this setting your plan covers about
+                        <strong>{{ number_format($estConvs) }} conversations</strong>
+                        ({{ number_format((int) $msgAllowance) }} messages) a month.
+                    @elseif ($msgUnlimited)
+                        Your plan has no message limit, so this only controls when a person steps in.
+                    @endif
+                </p>
+
+                @if (! empty($isOwner))
+                    <form method="POST" action="{{ route('billing.conversation-budget', ['client' => $client->slug]) }}"
+                          style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">
+                        @csrf
+                        <div style="display:flex;flex-direction:column;gap:5px;">
+                            <label for="mpc" style="font:600 11.5px system-ui,sans-serif;color:#334155;">
+                                AI replies per conversation
+                            </label>
+                            <input type="number" name="messages_per_conversation" id="mpc"
+                                   value="{{ old('messages_per_conversation', $perConversation) }}"
+                                   min="{{ $budgetBounds['min'] }}" max="{{ $budgetBounds['max'] }}" required
+                                   style="width:120px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;
+                                          font:13px ui-monospace,Menlo,monospace;color:#0f172a;">
+                        </div>
+                        <button type="submit"
+                                style="background:#0b6e5b;color:#fff;border:none;border-radius:8px;padding:9px 16px;
+                                       font:650 12.5px system-ui,sans-serif;cursor:pointer;">
+                            Save
+                        </button>
+                        <span style="font-size:11.5px;color:#94a3b8;">
+                            {{ $budgetBounds['min'] }}&ndash;{{ $budgetBounds['max'] }};
+                            default {{ $budgetBounds['default'] }}
+                        </span>
+                    </form>
+
+                    @error('messages_per_conversation')
+                        <p style="margin:10px 0 0;font-size:12px;color:#b91c1c;line-height:1.5;">{{ $message }}</p>
+                    @enderror
+                @else
+                    <p style="font-size:11.5px;color:#94a3b8;margin:0;">
+                        Only the workspace owner can change this.
+                    </p>
+                @endif
+
+                @if ($convCount)
+                    <p style="font-size:11.5px;color:#94a3b8;margin:12px 0 0;">
+                        {{ number_format($convCount) }} conversations so far this period.
+                    </p>
+                @endif
+            </div>
+        </div>
+
         {{-- What the active plan includes --}}
         @if (! empty($included))
             <div class="bl-card intro-y">

@@ -53,6 +53,15 @@ class Client extends Model
         // conventions coexist deliberately — see the migration's note.
         'billing_synced_at' => 'datetime',
         'current_plan_id'   => 'integer',
+
+        // The workspace settings bag, same convention as projects.json_data.
+        //
+        // The column has always been json and the cast was simply never added,
+        // so reads came back as a raw string and data_get() silently found
+        // nothing in it — a stored setting read as absent and fell through to
+        // its default with no error anywhere. Nothing else in the codebase
+        // touched this column, which is why it went unnoticed.
+        'json_data'         => 'array',
     ];
 
     protected function serializeDate(\DateTimeInterface $date)

@@ -85,7 +85,12 @@ Route::middleware(['auth', 'active.client'])
         Route::get ('/billing/checkout/cancel',  [CheckoutController::class, 'cancel'])->name('billing.checkout.cancel');
 
         Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
-        Route::post('/billing/change', [BillingController::class, 'change'])->name('billing.change');
+        // How many AI replies each conversation gets before a human takes over.
+    // Lives here rather than in project settings because it decides how far the
+    // plan's message allowance stretches, which is a billing decision.
+    Route::post('/billing/conversation-budget', [BillingController::class, 'conversationBudget'])
+        ->name('billing.conversation-budget');
+    Route::post('/billing/change', [BillingController::class, 'change'])->name('billing.change');
         Route::post('/billing/cancel', [BillingController::class, 'cancel'])->name('billing.cancel');
         Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
     });
