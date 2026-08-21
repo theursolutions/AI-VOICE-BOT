@@ -79,16 +79,43 @@ class AddonController extends Controller
             'canBuy'       => $canBuy,
             // Named rather than generic, because each of these has a different
             // next step and "unavailable" tells the customer none of them.
+            // Each of these says what HAPPENED and what to do about it. The
+            // previous wording — "add-ons unlock once your subscription is
+            // active, currently awaiting payment" — was accurate and told the
+            // customer nothing: it named a state without naming its cause or its
+            // remedy, so the only possible reaction was to wonder what it meant.
             'blockedWhy'   => $canBuy ? null : match (true) {
                 ! $subscription->stripe_subscription_ref
-                    => 'Your subscription is still being set up with our payment provider. '
-                     . 'Add-ons unlock as soon as that finishes — usually a few minutes.',
+                    => 'This plan hasn’t been set up with our payment provider yet, so there is no '
+                     . 'subscription for an add-on to attach to. Nothing for you to do — we are '
+                     . 'finishing it off.',
+
+                // Stripe's `incomplete`: the subscription was created but its
+                // first payment never succeeded, so it never started. Stripe
+                // voids that invoice after about a day, which is why the invoice
+                // list shows one marked "voided" — that is the abandoned attempt,
+                // not a charge that was taken and reversed.
+                $subscription->status === \App\Models\Billing\Subscription::STATUS_INCOMPLETE
+                    => 'The first payment for ' . ($subscription->plan?->name ?? 'this plan')
+                     . ' was never completed, so the subscription never started — that is also why '
+                     . 'you will see a voided invoice. Nothing was charged. Start the plan again and '
+                     . 'add-ons unlock immediately.',
+
                 $subscription->isPastDue()
                     => 'Your last payment didn’t go through. Update your card and add-ons are '
                      . 'available again straight away.',
+
                 default
-                    => 'Add-ons unlock once your subscription is active — currently '
-                     . lcfirst($subscription->statusLabel()) . '.',
+                    => 'Add-ons attach to an active subscription, and this one is currently '
+                     . lcfirst($subscription->statusLabel()) . '. Once it is running they unlock '
+                     . 'automatically.',
+            },
+            // Where the fix lives, when there is one the customer can perform.
+            'blockedAction' => $canBuy ? null : match (true) {
+                $subscription->isPastDue() => ['#payment-methods', 'Update your card'],
+                $subscription->status === \App\Models\Billing\Subscription::STATUS_INCOMPLETE
+                    => [route('billing.plans', ['client' => $client->slug]), 'Start the plan again'],
+                default => null,
             },
         ]);
     }

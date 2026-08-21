@@ -10,7 +10,9 @@
 @include('billing._styles')
 
 <style>
-    .ad-wrap { max-width:1040px; margin:0 auto; }
+    /* 32px top matches the mt-8 every other billing page opens with — without
+       it the heading sits flush against the top chrome. */
+    .ad-wrap { max-width:1040px; margin:32px auto 0; }
 
     .ad-head { margin-bottom:24px; }
     .ad-head h1 { font-size:26px; font-weight:800; letter-spacing:-.025em; color:#0b1220; margin:0 0 7px; }
@@ -115,10 +117,17 @@
          to the plan ladder and telling a paying customer to choose a plan. --}}
     @if (! ($canBuy ?? true))
         <div class="bl-alert bl-alert--info" style="margin-bottom:18px">
-            <i data-lucide="clock" class="w-5 h-5" style="flex:none"></i>
+            <i data-lucide="info" class="w-5 h-5" style="flex:none"></i>
             <div>
-                <strong>Not quite yet</strong>
+                <strong>Add-ons aren’t available yet</strong>
                 {{ $blockedWhy }}
+                @if (! empty($blockedAction))
+                    <div style="margin-top:9px">
+                        <a href="{{ $blockedAction[0] }}" class="bl-btn bl-btn--primary bl-btn--sm">
+                            {{ $blockedAction[1] }}
+                        </a>
+                    </div>
+                @endif
             </div>
         </div>
     @endif
@@ -153,6 +162,14 @@
                         @endif
                         <div class="ad-unit">
                             {{ $money($unit) }} <span>per unit, per {{ $per }}</span>
+                        </div>
+                        {{-- The interval is not a choice we are withholding.
+                             Stripe requires every line on a subscription to share
+                             one billing interval, so an add-on on an annual plan
+                             can only be annual. Saying so beats showing one
+                             option and letting it look like an oversight. --}}
+                        <div class="ad-desc" style="margin-top:6px;color:#98a2b3;font-size:11.5px">
+                            Billed {{ $per }}ly, on the same invoice as your plan.
                         </div>
                     </div>
 
