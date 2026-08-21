@@ -214,7 +214,7 @@
 
             @if (empty($usage))
                 <div class="bl-empty">
-                    <i data-lucide="bar-chart-2" class="w-7 h-7"></i>
+                    <i data-lucide="bar-chart" class="w-7 h-7"></i>
                     No usage recorded yet.
                 </div>
             @else
@@ -605,7 +605,7 @@
                                 @csrf @method('DELETE')
                                 <input type="hidden" name="payment_method" value="{{ $card['id'] }}">
                                 <button type="submit" class="bl-btn bl-btn--danger bl-btn--sm" title="Remove">
-                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                    <i data-lucide="trash" class="w-3.5 h-3.5"></i>
                                 </button>
                             </form>
                         </div>

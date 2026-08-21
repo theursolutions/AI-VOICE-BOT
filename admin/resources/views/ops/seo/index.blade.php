@@ -383,7 +383,7 @@
                                         @endforeach
                                     </select>
                                     <input type="text" name="sm_priority[]" class="seo-input" value="{{ $u['priority'] ?? '0.5' }}">
-                                    <button type="button" class="seo-sm-del" onclick="this.closest('.seo-sm-row').remove()"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                                    <button type="button" class="seo-sm-del" onclick="this.closest('.seo-sm-row').remove()"><i data-lucide="trash" class="w-4 h-4"></i></button>
                                 </div>
                             @empty
                             @endforelse
@@ -512,7 +512,7 @@
             '<input type="text" name="sm_loc[]" class="seo-input" placeholder="/pricing">' +
             '<select name="sm_changefreq[]" class="seo-select">' + freq + '</select>' +
             '<input type="text" name="sm_priority[]" class="seo-input" value="0.5">' +
-            '<button type="button" class="seo-sm-del"><i data-lucide="trash-2" class="w-4 h-4"></i></button>';
+            '<button type="button" class="seo-sm-del"><i data-lucide="trash" class="w-4 h-4"></i></button>';
         row.querySelector('.seo-sm-del').addEventListener('click', () => row.remove());
         document.getElementById('smRows').appendChild(row);
         if (window.lucide?.createIcons) window.lucide.createIcons();

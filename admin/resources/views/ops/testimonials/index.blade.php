@@ -199,7 +199,7 @@
                           data-confirm="Delete the testimonial from {{ $t->name }}? This cannot be undone.">
                         @csrf
                         <button type="submit" class="btn btn-danger btn-sm" title="Delete">
-                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                            <i data-lucide="trash" class="w-3.5 h-3.5"></i>
                         </button>
                     </form>
                 </div>

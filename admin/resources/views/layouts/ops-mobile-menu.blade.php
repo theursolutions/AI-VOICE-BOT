@@ -10,7 +10,7 @@
             <span class="ops-internal-badge">Internal</span>
         </a>
         <a href="javascript:;" class="mobile-menu-toggler">
-            <i data-lucide="bar-chart-2" class="w-8 h-8 text-white transform -rotate-90"></i>
+            <i data-lucide="bar-chart" class="w-8 h-8 text-white transform -rotate-90"></i>
         </a>
     </div>
     <div class="scrollable">
@@ -23,7 +23,7 @@
                 <div class="menu__title">Overview</div>
             </a></li>
             <li><a href="{{ route('ops.analytics.index') }}" class="menu {{ $is('ops.analytics.*') ? 'menu--active' : '' }}">
-                <div class="menu__icon"><i data-lucide="bar-chart-2"></i></div>
+                <div class="menu__icon"><i data-lucide="bar-chart"></i></div>
                 <div class="menu__title">Analytics</div>
             </a></li>
             <li class="menu__devider my-4"></li>

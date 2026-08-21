@@ -332,7 +332,7 @@
                                                   onsubmit="return confirm('Delete “{{ $feature->name }}” and remove it from every plan?\n\nAny code checking this feature key will start returning “not granted”.');">
                                                 @csrf @method('DELETE')
                                                 <button type="submit" class="ob-btn ob-btn--danger ob-btn--icon" title="Delete">
-                                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                                    <i data-lucide="trash" class="w-3.5 h-3.5"></i>
                                                 </button>
                                             </form>
                                         </div>

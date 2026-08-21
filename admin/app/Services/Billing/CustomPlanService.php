@@ -3,8 +3,10 @@
 namespace App\Services\Billing;
 
 use App\Models\Billing\Plan;
+use App\Models\Billing\PlanPrice;
 use App\Models\Client;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Turns a quote into a real, purchasable plan for one client.
@@ -179,17 +181,38 @@ class CustomPlanService
     }
 
     /**
-     * Monthly and annual, annual at ten months to match the catalogue.
+     * Monthly and annual, annual at ten months to match the catalogue — then
+     * minted at Stripe immediately.
      *
-     * stripe_price_ref is left null on purpose: BillingService refuses a price
-     * without one, so a plan cannot be bought until its Stripe price has been
-     * minted. A checkout that declines is a better failure than one that charges
-     * an amount nobody created.
+     * SYNCED HERE, NOT LATER, and that is the whole point. The published tiers
+     * can wait for an operator to press Sync Stripe because an operator created
+     * them; a custom plan is created by a CUSTOMER who has just pressed "use this
+     * plan", and leaving its price unminted meant the only possible outcome was
+     * being told we would email them. A self-serve flow whose last step is a
+     * promise to get back to you is not self-serve.
+     *
+     * Failure is tolerated rather than fatal. If Stripe is unconfigured or the
+     * call fails, the rows still exist with a null stripe_price_ref, checkout
+     * still refuses them, and the caller still shows the "we are finishing this
+     * off" message — so the worst case is exactly the behaviour this replaces,
+     * never a plan that half-exists or a customer charged for something that was
+     * never created.
      */
     private function priceIt(Plan $plan, int $monthlyCents): void
     {
+        $sync = app(StripeSyncService::class);
+
+        // The product has to exist before any price can point at it.
+        try {
+            $sync->syncProduct($plan);
+        } catch (\Throwable $e) {
+            Log::warning('billing.custom_plan.product_sync_failed', [
+                'plan_id' => $plan->id, 'error' => $e->getMessage(),
+            ]);
+        }
+
         foreach (['monthly' => $monthlyCents, 'annually' => $monthlyCents * 10] as $interval => $amount) {
-            DB::table('plan_prices')->insert([
+            $id = DB::table('plan_prices')->insertGetId([
                 'plan_id'         => $plan->id,
                 'interval'        => $interval,
                 'currency'        => 'usd',
@@ -199,6 +222,16 @@ class CustomPlanService
                 'created_at'      => now(),
                 'updated_at'      => now(),
             ]);
+
+            try {
+                $sync->syncPrice(PlanPrice::findOrFail($id));
+            } catch (\Throwable $e) {
+                // Left unminted. Checkout refuses it, which is the safe
+                // direction, and the operator can sync it from the Plans page.
+                Log::warning('billing.custom_plan.price_sync_failed', [
+                    'plan_id' => $plan->id, 'interval' => $interval, 'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 

@@ -145,7 +145,7 @@
                         <i data-lucide="pencil" class="w-4 h-4"></i>
                     </button>
                     <button type="button" class="text-danger inline-flex items-center justify-center w-8 h-8 rounded hover:bg-danger/10" data-tva-modal-open="agent-delete-{{ $agent->id }}" title="Delete">
-                        <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        <i data-lucide="trash" class="w-4 h-4"></i>
                     </button>
                 </div>
             </div>
@@ -168,7 +168,7 @@
                 <div class="tva-modal__backdrop" data-tva-modal-close></div>
                 <div class="tva-modal__panel" style="max-width:420px;">
                     <div class="tva-modal__head">
-                        <i data-lucide="trash-2" class="w-4 h-4 mr-2 inline" style="color:#b91c1c;"></i>
+                        <i data-lucide="trash" class="w-4 h-4 mr-2 inline" style="color:#b91c1c;"></i>
                         Delete agent
                         <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
                     </div>

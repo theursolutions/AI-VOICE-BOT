@@ -224,7 +224,7 @@
     <div class="tva-row" style="margin-bottom: 22px;">
         <div class="tva-card">
             <div class="tva-card__title">
-                <i data-lucide="bar-chart-2" class="w-4 h-4"></i> Activity — last 14 days
+                <i data-lucide="bar-chart" class="w-4 h-4"></i> Activity — last 14 days
             </div>
             <div class="tva-chart-wrap">
                 <canvas id="tvaActivityChart"></canvas>
