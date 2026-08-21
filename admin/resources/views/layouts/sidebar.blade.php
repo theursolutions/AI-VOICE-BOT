@@ -1,3 +1,20 @@
+{{-- Plan-locked menu items.
+     A padlock and a dimmed label, not a hidden row. The glyph is a CSS mask on
+     a data-URI so it needs no icon-library name — the built lucide bundle is
+     older than node_modules and does not carry every name the package does,
+     which has already cost us one wrong diagnosis. --}}
+<style>
+    .side-menu--plan { opacity:.62; }
+    .side-menu--plan:hover { opacity:1; }
+    .side-menu--plan .side-menu__title::after {
+        content:''; display:inline-block; width:11px; height:11px;
+        margin-left:7px; vertical-align:-1px;
+        background-color:currentColor; opacity:.75;
+        -webkit-mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>") center/contain no-repeat;
+                mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><rect x='3' y='11' width='18' height='11' rx='2'/><path d='M7 11V7a5 5 0 0 1 10 0v4'/></svg>") center/contain no-repeat;
+    }
+</style>
+
 @php
     // Helper: check if any of the given route names is the current route.
     $is = fn (...$names) => collect($names)->some(fn ($n) => request()->routeIs($n));
@@ -64,6 +81,17 @@
         return in_array($k, $mods, true);
     };
 
+    // Plan-locked modules stay in the menu under a padlock rather than
+    // vanishing: nobody upgrades to reach a feature they have never seen, and
+    // the route gate refuses the page either way, so showing it costs nothing
+    // and hiding it costs the sale. Clicking one lands on the upgrade dialog.
+    $lockedMods = $tvaLockedModules ?? [];
+    $planLocked = fn (string $k) => in_array($k, $lockedMods, true);
+    $lockCls    = fn (string $k) => in_array($k, $lockedMods, true) ? ' side-menu--plan' : '';
+    $lockTip    = fn (string $k) => in_array($k, $lockedMods, true)
+        ? 'Not included in your plan — click to see what unlocks it'
+        : null;
+
     // Section visibility — a collapsible group shows only if the member can
     // reach at least one of its children.
     $showSocial    = $can('messages') || $can('channels');
@@ -106,7 +134,8 @@
         @if($can('assistant'))
         <li>
             <a href="{{ $clientSlug ? route('assistant.index', ['client' => $clientSlug]) : '#' }}"
-               class="side-menu {{ $is('assistant.*') ? 'side-menu--active' : '' }}">
+               class="side-menu {{ $is('assistant.*') ? 'side-menu--active' : '' }}{{ $lockCls('assistant') }}"
+                       @if ($planLocked('assistant')) title="{{ $lockTip('assistant') }}" @endif>
                 <div class="side-menu__icon"><i data-lucide="bot"></i></div>
                 <div class="side-menu__title">Ask AI</div>
             </a>
@@ -161,7 +190,8 @@
         @if($can('compute'))
         <li>
             <a href="{{ $clientSlug ? route('compute.index', ['client' => $clientSlug]) : '#' }}"
-               class="side-menu {{ $is('compute.*') ? 'side-menu--active' : '' }}">
+               class="side-menu {{ $is('compute.*') ? 'side-menu--active' : '' }}{{ $lockCls('compute') }}"
+                       @if ($planLocked('compute')) title="{{ $lockTip('compute') }}" @endif>
                 <div class="side-menu__icon"><i data-lucide="cpu"></i></div>
                 <div class="side-menu__title">Live Compute</div>
             </a>
@@ -182,7 +212,8 @@
                 @if($can('messages'))
                 <li>
                     <a href="{{ $clientSlug ? route('chat.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('chat.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('chat.*') ? 'side-menu--active' : '' }}{{ $lockCls('messages') }}"
+                       @if ($planLocked('messages')) title="{{ $lockTip('messages') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="message-square"></i></div>
                         <div class="side-menu__title">Omni Chats</div>
                     </a>
@@ -191,7 +222,8 @@
                 @if($can('channels'))
                 <li>
                     <a href="{{ $clientSlug ? route('channels.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('channels.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('channels.*') ? 'side-menu--active' : '' }}{{ $lockCls('channels') }}"
+                       @if ($planLocked('channels')) title="{{ $lockTip('channels') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="radio"></i></div>
                         <div class="side-menu__title">Meta Onboarding</div>
                     </a>
@@ -223,14 +255,16 @@
             <ul class="{{ $sec['ai'] ? 'side-menu__sub-open' : '' }}">
                 <li>
                     <a href="{{ $clientSlug ? route('bot-strategy.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('bot-strategy.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('bot-strategy.*') ? 'side-menu--active' : '' }}{{ $lockCls('bot_strategy') }}"
+                       @if ($planLocked('bot_strategy')) title="{{ $lockTip('bot_strategy') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="layers"></i></div>
                         <div class="side-menu__title">Bot Strategy</div>
                     </a>
                 </li>
                 <li>
                     <a href="{{ $clientSlug ? route('brain-settings.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('brain-settings.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('brain-settings.*') ? 'side-menu--active' : '' }}{{ $lockCls('brain_settings') }}"
+                       @if ($planLocked('brain_settings')) title="{{ $lockTip('brain_settings') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="bot"></i></div>
                         <div class="side-menu__title">Brain &amp; Compute</div>
                     </a>
@@ -253,7 +287,8 @@
                 @if($can('data_sources'))
                 <li>
                     <a href="{{ $clientSlug ? route('data-sources.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('data-sources.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('data-sources.*') ? 'side-menu--active' : '' }}{{ $lockCls('data_sources') }}"
+                       @if ($planLocked('data_sources')) title="{{ $lockTip('data_sources') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="database"></i></div>
                         <div class="side-menu__title">Data Sources</div>
                     </a>
@@ -262,7 +297,8 @@
                 @if($can('voices'))
                 <li>
                     <a href="{{ $clientSlug ? route('voices.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('voices.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('voices.*') ? 'side-menu--active' : '' }}{{ $lockCls('voices') }}"
+                       @if ($planLocked('voices')) title="{{ $lockTip('voices') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="mic"></i></div>
                         <div class="side-menu__title">Voices</div>
                     </a>
@@ -271,7 +307,8 @@
                 @if($can('telephony'))
                 <li>
                     <a href="{{ $clientSlug ? route('telephony.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('telephony.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('telephony.*') ? 'side-menu--active' : '' }}{{ $lockCls('telephony') }}"
+                       @if ($planLocked('telephony')) title="{{ $lockTip('telephony') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="phone"></i></div>
                         <div class="side-menu__title">Telephony</div>
                     </a>
@@ -295,7 +332,8 @@
                 @if($can('profile'))
                 <li>
                     <a href="{{ $clientSlug ? route('project-profile.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('project-profile.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('project-profile.*') ? 'side-menu--active' : '' }}{{ $lockCls('profile') }}"
+                       @if ($planLocked('profile')) title="{{ $lockTip('profile') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="image"></i></div>
                         <div class="side-menu__title">Project Profile</div>
                     </a>
@@ -304,7 +342,8 @@
                 @if($can('agents'))
                 <li>
                     <a href="{{ $clientSlug ? route('bot-agents.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('bot-agents.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('bot-agents.*') ? 'side-menu--active' : '' }}{{ $lockCls('agents') }}"
+                       @if ($planLocked('agents')) title="{{ $lockTip('agents') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="users"></i></div>
                         <div class="side-menu__title">Agents</div>
                     </a>
@@ -313,7 +352,8 @@
                 @if($can('skills'))
                 <li>
                     <a href="{{ $clientSlug ? route('skills.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('skills.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('skills.*') ? 'side-menu--active' : '' }}{{ $lockCls('skills') }}"
+                       @if ($planLocked('skills')) title="{{ $lockTip('skills') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="tag"></i></div>
                         <div class="side-menu__title">Skills</div>
                     </a>
@@ -322,7 +362,8 @@
                 @if($can('flows'))
                 <li>
                     <a href="{{ $clientSlug ? route('flows.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('flows.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('flows.*') ? 'side-menu--active' : '' }}{{ $lockCls('flows') }}"
+                       @if ($planLocked('flows')) title="{{ $lockTip('flows') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="git-branch"></i></div>
                         <div class="side-menu__title">Flow builder</div>
                     </a>
@@ -331,7 +372,8 @@
                 @if($can('widget'))
                 <li>
                     <a href="{{ $clientSlug ? route('widget-settings.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('widget-settings.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('widget-settings.*') ? 'side-menu--active' : '' }}{{ $lockCls('widget') }}"
+                       @if ($planLocked('widget')) title="{{ $lockTip('widget') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="layout-template"></i></div>
                         <div class="side-menu__title">Widget</div>
                     </a>
@@ -355,7 +397,8 @@
                 @if($can('conversations'))
                 <li>
                     <a href="{{ $clientSlug ? route('sessions.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('sessions.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('sessions.*') ? 'side-menu--active' : '' }}{{ $lockCls('conversations') }}"
+                       @if ($planLocked('conversations')) title="{{ $lockTip('conversations') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="message-square"></i></div>
                         <div class="side-menu__title">Conversations</div>
                     </a>
@@ -364,7 +407,8 @@
                 @if($can('contacts'))
                 <li>
                     <a href="{{ $clientSlug ? route('contacts.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('contacts.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('contacts.*') ? 'side-menu--active' : '' }}{{ $lockCls('contacts') }}"
+                       @if ($planLocked('contacts')) title="{{ $lockTip('contacts') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="contact"></i></div>
                         <div class="side-menu__title">Contacts</div>
                     </a>
@@ -373,7 +417,8 @@
                 @if($can('leads'))
                 <li>
                     <a href="{{ $clientSlug ? route('leads.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('leads.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('leads.*') ? 'side-menu--active' : '' }}{{ $lockCls('leads') }}"
+                       @if ($planLocked('leads')) title="{{ $lockTip('leads') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="user-check"></i></div>
                         <div class="side-menu__title">Leads</div>
                     </a>
@@ -397,21 +442,24 @@
             <ul class="{{ $sec['team'] ? 'side-menu__sub-open' : '' }}">
                 <li>
                     <a href="{{ $clientSlug ? route('members.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('members.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('members.*') ? 'side-menu--active' : '' }}{{ $lockCls('team') }}"
+                       @if ($planLocked('team')) title="{{ $lockTip('team') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="users"></i></div>
                         <div class="side-menu__title">Members</div>
                     </a>
                 </li>
                 <li>
                     <a href="{{ $clientSlug ? route('roles.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('roles.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('roles.*') ? 'side-menu--active' : '' }}{{ $lockCls('team') }}"
+                       @if ($planLocked('team')) title="{{ $lockTip('team') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="shield"></i></div>
                         <div class="side-menu__title">Roles</div>
                     </a>
                 </li>
                 <li>
                     <a href="{{ $clientSlug ? route('invitations.index', ['client' => $clientSlug]) : '#' }}"
-                       class="side-menu {{ $is('invitations.*') ? 'side-menu--active' : '' }}">
+                       class="side-menu {{ $is('invitations.*') ? 'side-menu--active' : '' }}{{ $lockCls('team') }}"
+                       @if ($planLocked('team')) title="{{ $lockTip('team') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="user-plus"></i></div>
                         <div class="side-menu__title">Invitations</div>
                     </a>

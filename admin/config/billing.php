@@ -585,13 +585,15 @@ return [
         'show_local_currency' => true,
         'pricing_page_enabled' => true,
 
-        // true  — sections the plan doesn't include vanish from the sidebar, so
-        //         the menu matches what the customer bought (no dead ends).
-        // false — they stay visible and clicking lands on the 402 upsell page,
-        //         which advertises the feature instead of hiding it.
+        // false — sections the plan doesn't include stay in the sidebar under a
+        //         padlock, and clicking one raises the upgrade dialog. Nobody
+        //         upgrades to reach a feature they have never seen, so this is
+        //         the default: the same menu becomes the shortest sales pitch
+        //         available, at no cost to a paying customer who sees no locks.
+        // true  — they vanish, so the menu matches exactly what was bought.
         // Either way the route gate (EnsurePlanFeature) is unchanged; this only
         // controls visibility.
-        'hide_locked_modules' => (bool) env('BILLING_HIDE_LOCKED_MODULES', true),
+        'hide_locked_modules' => (bool) env('BILLING_HIDE_LOCKED_MODULES', false),
         'enterprise_cta_url'  => '/contact',
         'enterprise_from'     => 499,     // USD/mo "from" anchor on the page
     ],

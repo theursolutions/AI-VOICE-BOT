@@ -42,7 +42,8 @@
     .ws-empty { background:#fff; border:1px dashed #d8e2de; border-radius:12px; padding:34px; text-align:center; color:#64748b; font-size:13px; }
 </style>
 
-<div class="ws-head">
+<div class="content">
+<div class="ws-head mt-6">
     <div>
         <h1 class="ws-head__t">Workspace plans</h1>
         <p class="ws-head__d">
@@ -119,4 +120,5 @@
 
     <div style="margin-top:16px">{{ $clients->links() }}</div>
 @endif
+</div>
 @endsection

@@ -2,18 +2,36 @@
 
 @section('content')
 <style>
-    .wd-top { display:flex; align-items:flex-start; justify-content:space-between; gap:18px; flex-wrap:wrap; margin-bottom:22px; }
-    .wd-top__t { font-size:21px; font-weight:700; color:#0f172a; margin:0 0 4px; letter-spacing:-.01em; }
-    .wd-top__s { font:12px ui-monospace,Menlo,monospace; color:#94a3b8; }
-    .wd-back { font-size:12.5px; color:#0b6e5b; text-decoration:none; font-weight:650; }
+    /* A header BAND rather than loose text: this page mixes a read-only
+       entitlement table with two forms that change what a customer is allowed,
+       so the identity of the workspace being edited has to be unmistakable and
+       stay at the top of the eye's path. */
+    .wd-top {
+        display:flex; align-items:center; justify-content:space-between; gap:20px; flex-wrap:wrap;
+        margin-bottom:22px; padding:18px 22px; border-radius:14px;
+        background:linear-gradient(135deg,#f7fbfa,#fff 65%);
+        border:1px solid #e6ecf1;
+    }
+    .wd-top__t { font-size:20px; font-weight:750; color:#0f172a; margin:2px 0 3px; letter-spacing:-.015em; }
+    .wd-top__s { font:11.5px ui-monospace,Menlo,monospace; color:#94a3b8; }
+    .wd-back { font-size:12px; color:#0b6e5b; text-decoration:none; font-weight:650; }
+    .wd-back:hover { text-decoration:underline; }
+    .wd-top__r { text-align:right; }
+    .wd-top__lbl { font:600 10px ui-monospace,Menlo,monospace; letter-spacing:.09em; text-transform:uppercase; color:#94a3b8; }
+    .wd-top__plan { font-size:17px; font-weight:750; color:#0f172a; margin-top:2px; }
 
     .wd-grid { display:grid; grid-template-columns:minmax(0,1fr) 360px; gap:20px; align-items:start; }
     @media (max-width:1080px) { .wd-grid { grid-template-columns:1fr; } }
 
-    .wd-card { background:#fff; border:1px solid #e6ecf1; border-radius:13px; padding:0 0 16px; margin-bottom:18px; }
-    .wd-card__h { display:flex; align-items:center; gap:9px; padding:14px 17px; border-bottom:1px solid #f1f5f9; }
-    .wd-card__t { font-size:13.5px; font-weight:650; color:#0f172a; }
-    .wd-card__b { padding:14px 17px 0; }
+    .wd-card {
+        background:#fff; border:1px solid #e6ecf1; border-radius:14px;
+        padding:0 0 18px; margin-bottom:18px;
+        box-shadow:0 1px 2px rgba(15,23,42,.03);
+    }
+    .wd-card__h { display:flex; align-items:center; gap:10px; padding:15px 19px; border-bottom:1px solid #f4f7f9; }
+    .wd-card__t { font-size:13.5px; font-weight:680; color:#0f172a; letter-spacing:-.005em; }
+    .wd-card__b { padding:16px 19px 0; }
+    .wd-card__b > form { margin:0; }
 
     .wd-note { font-size:12px; color:#94a3b8; line-height:1.6; }
 
@@ -33,10 +51,15 @@
 
     .wd-tbl { width:100%; border-collapse:collapse; font-size:12.5px; }
     .wd-tbl th { text-align:left; font:600 10px ui-monospace,Menlo,monospace; letter-spacing:.08em; text-transform:uppercase; color:#94a3b8; padding:7px 8px; border-bottom:1px solid #eef2f6; }
-    .wd-tbl td { padding:8px; border-bottom:1px solid #f6f8fa; color:#334155; }
+    .wd-tbl td { padding:9px 8px; border-bottom:1px solid #f6f8fa; color:#334155; }
+    .wd-tbl td:first-child { padding-left:2px; }
     .wd-tbl td.num { font-family:ui-monospace,Menlo,monospace; text-align:right; white-space:nowrap; }
     .wd-tbl tr:last-child td { border-bottom:none; }
-    .wd-grp { font:600 10px ui-monospace,Menlo,monospace; letter-spacing:.08em; text-transform:uppercase; color:#0b6e5b; background:#f7fbfa; }
+    .wd-grp {
+        font:700 9.5px ui-monospace,Menlo,monospace; letter-spacing:.1em; text-transform:uppercase;
+        color:#0b6e5b; background:#f2f9f7; padding:7px 8px !important;
+        border-top:1px solid #e6f2ee; border-bottom:1px solid #e6f2ee;
+    }
     .wd-plus { color:#7e22ce; font-weight:700; }
     .wd-unl  { color:#0369a1; font-weight:650; }
 
@@ -49,6 +72,19 @@
     .wd-pill--gift { background:#f3e8ff; color:#7e22ce; }
     .wd-pill--live { background:#dcfce7; color:#15803d; }
     .wd-pill--stale{ background:#eef2f6; color:#64748b; }
+
+    html.dark .wd-top { background:linear-gradient(135deg,#0f172a,#1e293b 65%); border-color:#334155; }
+    html.dark .wd-top__t, html.dark .wd-top__plan { color:#f8fafc; }
+    html.dark .wd-card { background:#1e293b; border-color:#334155; }
+    html.dark .wd-card__h { border-color:#334155; }
+    html.dark .wd-card__t { color:#f8fafc; }
+    html.dark .wd-tbl td { color:#cbd5e1; border-color:#334155; }
+    html.dark .wd-tbl th { border-color:#334155; }
+    html.dark .wd-grp { background:#14342c; border-color:#1f4d41; }
+    html.dark .wd-fld input, html.dark .wd-fld select, html.dark .wd-fld textarea {
+        background:#0f172a; border-color:#334155; color:#f8fafc;
+    }
+    html.dark .wd-fld label { color:#cbd5e1; }
 </style>
 
 @php
@@ -56,15 +92,16 @@
     $onStripe = (bool) $subscription?->stripe_subscription_ref;
 @endphp
 
-<div class="wd-top">
+<div class="content">
+<div class="wd-top mt-6">
     <div>
         <a href="{{ route('ops.billing.workspaces.index') }}" class="wd-back">&larr; All workspaces</a>
         <h1 class="wd-top__t" style="margin-top:6px">{{ $client->name }}</h1>
         <div class="wd-top__s">{{ $client->slug }} &middot; workspace #{{ $client->id }}</div>
     </div>
-    <div style="text-align:right">
-        <div style="font-size:12px;color:#94a3b8">Currently on</div>
-        <div style="font-size:16px;font-weight:700;color:#0f172a">{{ $plan?->name ?? 'No plan' }}</div>
+    <div class="wd-top__r">
+        <div class="wd-top__lbl">Currently on</div>
+        <div class="wd-top__plan">{{ $plan?->name ?? 'No plan' }}</div>
         @if ($assigned)
             <span class="wd-pill wd-pill--gift" style="margin-top:5px;display:inline-block">Assigned free</span>
         @elseif ($onStripe)
@@ -286,5 +323,6 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 @endsection
