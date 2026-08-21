@@ -150,6 +150,16 @@ class BillingController extends Controller
     {
         $this->authorizeOwner($request, $client);
 
+        // Retired while the product owns the whole billing surface. Everything
+        // the portal offered is here: cards have their own form, invoices are
+        // rendered by us, and billing details are edited below. Refused at the
+        // endpoint and not merely unlinked, because an old bookmark is a live
+        // request.
+        if (config('billing.checkout.in_app_only', true)) {
+            return back()->with('info', 'Everything is on this page — payment methods, invoices and '
+                . 'billing details. There is nowhere else to go.');
+        }
+
         if (! $client->hasStripeCustomer()) {
             return back()->with('info', 'You’ll be able to manage payment details after your first subscription.');
         }
@@ -252,9 +262,17 @@ class BillingController extends Controller
 
         // No live Stripe subscription (free window, expired, cancelled) → this
         // has to be a fresh checkout, not a swap.
+        //
+        // Straight to the in-app form, carrying the selection. This used to post
+        // to checkout.store, which built a hosted Stripe session — so "change
+        // plan" was the one action that could still walk a customer off the
+        // product, and only for the subset who had never paid before.
         if (! $subscription?->stripe_subscription_ref || ! $subscription->grantsAccess()) {
-            return redirect()->route('billing.checkout.store', ['client' => $client->slug])
-                ->withInput($data);
+            return redirect()->route('billing.checkout', [
+                'client'   => $client->slug,
+                'plan'     => $data['plan'],
+                'interval' => $data['interval'],
+            ]);
         }
 
         try {
@@ -329,6 +347,52 @@ class BillingController extends Controller
             'success',
             "Saved. Each conversation now gets {$limit} AI replies before a team member takes over."
         );
+    }
+
+    /**
+     * Billing details — the name, address and tax number that appear on an
+     * invoice.
+     *
+     * This is what replaces the hosted portal. Saved locally first and pushed to
+     * Stripe second, in that order deliberately: our own invoice renders from
+     * these columns, so the customer's paperwork is correct the moment they press
+     * save even if Stripe is unreachable, and even if they have no Stripe
+     * customer yet because they have never paid.
+     */
+    public function updateDetails(Request $request, Client $client): RedirectResponse
+    {
+        $this->authorizeOwner($request, $client);
+
+        $data = $request->validate([
+            'billing_name'    => ['nullable', 'string', 'max:255'],
+            'billing_email'   => ['nullable', 'email', 'max:255'],
+            // ISO-3166 alpha-2, which is what Stripe wants and what
+            // config('billing.country_currency') is keyed on.
+            'billing_country' => ['nullable', 'string', 'size:2', 'alpha'],
+            // Free text: a GST number, a VAT number, an NTN and an EIN have
+            // nothing in common but needing to appear on an invoice, and
+            // per-country validation would reject legitimate identifiers long
+            // before it caught a typo.
+            'billing_tax_id'  => ['nullable', 'string', 'max:60'],
+        ]);
+
+        $client->forceFill([
+            'billing_name'    => $data['billing_name'] ?: null,
+            'billing_email'   => $data['billing_email'] ?: null,
+            'billing_country' => $data['billing_country'] ? strtoupper($data['billing_country']) : null,
+            'billing_tax_id'  => $data['billing_tax_id'] ?: null,
+            'updated_at'      => time(),
+        ])->save();
+
+        $this->billing->syncCustomerDetails($client);
+
+        AuditLog::record('billing.details_updated', [
+            'target_type' => 'client',
+            'target_id'   => $client->id,
+            'payload'     => ['country' => $client->billing_country],
+        ]);
+
+        return back()->with('success', 'Billing details saved. They will appear on your next invoice.');
     }
 
     private function authorizeOwner(Request $request, Client $client): void

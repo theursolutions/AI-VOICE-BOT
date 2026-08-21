@@ -612,20 +612,54 @@
             </div>
         @endif
 
-        {{-- Stripe portal, for tax ids / billing address / raw invoices --}}
-        @if ($isOwner && $client->hasStripeCustomer())
+        {{-- Billing details.
+             What replaced the hosted Stripe portal. Everything the portal
+             offered now lives on this page: cards above, invoices below, and
+             the name, country and tax number that appear on an invoice here.
+             Saved locally first and pushed to Stripe second, so the paperwork is
+             right the moment it is saved — including for a workspace that has
+             never paid and so has no Stripe customer yet. --}}
+        @if ($isOwner)
             <div class="bl-card intro-y">
                 <div class="bl-card__head">
-                    <i data-lucide="external-link" class="w-4 h-4" style="color:#6366f1"></i>
-                    <div class="bl-card__title">Billing portal</div>
+                    <i data-lucide="receipt" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="bl-card__title">Billing details</div>
                 </div>
                 <p style="font-size:13px;color:#64748b;line-height:1.6;margin:0 0 14px">
-                    Billing address, tax ID and original Stripe receipts.
+                    What appears on your invoices.
                 </p>
-                <form method="POST" action="{{ route('billing.portal', ['client' => $client->slug]) }}">
-                    @csrf
-                    <button type="submit" class="bl-btn bl-btn--ghost" style="width:100%">
-                        Open Stripe portal <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+
+                <form method="POST" action="{{ route('billing.details', ['client' => $client->slug]) }}">
+                    @csrf @method('PATCH')
+
+                    @php
+                        $detailFields = [
+                            ['billing_name',    'Billed to',      'text',  $client->name, 'Company or person'],
+                            ['billing_email',   'Invoice email',  'email', '',            'accounts@example.com'],
+                            ['billing_country', 'Country code',   'text',  '',            'PK'],
+                            ['billing_tax_id',  'Tax number',     'text',  '',            'NTN / GST / VAT'],
+                        ];
+                    @endphp
+
+                    @foreach ($detailFields as [$name, $label, $type, $fallback, $placeholder])
+                        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:11px;">
+                            <label for="{{ $name }}" style="font:650 11.5px system-ui,sans-serif;color:#334155;">
+                                {{ $label }}
+                            </label>
+                            <input type="{{ $type }}" name="{{ $name }}" id="{{ $name }}"
+                                   value="{{ old($name, $client->{$name}) }}"
+                                   placeholder="{{ $placeholder ?: $fallback }}"
+                                   @if ($name === 'billing_country') maxlength="2" style="text-transform:uppercase" @endif
+                                   style="padding:9px 11px;border:1px solid #e2e8f0;border-radius:8px;
+                                          font:13px system-ui,sans-serif;color:#0f172a;background:#fff;">
+                            @error($name)
+                                <span style="font-size:11.5px;color:#b91c1c;line-height:1.45">{{ $message }}</span>
+                            @enderror
+                        </div>
+                    @endforeach
+
+                    <button type="submit" class="bl-btn bl-btn--ghost" style="width:100%;margin-top:4px">
+                        Save details
                     </button>
                 </form>
             </div>

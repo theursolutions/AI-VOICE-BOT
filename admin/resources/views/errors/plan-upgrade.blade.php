@@ -92,18 +92,19 @@
 
         <div class="pu-actions">
             @if ($requiredPlan && $requiredPlan->isPurchasable())
-                {{-- Straight to checkout for the plan that actually unlocks
-                     this — a generic "see plans" link makes the customer do
-                     the matching themselves. Only slug + interval travel. --}}
-                <form method="POST" action="{{ route('billing.checkout.store', ['client' => $slug]) }}">
-                    @csrf
-                    <input type="hidden" name="plan" value="{{ $requiredPlan->slug }}">
-                    <input type="hidden" name="interval" value="monthly">
-                    <button type="submit" class="pu-btn">
-                        <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
-                        Upgrade to {{ $requiredPlan->name }}
-                    </button>
-                </form>
+                {{-- Straight to the checkout form for the plan that actually
+                     unlocks this — a generic "see plans" link makes the customer
+                     do the matching themselves. Only slug + interval travel.
+
+                     A GET to our own checkout page rather than a POST to the
+                     hosted-session starter: that route now redirects here
+                     anyway, so posting to it only added a hop, and this is the
+                     page the payment is completed on. --}}
+                <a href="{{ route('billing.checkout', ['client' => $slug, 'plan' => $requiredPlan->slug, 'interval' => 'monthly']) }}"
+                   class="pu-btn">
+                    <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+                    Upgrade to {{ $requiredPlan->name }}
+                </a>
             @endif
 
             <a href="{{ $slug ? route('billing.index', ['client' => $slug]) : url('/pricing') }}" class="pu-btn pu-btn--ghost">

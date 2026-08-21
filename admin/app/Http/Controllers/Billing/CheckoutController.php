@@ -128,6 +128,23 @@ class CheckoutController extends Controller
             return back()->with('error', 'Payments aren’t configured yet. Please contact support.');
         }
 
+        // The purchase belongs inside the product. Send them to our own Elements
+        // page instead of Stripe's hosted one, carrying the selection so they
+        // land on a form that already knows what they picked.
+        //
+        // Redirected rather than refused: every caller of this method is someone
+        // who has just chosen a plan and pressed a button, and answering that
+        // with an error would be a dead end where a working checkout exists two
+        // lines away. The hosted path below stays reachable by flipping
+        // BILLING_IN_APP_ONLY, so nothing is deleted — only routed past.
+        if (config('billing.checkout.in_app_only', true)) {
+            return redirect()->route('billing.checkout', [
+                'client'   => $client->slug,
+                'plan'     => $plan,
+                'interval' => $interval,
+            ]);
+        }
+
         try {
             $session = $this->billing->checkout(
                 client:     $client,

@@ -85,7 +85,10 @@ Route::middleware(['auth', 'active.client'])
         Route::get ('/billing/checkout/success', [CheckoutController::class, 'success'])->name('billing.checkout.success');
         Route::get ('/billing/checkout/cancel',  [CheckoutController::class, 'cancel'])->name('billing.checkout.cancel');
 
-        Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
+        // Billing details — what appears on an invoice. Replaces the hosted
+    // portal, which is refused while billing.checkout.in_app_only holds.
+    Route::patch('/billing/details', [BillingController::class, 'updateDetails'])->name('billing.details');
+    Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
         // ── Build your own plan ─────────────────────────────────────────
     // For the workspace no published tier fits. Owner-only, and the price is
     // always recomputed server-side from the posted CONFIGURATION — the browser

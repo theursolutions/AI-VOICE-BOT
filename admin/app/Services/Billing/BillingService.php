@@ -45,6 +45,40 @@ class BillingService
      * thousands of empty customers and blur the line between "free plan" and
      * "subscription", which the brief explicitly asked to keep separate.
      */
+    /**
+     * Push the workspace's billing details onto its Stripe customer.
+     *
+     * Only when there IS a customer: creating one just to record an address
+     * would litter the dashboard with empty customers for workspaces that have
+     * never paid, which is the same reason ensureCustomer() is lazy. The local
+     * columns are the source of truth either way, and our own invoice renders
+     * from them — so a workspace with no Stripe customer yet still gets correct
+     * paperwork, and Stripe catches up at the first subscription.
+     *
+     * Never allowed to throw. These details are already saved locally by the
+     * time this runs, and a Stripe API blip must not present that as a failure
+     * the customer has to retry — the next save reconciles it.
+     */
+    public function syncCustomerDetails(Client $client): void
+    {
+        if (! $client->stripe_customer_ref || ! $this->isConfigured()) {
+            return;
+        }
+
+        try {
+            $this->factory->make()->customers->update($client->stripe_customer_ref, array_filter([
+                'name'    => $client->billing_name ?: $client->stripeName(),
+                'email'   => $client->billing_email ?: $client->stripeEmail(),
+                'address' => $client->billing_country ? ['country' => $client->billing_country] : null,
+            ]));
+        } catch (\Throwable $e) {
+            Log::warning('billing.customer.sync_failed', [
+                'client_id' => $client->getKey(),
+                'error'     => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function ensureCustomer(Client $client): string
     {
         if ($client->stripe_customer_ref) {

@@ -538,6 +538,30 @@ return [
         'success_route' => 'billing.checkout.success',
         'cancel_route'  => 'billing.checkout.cancel',
 
+        /*
+         * KEEP THE WHOLE PURCHASE INSIDE THE PRODUCT.
+         *
+         * true  — every purchase runs through our own Stripe Elements form
+         *         (BillingService::subscribeWithElements), and the hosted
+         *         Checkout redirect plus the hosted Billing Portal are refused.
+         *         The customer never leaves the app, so they never see a second
+         *         brand mid-payment and never land somewhere our own session
+         *         does not follow them.
+         * false — the hosted paths are available again.
+         *
+         * The Elements path is not a reimplementation: it already existed
+         * alongside the redirect and handles 3DS. This switch decides which of
+         * the two the product actually uses, and it refuses at the ENDPOINT
+         * rather than only hiding the buttons, because a hidden button in front
+         * of a live POST route is not disabled.
+         *
+         * Retiring the portal costs the customer nothing they cannot do here:
+         * cards are managed in-app, invoices are rendered by us, and billing
+         * details have their own form. Anything genuinely Stripe-only — a
+         * disputed charge, say — is an operator task, not a self-serve one.
+         */
+        'in_app_only' => (bool) env('BILLING_IN_APP_ONLY', true),
+
         'allow_promotion_codes' => true,
         'collect_billing_address' => 'auto',      // 'auto' | 'required'
         'automatic_tax'         => (bool) env('STRIPE_AUTOMATIC_TAX', false),
