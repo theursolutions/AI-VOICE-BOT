@@ -47,6 +47,32 @@ class MemoryBuilder
     private const MAX_PASSAGES = 3;
 
     /**
+     * How far below the best passage a weaker one may score and still be sent,
+     * as a fraction of the top score. Default for
+     * services.llm.passage_score_ratio (LLM_PASSAGE_SCORE_RATIO).
+     *
+     * MAX_PASSAGES alone is a flat cap: it sends three chunks whether the
+     * retriever found three good matches or one good match and two near-misses
+     * it ranked last out of politeness. Passages are the largest block in the
+     * prompt — 500 tokens each, on every turn — so the near-misses are the
+     * single most expensive thing in it, and they are the part the model
+     * least needs.
+     *
+     * A RELATIVE test rather than an absolute floor, because BM25 scores are
+     * unbounded and corpus-dependent: a score of 4 is a strong hit in a small
+     * knowledge base and a weak one in a large index, so no fixed threshold
+     * can be right for two customers at once. The ratio compares each passage
+     * against the best one actually retrieved for THIS query, which is the only
+     * scale that means the same thing everywhere.
+     *
+     * 0.45 keeps anything at least roughly half as relevant as the winner.
+     * A confident single hit then costs one passage instead of three; a genuine
+     * three-way tie still sends all three, which is exactly when breadth is
+     * worth paying for. Set to 0 to disable the test and restore the flat cap.
+     */
+    private const PASSAGE_SCORE_RATIO = 0.45;
+
+    /**
      * Turns of verbatim history to send.
      *
      * Clamped, because this one is genuinely dangerous at both ends: a
@@ -65,6 +91,89 @@ class MemoryBuilder
     private function maxPassages(): int
     {
         return max(0, min(25, self::setting('max_passages', self::MAX_PASSAGES)));
+    }
+
+    /**
+     * Relevance ratio for trimming weak passages. 0 disables the test.
+     *
+     * Clamped to 0..0.95: at 1.0 only passages tying the top score exactly
+     * would survive, which for float scores means "the first one, always" and
+     * turns a cost dial into a silent quality cut.
+     *
+     * Read as a float, so the is_numeric() reasoning on setting() applies here
+     * too — a blank LLM_PASSAGE_SCORE_RATIO must not become 0.0 and quietly
+     * switch the trimming off.
+     */
+    private function passageScoreRatio(): float
+    {
+        $value = config('services.llm.passage_score_ratio');
+        $ratio = is_numeric($value) ? (float) $value : self::PASSAGE_SCORE_RATIO;
+
+        return max(0.0, min(0.95, $ratio));
+    }
+
+    /**
+     * Rank-and-relevance filter for retrieved passages.
+     *
+     * Applies the flat cap first (passages arrive ranked, so the tail is both
+     * the most expensive and the least relevant), then drops anything scoring
+     * below `ratio` of the best passage still in play.
+     *
+     * FAILS OPEN — returns the cap-limited list untouched — whenever the scores
+     * cannot be trusted to compare:
+     *
+     *   • a passage carries no numeric score  a resolver may yield plain
+     *                                         strings; nothing to rank on
+     *   • the top score is not positive       BM25 can emit zero or negative
+     *                                         values, and a ratio of a
+     *                                         non-positive number is meaningless
+     *   • the ratio is 0                      the test is switched off
+     *
+     * Failing open costs tokens. Failing closed would drop reference data the
+     * answer depends on, and a confidently wrong answer about someone's
+     * business is worth more than the tokens saved.
+     *
+     * @param  array<int, mixed>  $items
+     * @return array<int, mixed>
+     */
+    private function selectPassages(array $items): array
+    {
+        $capped = array_slice($items, 0, $this->maxPassages());
+        $ratio  = $this->passageScoreRatio();
+
+        if ($ratio <= 0.0 || count($capped) < 2) {
+            return $capped;
+        }
+
+        $scores = [];
+        foreach ($capped as $passage) {
+            if (! is_array($passage) || ! isset($passage['score']) || ! is_numeric($passage['score'])) {
+                return $capped;          // unscored — cannot compare, keep all
+            }
+            $scores[] = (float) $passage['score'];
+        }
+
+        // The best score present, not the first: ranking is the resolver's
+        // promise, not something to depend on when the whole point is to
+        // discard the weak tail.
+        $top = max($scores);
+
+        if ($top <= 0.0) {
+            return $capped;
+        }
+
+        $floor = $top * $ratio;
+        $kept  = [];
+
+        foreach ($capped as $i => $passage) {
+            if ($scores[$i] >= $floor) {
+                $kept[] = $passage;
+            }
+        }
+
+        // max() guarantees at least the top passage clears the floor, so $kept
+        // is never empty while $capped is not.
+        return $kept;
     }
 
     /**
@@ -326,15 +435,17 @@ class MemoryBuilder
             }
 
             if ($r->kind === ResolverResult::KIND_PASSAGES) {
-                // Capped. This loop was unbounded, so a retriever returning
-                // fifteen chunks put every one of them in the prompt — on the
-                // largest single block in it, on every turn. Passages arrive
-                // ranked, so the tail is both the most expensive part and the
-                // least relevant, and burying the good chunks among weak ones
+                // Capped AND relevance-filtered — see selectPassages().
+                //
+                // This loop was once unbounded, so a retriever returning fifteen
+                // chunks put every one of them in the prompt — on the largest
+                // single block in it, on every turn. Passages arrive ranked, so
+                // the tail is both the most expensive part and the least
+                // relevant, and burying the good chunks among weak ones
                 // measurably hurts the answer.
                 //
                 // Records already had a limit of 20 rows; passages had none.
-                foreach (array_slice($r->items, 0, $this->maxPassages()) as $passage) {
+                foreach ($this->selectPassages($r->items) as $passage) {
                     $text = is_array($passage) ? ($passage['text'] ?? '') : (string) $passage;
                     if (trim($text) === '') continue;
                     $cite = $this->citationLabel($passage);
