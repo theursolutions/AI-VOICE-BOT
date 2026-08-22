@@ -92,9 +92,13 @@ class AddonController extends Controller
                 // complimentary plan is granted, not sold, and the person who
                 // granted the plan can grant that too.
                 data_get($subscription->metadata, 'assigned_by_super_admin')
-                    => 'Your plan is on us, so there is no subscription for a paid add-on to attach '
-                     . 'to. Extra seats or agents can be added to it directly — just ask and we '
-                     . 'will raise your allowance.',
+                    => $request->user()?->isSuperAdmin()
+                        ? 'This workspace is on a complimentary plan, so it has no Stripe '
+                        . 'subscription for a paid add-on to attach to. Grant the capacity instead, '
+                        . 'or take a real subscription on the plans page to buy add-ons normally.'
+                        : 'Your plan is on us, so there is no subscription for a paid add-on to '
+                        . 'attach to. Extra seats or agents can be added to it directly — just ask '
+                        . 'and we will raise your allowance.',
 
                 ! $subscription->stripe_subscription_ref
                     => 'This plan hasn’t been set up with our payment provider yet, so there is no '
@@ -123,10 +127,16 @@ class AddonController extends Controller
             },
             // Where the fix lives, when there is one the customer can perform.
             'blockedAction' => $canBuy ? null : match (true) {
-                // Nothing for them to click on a complimentary plan — raising
-                // the allowance is an operator action, so offering a button
-                // would only lead somewhere that could not help.
-                data_get($subscription->metadata, 'assigned_by_super_admin') => null,
+                // On a complimentary plan the fix is an operator action, so
+                // there is normally nothing for the customer to click. The
+                // exception is a viewer who IS that operator — on a
+                // self-hosted install the owner and the super admin are
+                // routinely the same person, and sending them to "just ask"
+                // when they are the one being asked is a loop.
+                data_get($subscription->metadata, 'assigned_by_super_admin')
+                    => $request->user()?->isSuperAdmin()
+                        ? [route('ops.billing.workspaces.show', $client->id), 'Raise the allowance']
+                        : null,
                 $subscription->isPastDue() => ['#payment-methods', 'Update your card'],
                 $subscription->status === \App\Models\Billing\Subscription::STATUS_INCOMPLETE
                     => [route('billing.plans', ['client' => $client->slug]), 'Start the plan again'],
