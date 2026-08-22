@@ -85,6 +85,17 @@ class AddonController extends Controller
             // customer nothing: it named a state without naming its cause or its
             // remedy, so the only possible reaction was to wonder what it meant.
             'blockedWhy'   => $canBuy ? null : match (true) {
+                // A plan a super admin assigned at no charge has no Stripe
+                // subscription by design, so an add-on has nothing to attach to
+                // and never will. Saying "we are finishing it off" here would be
+                // simply untrue — nothing is pending. Extra capacity on a
+                // complimentary plan is granted, not sold, and the person who
+                // granted the plan can grant that too.
+                data_get($subscription->metadata, 'assigned_by_super_admin')
+                    => 'Your plan is on us, so there is no subscription for a paid add-on to attach '
+                     . 'to. Extra seats or agents can be added to it directly — just ask and we '
+                     . 'will raise your allowance.',
+
                 ! $subscription->stripe_subscription_ref
                     => 'This plan hasn’t been set up with our payment provider yet, so there is no '
                      . 'subscription for an add-on to attach to. Nothing for you to do — we are '
@@ -112,6 +123,10 @@ class AddonController extends Controller
             },
             // Where the fix lives, when there is one the customer can perform.
             'blockedAction' => $canBuy ? null : match (true) {
+                // Nothing for them to click on a complimentary plan — raising
+                // the allowance is an operator action, so offering a button
+                // would only lead somewhere that could not help.
+                data_get($subscription->metadata, 'assigned_by_super_admin') => null,
                 $subscription->isPastDue() => ['#payment-methods', 'Update your card'],
                 $subscription->status === \App\Models\Billing\Subscription::STATUS_INCOMPLETE
                     => [route('billing.plans', ['client' => $client->slug]), 'Start the plan again'],

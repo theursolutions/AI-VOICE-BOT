@@ -60,6 +60,18 @@ class AddonService
                 'per_unit'    => $featureKey ? $this->features->planLimit($addon, $featureKey) : null,
                 'owned'       => (int) ($held->quantity ?? 0),
                 'line_total'  => $held?->formattedLineTotal(),
+
+                // Every interval this add-on is sold on, so the page can show a
+                // monthly/annual comparison instead of the single figure that
+                // happens to match the current subscription. Only the matching
+                // one is purchasable — Stripe requires every line on a
+                // subscription to share one billing interval — but showing both
+                // is the difference between an informed choice and a number that
+                // looks arbitrary.
+                'prices'      => $addon->prices
+                    ->where('is_active', true)
+                    ->keyBy('interval')
+                    ->all(),
             ];
         }
 

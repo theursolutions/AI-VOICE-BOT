@@ -23,6 +23,22 @@
         font-size:12.5px; font-weight:650; color:#4338ca;
     }
 
+    /* Interval switch.
+       Both intervals are shown because both exist and both are real prices, but
+       only the one matching the plan can be BOUGHT: Stripe requires every line
+       on a subscription to share one billing interval. So this compares rather
+       than selects, and says so. */
+    .ad-seg { display:inline-flex; padding:4px; background:#f2f4f7; border:1px solid #e6eaf2; border-radius:999px; margin-bottom:6px; }
+    .ad-seg button {
+        border:0; background:transparent; cursor:pointer; border-radius:999px;
+        padding:7px 16px; font:650 12.5px system-ui,sans-serif; color:#667085;
+    }
+    .ad-seg button.is-on { background:#fff; color:#0b1220; box-shadow:0 1px 3px rgba(16,24,40,.14); }
+    .ad-seg button:disabled { cursor:not-allowed; opacity:.55; }
+    .ad-seg__note { font-size:11.5px; color:#98a2b3; margin:0 0 18px; line-height:1.55; }
+    .ad-alt { font-size:11.5px; color:#98a2b3; margin-top:5px; }
+    .ad-alt b { color:#475467; font-weight:650; }
+
     .ad-grid { display:grid; grid-template-columns:1fr 330px; gap:22px; align-items:start; }
     @media (max-width:900px) { .ad-grid { grid-template-columns:1fr; } }
 
@@ -132,6 +148,30 @@
         </div>
     @endif
 
+    @php
+        // Which intervals any add-on is actually sold on.
+        $adIntervals = collect($addons)->flatMap(fn ($i) => array_keys($i['prices'] ?? []))->unique()->values();
+        $adLabels    = ['monthly' => 'Monthly', 'annually' => 'Annual'];
+    @endphp
+
+    @if ($adIntervals->count() > 1)
+        <div class="ad-seg" role="group" aria-label="Billing interval">
+            @foreach ($adIntervals as $iv)
+                <button type="button" class="js-ad-iv {{ $iv === $subscription->interval ? 'is-on' : '' }}"
+                        data-iv="{{ $iv }}">
+                    {{ $adLabels[$iv] ?? ucfirst($iv) }}
+                </button>
+            @endforeach
+        </div>
+        <p class="ad-seg__note">
+            Your plan is billed {{ $per }}ly, so add-ons are too — every line on one subscription has
+            to share a billing interval. Switch here to compare;
+            <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" style="color:#6366f1;font-weight:650">
+                change your plan's interval</a>
+            to buy on the other one.
+        </p>
+    @endif
+
     <div class="ad-grid">
 
         {{-- ── Choose quantities ──────────────────────────────── --}}
@@ -163,11 +203,15 @@
                         <div class="ad-unit">
                             {{ $money($unit) }} <span>per unit, per {{ $per }}</span>
                         </div>
-                        {{-- The interval is not a choice we are withholding.
-                             Stripe requires every line on a subscription to share
-                             one billing interval, so an add-on on an annual plan
-                             can only be annual. Saying so beats showing one
-                             option and letting it look like an oversight. --}}
+                        {{-- The other interval's figure, so the comparison is on
+                             the card rather than only in the toggle. --}}
+                        @foreach (($item['prices'] ?? []) as $iv => $ivPrice)
+                            @continue ($iv === $subscription->interval)
+                            <div class="ad-alt js-ad-alt" data-iv="{{ $iv }}">
+                                <b>{{ $money($ivPrice->unit_amount) }}</b>
+                                on {{ $adLabels[$iv] ?? $iv }} billing
+                            </div>
+                        @endforeach
                         <div class="ad-desc" style="margin-top:6px;color:#98a2b3;font-size:11.5px">
                             Billed {{ $per }}ly, on the same invoice as your plan.
                         </div>
@@ -287,6 +331,40 @@
     }
 
     var timer = null;
+
+    /* Interval switch.
+       COMPARISON ONLY — it swaps which figure is emphasised and never touches
+       the quantity, the line total or the submit state. Stripe requires every
+       line on a subscription to share one billing interval, so pretending the
+       other one is purchasable here would produce a form that fails at the API
+       with an error the customer cannot act on. The plan page is where the
+       interval actually changes, and the note above links to it. */
+    (function () {
+        var buttons = document.querySelectorAll('.js-ad-iv');
+        if (buttons.length < 2) return;
+
+        var planIv = @json($subscription->interval);
+
+        buttons.forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var iv = btn.dataset.iv;
+
+                buttons.forEach(function (b) { b.classList.toggle('is-on', b === btn); });
+
+                // On the plan's own interval the alternates are hints; on the
+                // other one the alternate for THAT interval becomes the headline
+                // and the plan's own figure is the hint.
+                document.querySelectorAll('.js-addon').forEach(function (card) {
+                    card.querySelectorAll('.js-ad-alt').forEach(function (alt) {
+                        alt.style.fontWeight = alt.dataset.iv === iv ? '650' : '';
+                        alt.style.color      = alt.dataset.iv === iv ? '#0b1220' : '';
+                    });
+                    var unit = card.querySelector('.ad-unit');
+                    if (unit) unit.style.opacity = (iv === planIv) ? '' : '.5';
+                });
+            });
+        });
+    })();
 
     document.querySelectorAll('.js-addon').forEach(function (form) {
         var input  = form.querySelector('input[name="quantity"]');
