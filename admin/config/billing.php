@@ -38,6 +38,58 @@ return [
     | and it keeps Stripe behind BillingService so the provider stays swappable.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | PayFast (Pakistan)
+    |--------------------------------------------------------------------------
+    |
+    | Avanza Premier Payment Services, State Bank of Pakistan commercially
+    | licensed since 2021. Used for customers paying in Pakistan; Stripe stays
+    | for everyone else, and the two coexist rather than one replacing the other.
+    |
+    | HOSTED CHECKOUT, not the direct API. The customer is handed to PayFast's
+    | own page and picks their method there — Visa, Mastercard, bank account,
+    | JazzCash, Easypaisa — so every method they support is available without us
+    | building a form per method, and no card ever touches this server. The
+    | direct API would mean handling PAN entry and OTP ourselves for a narrower
+    | set of methods.
+    |
+    | WHAT PAYFAST DOES NOT DO, which shapes everything downstream: there is no
+    | saved-card token, no subscription object, no invoice API and no proration.
+    | It authorises one payment at a time. A recurring plan on PayFast is
+    | therefore OUR periodic charge against a fresh checkout, not a mandate the
+    | gateway honours — see PayFastGateway.
+    */
+    'payfast' => [
+        'merchant_id'   => env('PAYFAST_MERCHANT_ID'),
+        'merchant_name' => env('PAYFAST_MERCHANT_NAME', env('APP_NAME')),
+        'secured_key'   => env('PAYFAST_SECURED_KEY'),
+
+        // Live unless explicitly told otherwise. The opposite default would let
+        // a missing env var take real money through a sandbox that silently
+        // approves everything.
+        'sandbox'       => (bool) env('PAYFAST_SANDBOX', false),
+
+        'endpoints' => [
+            'live' => [
+                'token'    => env('PAYFAST_TOKEN_URL', 'https://ipg1.apps.net.pk/Ecommerce/api/Transaction/GetAccessToken'),
+                'checkout' => env('PAYFAST_CHECKOUT_URL', 'https://ipg1.apps.net.pk/Ecommerce/api/Transaction/PostTransaction'),
+            ],
+            'sandbox' => [
+                'token'    => env('PAYFAST_SANDBOX_TOKEN_URL', 'https://ipguat.apps.net.pk/Ecommerce/api/Transaction/GetAccessToken'),
+                'checkout' => env('PAYFAST_SANDBOX_CHECKOUT_URL', 'https://ipguat.apps.net.pk/Ecommerce/api/Transaction/PostTransaction'),
+            ],
+        ],
+
+        // Their access token is short-lived and fetched per checkout. Cached
+        // only long enough to serve one request rather than kept, because a
+        // token reused past its life fails the checkout with an error the
+        // customer cannot act on.
+        'token_ttl' => (int) env('PAYFAST_TOKEN_TTL', 60),
+
+        'timeout' => (int) env('PAYFAST_TIMEOUT', 20),
+    ],
+
     'stripe' => [
         'key'            => env('STRIPE_KEY'),
         'secret'         => env('STRIPE_SECRET'),
