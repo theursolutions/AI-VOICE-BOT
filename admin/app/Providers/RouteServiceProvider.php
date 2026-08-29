@@ -45,6 +45,10 @@ class RouteServiceProvider extends ServiceProvider
             // it for days.
             Route::group([], base_path('routes/stripe.php'));
 
+            // Safepay's webhook and return, same treatment as Stripe's:
+            // no middleware group, signature-authenticated in the controller.
+            Route::group([], base_path('routes/safepay.php'));
+
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
         });
