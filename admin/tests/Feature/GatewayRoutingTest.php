@@ -137,12 +137,22 @@ class GatewayRoutingTest extends TestCase
      */
     public function test_an_unconfigured_gateway_is_skipped_rather_than_chosen(): void
     {
-        config(['billing.payfast.merchant_id' => null, 'billing.payfast.secured_key' => null]);
+        // EVERY local gateway must be unconfigured for this to test what it
+        // claims. Nulling only PayFast passed while nothing else had keys, then
+        // failed the moment real Safepay credentials reached .env — the test was
+        // reading the developer's environment rather than controlling its own.
+        config([
+            'billing.payfast.merchant_id' => null,
+            'billing.payfast.secured_key' => null,
+            'billing.safepay.api_key'     => null,
+            'billing.safepay.v1_secret'   => null,
+        ]);
         app()->forgetInstance(GatewayRegistry::class);
 
         $registry = app(GatewayRegistry::class);
 
         $this->assertFalse(app(PayFastGateway::class)->isConfigured());
+        $this->assertFalse(app(\App\Services\Billing\Gateways\SafepayGateway::class)->isConfigured());
         $this->assertSame(
             'stripe',
             $registry->forClient($this->client('PK'))?->key(),
