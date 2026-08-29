@@ -73,17 +73,26 @@ return [
         // let a missing env var take real money.
         'sandbox' => (bool) env('SAFEPAY_SANDBOX', true),
 
+        // The API and the CHECKOUT PAGE are on different hosts, which cost an
+        // hour to discover: api.getsafepay.com serves the session endpoint but
+        // 404s the checkout page, and the sandbox serves both. Deriving one from
+        // the other produces a URL that 301s to the marketing site, which looks
+        // like a bad tracker rather than a wrong host.
         'base_url' => [
             'sandbox'    => env('SAFEPAY_SANDBOX_URL', 'https://sandbox.api.getsafepay.com'),
             'production' => env('SAFEPAY_PRODUCTION_URL', 'https://api.getsafepay.com'),
         ],
 
-        // Paths, configurable because they are the part most likely to differ
-        // from what the docs said on the day this was written. safepay:doctor
-        // exercises them against the sandbox.
+        // Where the customer is sent. Verified by fetching each and checking the
+        // page title is "Safepay Checkout" rather than a redirect to
+        // getsafepay.pk.
+        'checkout_url' => [
+            'sandbox'    => env('SAFEPAY_SANDBOX_CHECKOUT_URL', 'https://sandbox.api.getsafepay.com/embedded/'),
+            'production' => env('SAFEPAY_CHECKOUT_URL', 'https://getsafepay.com/checkout/pay'),
+        ],
+
         'paths' => [
-            'session'  => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
-            'checkout' => env('SAFEPAY_CHECKOUT_PATH', '/components'),
+            'session' => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
         ],
 
         // rupees | paisa — see the warning above.

@@ -22,6 +22,9 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Msd\MailChannel\Models\EmailAccount;
+use Msd\MailChannel\Services\SmtpMailer;
+use Msd\MailChannel\Support\OutboundEmail;
 use Msd\MetaChannels\MetaManager;
 use Msd\MetaChannels\Models\ChannelConnection;
 use Msd\MetaChannels\Services\GraphClient;
@@ -35,6 +38,15 @@ use Msd\MetaChannels\Services\GraphClient;
 class ChatController extends Controller
 {
     private const META_CHANNELS = ['whatsapp', 'instagram', 'facebook', 'messenger'];
+
+    /**
+     * Every channel this console shows a thread for. Kept separate from
+     * META_CHANNELS, which still gates Meta-only behaviour below (the 24h
+     * service window, HUMAN_AGENT tag, and the media/template/interactive/
+     * flow/product endpoints that only make sense against the Graph API) —
+     * email has none of that, but does belong in the same inbox.
+     */
+    private const INBOX_CHANNELS = [...self::META_CHANNELS, 'email'];
 
     /**
      * How much of Meta's 24h window counts as "expiring soon".
@@ -87,7 +99,7 @@ class ChatController extends Controller
         // before you click. Selecting only scalar columns keeps this cheap:
         // no per-session message lookups happen here.
         $facetRows = Session::where('project_id', $project->id)
-            ->whereIn('channel', self::META_CHANNELS)
+            ->whereIn('channel', self::INBOX_CHANNELS)
             ->orderByDesc('last_activity_at')
             ->limit(1000)
             // conversation_status_id only when the tenant DB has it: naming a
@@ -100,7 +112,7 @@ class ChatController extends Controller
             ));
 
         $q = Session::where('project_id', $project->id)
-            ->whereIn('channel', self::META_CHANNELS)
+            ->whereIn('channel', self::INBOX_CHANNELS)
             ->orderByDesc('last_activity_at');
 
         if ($filter === 'mine' && $mine) {
@@ -425,6 +437,12 @@ class ChatController extends Controller
      */
     private function replyPolicy(Session $session): array
     {
+        // Email has no expiring service window — a mailbox can be replied to
+        // at any time, exactly like a normal email client.
+        if ($session->channel === 'email') {
+            return ['allowed' => true, 'mode' => 'free', 'reason' => null, 'expires_at' => null];
+        }
+
         $open = $this->meta->serviceWindowOpen($session->last_inbound_at);
         $last = (int) ($session->last_inbound_at ?? 0);
 
@@ -947,7 +965,7 @@ class ChatController extends Controller
             'read'     => in_array($request->query('read'), ['read', 'unread'], true) ? $request->query('read') : null,
             'date'     => in_array($request->query('date'), ['today', '7d', '30d'], true) ? $request->query('date') : null,
             'states'   => array_intersect($list('states'), ['active', 'expiring', 'expired', 'closed']),
-            'channels' => array_intersect($list('channels'), self::META_CHANNELS),
+            'channels' => array_intersect($list('channels'), self::INBOX_CHANNELS),
             'accounts' => $list('accounts'),
             'kinds'    => array_intersect($list('kinds'), ['dm', 'comment']),
             'handlers' => array_intersect($list('handlers'), ['bot', 'agent', 'queued']),
@@ -1305,6 +1323,198 @@ class ChatController extends Controller
 
         $msg = $this->persistOutbound($session, $data['text'], [], $wamid, $replyMeta);
         return response()->json(['message' => $this->shapeMessage($msg, $sessionId)], 201);
+    }
+
+    /**
+     * Reply within an email thread — subject/Cc/Bcc/HTML body/attachments,
+     * none of which the WhatsApp-shaped reply() above accepts. No service
+     * window to check (see replyPolicy()): a mailbox can be answered any time.
+     */
+    public function emailReply(Request $request, Client $client, int $sessionId): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'subject'    => 'nullable|string|max:255',
+            'text'       => 'required|string|max:20000',
+            'cc'         => 'nullable|array',
+            'cc.*'       => 'email',
+            'bcc'        => 'nullable|array',
+            'bcc.*'      => 'email',
+            'attachments.*' => 'nullable|file|max:10240',
+        ]);
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_text')) {
+            return $deny;
+        }
+        $session = $this->session($project, $sessionId);
+        if ($session->channel !== 'email') {
+            return response()->json(['error' => 'wrong_channel'], 422);
+        }
+
+        $account = $this->emailAccountFor($session);
+        if (!$account || !$account->isEnabled()) {
+            return response()->json(['error' => 'no_connection', 'message' => 'This mailbox is no longer connected.'], 422);
+        }
+
+        // Thread against the most recent inbound message, so a real mail
+        // client (Gmail, Outlook…) groups this reply into the same thread
+        // instead of starting a new one.
+        $lastInbound = Message::where('session_id', $session->id)->where('role', 'user')
+            ->orderByDesc('id')->first();
+        $inReplyTo  = data_get($lastInbound?->metadata, 'message_id');
+        $references = (array) data_get($lastInbound?->metadata, 'references', []);
+        if ($inReplyTo && !in_array($inReplyTo, $references, true)) {
+            $references[] = $inReplyTo;
+        }
+
+        $subject = $data['subject'] ?: ('Re: ' . (data_get($lastInbound?->metadata, 'subject') ?: '(no subject)'));
+
+        [$attachments, $storedMeta] = $this->collectEmailAttachments($request, $session);
+
+        try {
+            SmtpMailer::forAccount($account)->send(new OutboundEmail(
+                to: [$session->external_id],
+                cc: $data['cc'] ?? [],
+                bcc: $data['bcc'] ?? [],
+                subject: $subject,
+                text: $data['text'],
+                html: nl2br(e($data['text'])),
+                attachments: $attachments,
+                inReplyTo: $inReplyTo,
+                references: $references,
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('Chat: email send failed: ' . $e->getMessage());
+            return response()->json(['error' => 'send_failed', 'message' => 'The mail server rejected the message.'], 502);
+        }
+
+        $msg = $this->persistOutbound($session, $data['text'], $storedMeta, null, null, array_filter([
+            'subject' => $subject,
+            'cc'      => $data['cc'] ?? null,
+            'bcc'     => $data['bcc'] ?? null,
+        ]));
+
+        return response()->json(['message' => $this->shapeMessage($msg, $sessionId)], 201);
+    }
+
+    /** Start a brand new outbound email thread (not a reply to anything inbound). */
+    public function composeEmail(Request $request, Client $client): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'account_id' => 'required|integer',
+            'to'         => 'required|email',
+            'cc'         => 'nullable|array',
+            'cc.*'       => 'email',
+            'bcc'        => 'nullable|array',
+            'bcc.*'      => 'email',
+            'subject'    => 'required|string|max:255',
+            'text'       => 'required|string|max:20000',
+            'attachments.*' => 'nullable|file|max:10240',
+        ]);
+        $project = $this->guard($client, (int) $data['project_id']);
+
+        if ($deny = $this->denyUnlessCan($client, $project, 'send_text')) {
+            return $deny;
+        }
+
+        $account = EmailAccount::where('project_id', $project->id)->find($data['account_id']);
+        if (!$account || !$account->isEnabled()) {
+            return response()->json(['error' => 'no_connection', 'message' => 'Mailbox not found or disabled.'], 422);
+        }
+
+        $now = time();
+        // One thread per (project, mailbox, recipient), same convention as
+        // every inbound email — so a reply from them lands back in this
+        // same session rather than starting a parallel one.
+        $session = Session::where('project_id', $project->id)
+            ->where('channel', 'email')
+            ->where('channel_account', $account->from_email)
+            ->where('external_id', $data['to'])
+            ->where('status', 'active')
+            ->first();
+
+        if (!$session) {
+            $session = Session::create([
+                'project_id'       => $project->id,
+                'channel'          => 'email',
+                'channel_account'  => $account->from_email,
+                'external_id'      => $data['to'],
+                'customer_email'   => $data['to'],
+                'status'           => 'active',
+                'started_at'       => $now,
+                'last_activity_at' => $now,
+                'metadata'         => ['meta' => ['provider' => 'email']],
+                'created_at'       => $now,
+                'update_at'        => $now,
+            ]);
+        }
+
+        [$attachments, $storedMeta] = $this->collectEmailAttachments($request, $session);
+
+        try {
+            SmtpMailer::forAccount($account)->send(new OutboundEmail(
+                to: [$data['to']],
+                cc: $data['cc'] ?? [],
+                bcc: $data['bcc'] ?? [],
+                subject: $data['subject'],
+                text: $data['text'],
+                html: nl2br(e($data['text'])),
+                attachments: $attachments,
+            ));
+        } catch (\Throwable $e) {
+            Log::warning('Chat: compose email send failed: ' . $e->getMessage());
+            return response()->json(['error' => 'send_failed', 'message' => 'The mail server rejected the message.'], 502);
+        }
+
+        $msg = $this->persistOutbound($session, $data['text'], $storedMeta, null, null, array_filter([
+            'subject' => $data['subject'],
+            'cc'      => $data['cc'] ?? null,
+            'bcc'     => $data['bcc'] ?? null,
+        ]));
+
+        return response()->json(['session_id' => $session->id, 'message' => $this->shapeMessage($msg, $session->id)], 201);
+    }
+
+    /**
+     * Save uploaded compose attachments the same way storeOutboundMedia()
+     * keeps WhatsApp media: under `chat/{session}/...` on the public disk, so
+     * the thread renders them without depending on the mail server.
+     *
+     * @return array{0: array<int,array{filename:string,mime:string,bytes:string}>, 1: array<int,array>}
+     */
+    private function collectEmailAttachments(Request $request, Session $session): array
+    {
+        $forSend = [];
+        $forStorage = [];
+
+        foreach ($request->file('attachments', []) as $file) {
+            if (!$file) {
+                continue;
+            }
+            $bytes    = $file->get();
+            $mime     = $file->getMimeType() ?: 'application/octet-stream';
+            $filename = $file->getClientOriginalName() ?: 'attachment';
+
+            $forSend[] = ['filename' => $filename, 'mime' => $mime, 'bytes' => $bytes];
+            $forStorage[] = array_filter([
+                'type'     => 'document',
+                'mime'     => $mime,
+                'filename' => $filename,
+                'url'      => $this->storeOutboundMedia($session, $bytes, $mime, $filename),
+            ]);
+        }
+
+        return [$forSend, $forStorage];
+    }
+
+    /** Resolve the mailbox a session belongs to. */
+    private function emailAccountFor(Session $session): ?EmailAccount
+    {
+        return EmailAccount::where('project_id', $session->project_id)
+            ->where('from_email', $session->channel_account)
+            ->first();
     }
 
     /**
@@ -1856,7 +2066,7 @@ class ChatController extends Controller
         };
     }
 
-    private function persistOutbound(Session $session, string $content, array $attachments = [], ?string $wamid = null, ?array $replyTo = null): Message
+    private function persistOutbound(Session $session, string $content, array $attachments = [], ?string $wamid = null, ?array $replyTo = null, array $extraMeta = []): Message
     {
         $now = time();
         $msg = Message::create([
@@ -1864,7 +2074,7 @@ class ChatController extends Controller
             'project_id' => $session->project_id,
             'role'       => 'assistant',
             'content'    => $content !== '' ? $content : null,
-            'metadata'   => array_filter([
+            'metadata'   => array_merge(array_filter([
                 // 'owner' when the workspace owner replies without holding an
                 // agent seat. The distinction is worth recording: the team
                 // needs to know the boss answered this one, and "agent" for
@@ -1874,7 +2084,7 @@ class ChatController extends Controller
                 'attachments' => $attachments ?: null,
                 'wamid'       => $wamid,
                 'reply_to'    => $replyTo,
-            ]),
+            ]), $extraMeta),
             'created_at' => $now,
         ]);
         $session->last_activity_at = $now;
@@ -1919,6 +2129,11 @@ class ChatController extends Controller
             'note'        => data_get($m->metadata, 'note'),
             'content'     => $m->content,
             'reply'       => data_get($m->metadata, 'reply_to'),
+            // Email-only fields — null for every other channel.
+            'subject'     => data_get($m->metadata, 'subject'),
+            'cc'          => data_get($m->metadata, 'cc'),
+            'bcc'         => data_get($m->metadata, 'bcc'),
+            'html_body'   => data_get($m->metadata, 'html_body'),
             // sent | delivered | read | failed — only ever set on outbound.
             'delivery'    => data_get($m->metadata, 'delivery'),
             'delivery_error' => data_get($m->metadata, 'delivery_error'),
@@ -2085,7 +2300,7 @@ class ChatController extends Controller
 
     private function session(Project $project, int $sessionId): Session
     {
-        $s = Session::where('project_id', $project->id)->whereIn('channel', self::META_CHANNELS)->findOrFail($sessionId);
+        $s = Session::where('project_id', $project->id)->whereIn('channel', self::INBOX_CHANNELS)->findOrFail($sessionId);
         return $s;
     }
 

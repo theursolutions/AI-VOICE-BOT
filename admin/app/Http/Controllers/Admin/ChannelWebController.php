@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Project;
+use Msd\MailChannel\Models\EmailAccount;
 use Msd\MetaChannels\Models\ChannelConnection;
 use Msd\MetaChannels\Models\ChannelOnboardingLog;
 use Illuminate\Http\RedirectResponse;
@@ -33,6 +34,7 @@ class ChannelWebController extends Controller
 
         $connections = collect();
         $onboardingLogs = collect();
+        $emailAccounts = collect();
         if ($project) {
             $connections = ChannelConnection::where('project_id', $project->id)
                 ->orderBy('provider')
@@ -46,12 +48,15 @@ class ChannelWebController extends Controller
                 ->orderByDesc('id')
                 ->limit(10)
                 ->get();
+            $emailAccounts = EmailAccount::where('project_id', $project->id)
+                ->orderBy('from_email')
+                ->get();
         }
 
         $providers = ChannelConnection::PROVIDERS;
 
         return view('channels.index', compact(
-            'client', 'projects', 'project', 'projectId', 'connections', 'providers', 'onboardingLogs'
+            'client', 'projects', 'project', 'projectId', 'connections', 'providers', 'onboardingLogs', 'emailAccounts'
         ));
     }
 

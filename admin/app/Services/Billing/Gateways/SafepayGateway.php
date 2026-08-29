@@ -91,8 +91,9 @@ class SafepayGateway implements PaymentGateway
 
         $tracker = $this->createSession($price);
 
-        $url = rtrim($this->baseUrl(), '/')
-            . (string) $this->config('paths.checkout', '/components')
+        // The checkout page, NOT the API host — they are different services and
+        // the production API host 404s this path entirely.
+        $url = $this->checkoutUrl()
             . '?' . http_build_query([
                 // `beacon`, not `tracker`. The session is created under a
                 // tracker but the checkout component reads it from `beacon`,
@@ -238,11 +239,27 @@ class SafepayGateway implements PaymentGateway
         return hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature);
     }
 
+    /** Where the API lives — sessions, lookups. */
     public function baseUrl(): string
     {
         return (string) $this->config(
             $this->config('sandbox') ? 'base_url.sandbox' : 'base_url.production'
         );
+    }
+
+    /**
+     * Where the CUSTOMER goes. A different host from the API in production.
+     *
+     * Kept whole rather than assembled from a base and a path, because the two
+     * environments differ in host AND path and splitting them invites deriving
+     * one from the other — which is exactly the mistake that sent customers to
+     * the marketing site.
+     */
+    public function checkoutUrl(): string
+    {
+        return rtrim((string) $this->config(
+            $this->config('sandbox') ? 'checkout_url.sandbox' : 'checkout_url.production'
+        ), '?');
     }
 
     private function config(string $key, mixed $default = null): mixed

@@ -79,6 +79,13 @@ class AppServiceProvider extends ServiceProvider
             \App\Meta\CrmMessageStatusHandler::class,
         );
 
+        // mail-channel package → CRM brain bridge, same seam as the Meta
+        // bindings above.
+        $this->app->bind(
+            \Msd\MailChannel\Contracts\HandlesInboundEmail::class,
+            \App\EmailChannel\CrmInboundEmailHandler::class,
+        );
+
         $this->app->singleton(DataSourceRouter::class, function ($app) {
             $router = new DataSourceRouter();
             $router->register($app->make(WebsiteResolver::class));

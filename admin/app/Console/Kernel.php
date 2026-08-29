@@ -96,6 +96,16 @@ class Kernel extends ConsoleKernel
         $schedule->command('geoip:update')
             ->weeklyOn(2, '04:10')
             ->withoutOverlapping();
+
+        // ── Email channel ────────────────────────────────────────────
+        //
+        // IMAP has no webhook, so an inbound email only exists to the CRM
+        // once something asks the mailbox for it. Every 2 minutes matches
+        // config('mail_channel.poll_interval_minutes') — change both
+        // together. A no-op when no mailbox is connected/enabled.
+        $schedule->command('email:poll-inbound')
+            ->everyTwoMinutes()
+            ->withoutOverlapping();
     }
 
     /**

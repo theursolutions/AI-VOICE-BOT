@@ -40,7 +40,7 @@ class SafepayDoctor extends Command
             ['Webhook secret', $this->hint(config('billing.safepay.webhook_secret'))],
             ['Amount unit', config('billing.safepay.amount_unit')],
             ['Session path', config('billing.safepay.paths.session')],
-            ['Checkout path', config('billing.safepay.paths.checkout')],
+            ['Checkout URL', $safepay->checkoutUrl()],
         ]);
 
         if (! $safepay->isConfigured()) {
