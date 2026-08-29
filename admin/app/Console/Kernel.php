@@ -46,6 +46,20 @@ class Kernel extends ConsoleKernel
             ->dailyAt('06:15')
             ->withoutOverlapping();
 
+        // Renewal notices, for customers whose gateway cannot charge them
+        // automatically. Later than the lifecycle sweep so a subscription that
+        // has just lapsed is already marked as such and is not asked to renew
+        // something it no longer holds.
+        //
+        // 09:30 local rather than dawn: this reaches people on WhatsApp, and a
+        // billing reminder at six in the morning is an intrusion whatever it
+        // says. Once a day — the notice is claimed per (subscription, period,
+        // offset, channel), so a second run would send nothing anyway, but there
+        // is no reason to ask.
+        $schedule->command('billing:renewal-notices')
+            ->dailyAt('09:30')
+            ->withoutOverlapping();
+
         // ── Meta channels ────────────────────────────────────────────
         //
         // Instagram Login tokens live 60 days and, unlike Facebook Page

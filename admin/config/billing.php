@@ -60,6 +60,47 @@ return [
     | therefore OUR periodic charge against a fresh checkout, not a mandate the
     | gateway honours — see PayFastGateway.
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Renewal notices
+    |--------------------------------------------------------------------------
+    |
+    | Only for customers on a gateway that CANNOT bill them itself. On Stripe a
+    | renewal simply happens and reminding someone about it is noise; on a
+    | Pakistani gateway with no reusable card token the customer has to act, so
+    | silence means the subscription lapses.
+    |
+    | Three notices at widening gaps, on both email and WhatsApp. The first is
+    | information, the second is a nudge, the third is the last chance — sending
+    | all three the day before would be three copies of one message rather than
+    | an escalation.
+    |
+    | WHATSAPP NEEDS AN APPROVED TEMPLATE. A renewal notice is always outside
+    | Meta's 24-hour service window — the customer has not messaged us — so it
+    | can only be sent as a template Meta has approved. With no template name
+    | configured the WhatsApp leg is skipped and email still goes, which is the
+    | right failure: a missing template must not silence the reminder entirely.
+    */
+    'renewals' => [
+        'days_before' => [7, 3, 1],
+
+        'whatsapp' => [
+            'enabled'  => (bool) env('BILLING_RENEWAL_WHATSAPP', true),
+            // Approved template name and locale, from WhatsApp Manager.
+            'template' => env('BILLING_RENEWAL_TEMPLATE'),
+            'language' => env('BILLING_RENEWAL_TEMPLATE_LANG', 'en'),
+        ],
+
+        'email' => [
+            'enabled' => (bool) env('BILLING_RENEWAL_EMAIL', true),
+        ],
+
+        // How long a renewal payment link stays valid. Longer than the last
+        // notice, so a customer who acts on the final reminder still has a
+        // working link.
+        'link_ttl_days' => (int) env('BILLING_RENEWAL_LINK_DAYS', 10),
+    ],
+
     'payfast' => [
         'merchant_id'   => env('PAYFAST_MERCHANT_ID'),
         'merchant_name' => env('PAYFAST_MERCHANT_NAME', env('APP_NAME')),
