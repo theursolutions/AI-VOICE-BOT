@@ -92,12 +92,17 @@ class SafepayGateway implements PaymentGateway
         $tracker = $this->createSession($price);
 
         $url = rtrim($this->baseUrl(), '/')
-            . (string) $this->config('paths.checkout', '/embedded/')
+            . (string) $this->config('paths.checkout', '/components')
             . '?' . http_build_query([
-                'tracker'     => $tracker,
-                'env'         => $this->config('sandbox') ? 'sandbox' : 'production',
-                'source'      => 'custom',
-                'order_id'    => $orderId,
+                // `beacon`, not `tracker`. The session is created under a
+                // tracker but the checkout component reads it from `beacon`,
+                // and sending the wrong name produces "Session expired!" on
+                // their page rather than an error naming the missing parameter
+                // — which is a long way from the cause.
+                'beacon'       => $tracker,
+                'env'          => $this->config('sandbox') ? 'sandbox' : 'production',
+                'source'       => 'custom',
+                'order_id'     => $orderId,
                 // Their flow POSTs back to this URL with tracker + sig.
                 'redirect_url' => (string) ($context['success_url'] ?? ''),
                 'cancel_url'   => (string) ($context['cancel_url'] ?? ''),

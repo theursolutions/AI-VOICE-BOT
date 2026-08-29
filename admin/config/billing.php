@@ -83,7 +83,7 @@ return [
         // exercises them against the sandbox.
         'paths' => [
             'session'  => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
-            'checkout' => env('SAFEPAY_CHECKOUT_PATH', '/embedded/'),
+            'checkout' => env('SAFEPAY_CHECKOUT_PATH', '/components'),
         ],
 
         // rupees | paisa — see the warning above.

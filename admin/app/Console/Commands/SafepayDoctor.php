@@ -107,11 +107,22 @@ class SafepayDoctor extends Command
 
         $this->result('Session created and a tracker came back', true);
         $this->line('');
-        $this->line('  Open this and confirm the amount reads <options=bold>Rs ' . number_format($rupees) . '</>:');
+        $this->line('  Open this and read the amount Safepay shows:');
         $this->line('  <fg=cyan>' . $handoff->url . '</>');
         $this->line('');
-        $this->warn('  If that page shows Rs ' . number_format($rupees * 100) . ' instead, set SAFEPAY_AMOUNT_UNIT=paisa.');
-        $this->warn('  Do not go live until this figure is right — the error is a factor of 100.');
+
+        // The advice has to depend on the CURRENT setting, or it tells someone
+        // already on paisa to switch to paisa — which is how a factor-of-100
+        // bug survives the check built to catch it.
+        $unit  = (string) config('billing.safepay.amount_unit');
+        $other = $unit === 'paisa' ? 'rupees' : 'paisa';
+        $wrong = $unit === 'paisa' ? $rupees * 100 : intdiv(max(1, $rupees), 100);
+
+        $this->line('  <options=bold>Rs ' . number_format($rupees) . '</>  correct — leave SAFEPAY_AMOUNT_UNIT as ' . $unit);
+        $this->line('  <fg=red;options=bold>Rs ' . number_format($wrong) . '</>  wrong  — set SAFEPAY_AMOUNT_UNIT=' . $other);
+        $this->line('');
+        $this->warn('  Do not go live until this figure is right — the error is a factor of 100,');
+        $this->warn('  and in one direction it charges a customer a hundred times the price.');
         $this->line('');
         $this->comment('  Then pay it with a sandbox instrument and check that the redirect back');
         $this->comment('  carries `tracker` and `sig`, and that the sig verifies.');
