@@ -40,6 +40,60 @@ return [
     */
     /*
     |--------------------------------------------------------------------------
+    | Safepay (Pakistan)
+    |--------------------------------------------------------------------------
+    |
+    | Regulated by the State Bank of Pakistan. Hosted checkout: the customer is
+    | handed to Safepay's page and pays by card, bank account, JazzCash or
+    | Easypaisa there, so every method they support works without a form per
+    | method and no card number reaches this server.
+    |
+    | THREE SECRETS, three jobs, and mixing them up fails in ways that look like
+    | something else:
+    |
+    |   api_key         public, `sec_…`. Identifies the merchant on a session.
+    |   v1_secret       server-side. Signs the redirect back from checkout.
+    |   webhook_secret  server-side. Signs the X-SFPY-SIGNATURE webhook header.
+    |
+    | AMOUNTS ARE SENT IN RUPEES, not paisa, and that is the single most
+    | dangerous line in this file. Our prices are stored in minor units, so a
+    | Rs 75 plan is 7500. Sending 7500 where Safepay expects rupees charges the
+    | customer Rs 7,500 — a hundred times the price. The conversion below errs
+    | the other way on purpose: if their API turns out to want paisa we
+    | undercharge by 100x, which costs us money and harms nobody, and the
+    | sandbox run will show it immediately. Confirm with a sandbox payment
+    | BEFORE this is switched live.
+    */
+    'safepay' => [
+        'api_key'        => env('SAFEPAY_API_KEY'),
+        'v1_secret'      => env('SAFEPAY_V1_SECRET'),
+        'webhook_secret' => env('SAFEPAY_WEBHOOK_SECRET'),
+
+        // Sandbox unless explicitly told otherwise — the opposite default would
+        // let a missing env var take real money.
+        'sandbox' => (bool) env('SAFEPAY_SANDBOX', true),
+
+        'base_url' => [
+            'sandbox'    => env('SAFEPAY_SANDBOX_URL', 'https://sandbox.api.getsafepay.com'),
+            'production' => env('SAFEPAY_PRODUCTION_URL', 'https://api.getsafepay.com'),
+        ],
+
+        // Paths, configurable because they are the part most likely to differ
+        // from what the docs said on the day this was written. safepay:doctor
+        // exercises them against the sandbox.
+        'paths' => [
+            'session'  => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
+            'checkout' => env('SAFEPAY_CHECKOUT_PATH', '/embedded/'),
+        ],
+
+        // rupees | paisa — see the warning above.
+        'amount_unit' => env('SAFEPAY_AMOUNT_UNIT', 'rupees'),
+
+        'timeout' => (int) env('SAFEPAY_TIMEOUT', 20),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | PayFast (Pakistan)
     |--------------------------------------------------------------------------
     |

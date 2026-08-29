@@ -35,14 +35,19 @@ class GatewayRegistry
      */
     private const LOCAL_COUNTRIES = ['PK'];
 
+    /** Local providers, in preference order. First one with credentials wins. */
+    private const LOCAL_GATEWAYS = ['safepay', 'payfast'];
+
     /** @var array<int, PaymentGateway> */
     private array $gateways;
 
-    public function __construct(PayFastGateway $payfast, StripeGateway $stripe)
+    public function __construct(SafepayGateway $safepay, PayFastGateway $payfast, StripeGateway $stripe)
     {
-        // Order is preference. PayFast first for the countries it serves; the
-        // country test below is what actually decides, so this only breaks ties.
-        $this->gateways = [$payfast, $stripe];
+        // Order is preference among the local options. Safepay first — it is
+        // the one with credentials — and PayFast stays registered so switching
+        // is a matter of which has keys, not a code change. The country test
+        // below decides who is eligible at all; this only breaks ties.
+        $this->gateways = [$safepay, $payfast, $stripe];
     }
 
     /**
@@ -57,10 +62,16 @@ class GatewayRegistry
         $country = strtoupper((string) $client->billing_country);
 
         if (in_array($country, self::LOCAL_COUNTRIES, true)) {
-            $local = $this->get('payfast');
+            // First local gateway that actually has credentials. Listing them
+            // rather than naming one means adding or swapping a Pakistani
+            // provider is a line here, and a half-configured one is skipped
+            // instead of chosen and failed at.
+            foreach (self::LOCAL_GATEWAYS as $key) {
+                $local = $this->get($key);
 
-            if ($local?->isConfigured()) {
-                return $local;
+                if ($local?->isConfigured()) {
+                    return $local;
+                }
             }
         }
 

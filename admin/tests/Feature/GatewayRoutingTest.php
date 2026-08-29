@@ -47,6 +47,23 @@ class GatewayRoutingTest extends TestCase
         config([
             'billing.payfast.merchant_id' => 'TEST-MERCHANT',
             'billing.payfast.secured_key' => 'TEST-KEY',
+            // Safepay explicitly absent, so these tests keep testing PayFast.
+            'billing.safepay.api_key'     => null,
+            'billing.safepay.v1_secret'   => null,
+        ]);
+
+        app()->forgetInstance(GatewayRegistry::class);
+
+        return app(GatewayRegistry::class);
+    }
+
+    private function registryWithSafepay(): GatewayRegistry
+    {
+        config([
+            'billing.safepay.api_key'   => 'sec_test',
+            'billing.safepay.v1_secret' => 'v1-test-secret',
+            'billing.payfast.merchant_id' => 'TEST-MERCHANT',
+            'billing.payfast.secured_key' => 'TEST-KEY',
         ]);
 
         app()->forgetInstance(GatewayRegistry::class);
@@ -160,5 +177,93 @@ class GatewayRoutingTest extends TestCase
         // Without a basket id a callback cannot be matched to a charge, so the
         // payment would be unattributable the moment it succeeded.
         app(PayFastGateway::class)->startCheckout($this->client('PK'), $price, []);
+    }
+
+    // ── Safepay ─────────────────────────────────────────────────────────
+
+    /**
+     * Safepay's signature is a real HMAC under a shared secret, unlike a scheme
+     * whose "signature" carries no secret at all — so verifying the redirect
+     * genuinely proves Safepay produced it, and these are the assertions that
+     * keep it that way.
+     */
+    public function test_safepay_verifies_a_genuine_signature_and_rejects_a_forged_one(): void
+    {
+        config(['billing.safepay.v1_secret' => 'v1-test-secret']);
+
+        $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
+        $tracker = 'trk_' . uniqid();
+        $valid   = hash_hmac('sha256', $tracker, 'v1-test-secret');
+
+        $this->assertTrue($safepay->signatureValid($tracker, $valid));
+        $this->assertFalse($safepay->signatureValid($tracker, $valid . 'x'));
+        $this->assertFalse($safepay->signatureValid($tracker, ''));
+        $this->assertFalse($safepay->signatureValid('', $valid));
+        $this->assertFalse(
+            $safepay->signatureValid($tracker, hash_hmac('sha256', 'a-different-tracker', 'v1-test-secret')),
+            'A signature for another tracker must not validate this one',
+        );
+    }
+
+    /** Webhooks are signed under a DIFFERENT secret, over the raw body. */
+    public function test_safepay_webhooks_use_their_own_secret(): void
+    {
+        config([
+            'billing.safepay.v1_secret'      => 'v1-test-secret',
+            'billing.safepay.webhook_secret' => 'hook-test-secret',
+        ]);
+
+        $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
+        $body    = '{"event":"payment.succeeded"}';
+
+        $this->assertTrue($safepay->webhookValid($body, hash_hmac('sha256', $body, 'hook-test-secret')));
+        $this->assertFalse(
+            $safepay->webhookValid($body, hash_hmac('sha256', $body, 'v1-test-secret')),
+            'The redirect secret must not validate a webhook — they are separate credentials',
+        );
+    }
+
+    /**
+     * An unverifiable payment is PENDING, never FAILED. It may be a forgery, but
+     * it may equally be a truncated POST or a refresh, and cancelling someone's
+     * subscription on that basis is guessing with their money.
+     */
+    public function test_an_unverifiable_safepay_payment_is_pending_not_failed(): void
+    {
+        config(['billing.safepay.v1_secret' => 'v1-test-secret']);
+
+        $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
+
+        $noSig = $safepay->verifyPayment('order-1', ['tracker' => 'trk_1']);
+        $this->assertFalse($noSig->paid);
+        $this->assertTrue($noSig->isPending());
+
+        $badSig = $safepay->verifyPayment('order-1', ['tracker' => 'trk_1', 'sig' => 'nonsense']);
+        $this->assertFalse($badSig->paid);
+        $this->assertTrue($badSig->isPending(), 'A bad signature must be reconcilable, not terminal');
+    }
+
+    public function test_safepay_serves_pakistan_when_it_has_credentials(): void
+    {
+        $registry = $this->registryWithSafepay();
+
+        $this->assertSame('safepay', $registry->forClient($this->client('PK'))?->key());
+        $this->assertSame('stripe', $registry->forClient($this->client('GB'))?->key());
+        $this->assertSame('PKR', $registry->currencyFor($this->client('PK')));
+    }
+
+    /**
+     * Until a sandbox run proves a saved instrument can be charged with no
+     * customer present, Safepay must not claim recurring — claiming it stands
+     * the renewal notices down, and customers would lapse silently.
+     */
+    public function test_safepay_does_not_claim_recurring_until_proven(): void
+    {
+        $registry = $this->registryWithSafepay();
+
+        $this->assertFalse(
+            $registry->billsRecurringItself($this->client('PK')),
+            'Renewal notices must keep running until recurring is demonstrated',
+        );
     }
 }
