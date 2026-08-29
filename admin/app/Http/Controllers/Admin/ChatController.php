@@ -1083,6 +1083,11 @@ class ChatController extends Controller
         if ($s->status !== 'active' || $s->handoff_status === 'resolved') {
             return 'closed';
         }
+        // Email has no expiring service window — it stays "active" until
+        // closed on our side, same as a normal email client would show it.
+        if ($s->channel === 'email') {
+            return 'active';
+        }
         if (! $this->meta->serviceWindowOpen($s->last_inbound_at, $now)) {
             return 'expired';
         }

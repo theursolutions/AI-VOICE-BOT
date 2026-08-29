@@ -125,10 +125,14 @@ class SafepayGateway implements PaymentGateway
             rtrim($this->baseUrl(), '/') . (string) $this->config('paths.session', '/order/v1/init'),
             [
                 'json' => [
-                    'client'      => (string) $this->config('api_key'),
-                    'amount'      => $this->amountFor($price),
-                    'currency'    => 'PKR',
-                    'environment' => $this->config('sandbox') ? 'sandbox' : 'production',
+                    'merchant_api_key' => (string) $this->config('api_key'),
+                    // Both required. The legacy endpoint accepted a session
+                    // without them and returned a tracker the checkout page
+                    // could not use.
+                    'intent'   => (string) $this->config('intent', 'CYBERSOURCE'),
+                    'mode'     => 'payment',
+                    'currency' => 'PKR',
+                    'amount'   => $this->amountFor($price),
                 ],
                 'timeout' => (int) $this->config('timeout', 20),
             ],
@@ -138,10 +142,12 @@ class SafepayGateway implements PaymentGateway
 
         // Their envelope has moved between versions; accept the shapes seen
         // rather than assuming one, and fail loudly if none matches.
+        // v3 nests it under data.tracker.token; the older shapes are kept so a
+        // pinned SAFEPAY_SESSION_PATH still works.
         $tracker = (string) (
-            data_get($body, 'data.token')
+            data_get($body, 'data.tracker.token')
+            ?? data_get($body, 'data.token')
             ?? data_get($body, 'token')
-            ?? data_get($body, 'data.tracker')
             ?? ''
         );
 

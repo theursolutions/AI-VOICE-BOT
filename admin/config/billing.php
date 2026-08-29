@@ -91,9 +91,19 @@ return [
             'production' => env('SAFEPAY_CHECKOUT_URL', 'https://getsafepay.com/checkout/pay'),
         ],
 
+        // /order/payments/v3/, not the legacy /order/v1/init. The old endpoint
+        // still answers 200 and returns a tracker, which is why it looked
+        // right — but it silently drops `intent` and `mode`, and the checkout
+        // component cannot proceed without them. Its failure reads "Unable to
+        // make request", which names neither field.
         'paths' => [
-            'session' => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
+            'session' => env('SAFEPAY_SESSION_PATH', '/order/payments/v3/'),
         ],
+
+        // Card rails. The session comes back advertising CYBERSOURCE, MPGS,
+        // PAYFAST and RAAST, so the customer still chooses their method on
+        // Safepay's page; this only says which processor the intent opens with.
+        'intent' => env('SAFEPAY_INTENT', 'CYBERSOURCE'),
 
         // rupees | paisa — see the warning above.
         'amount_unit' => env('SAFEPAY_AMOUNT_UNIT', 'rupees'),
