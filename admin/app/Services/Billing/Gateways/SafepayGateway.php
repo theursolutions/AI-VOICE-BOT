@@ -107,6 +107,11 @@ class SafepayGateway implements PaymentGateway
                 // Their flow POSTs back to this URL with tracker + sig.
                 'redirect_url' => (string) ($context['success_url'] ?? ''),
                 'cancel_url'   => (string) ($context['cancel_url'] ?? ''),
+                // Asks Safepay to also notify us server-to-server. Omitted at
+                // first, and its absence is silent: the page loads, the payment
+                // can complete, and no webhook ever arrives — so the charge stays
+                // pending forever with nothing to indicate why.
+                'webhooks'     => 'true',
             ]);
 
         return CheckoutHandoff::redirect($url, $orderId);
@@ -124,15 +129,15 @@ class SafepayGateway implements PaymentGateway
         $response = $this->http->post(
             rtrim($this->baseUrl(), '/') . (string) $this->config('paths.session', '/order/v1/init'),
             [
+                // Exactly the four fields Safepay's own SDK sends for the
+                // hosted flow. The v3 endpoint accepts a richer body and returns
+                // a tracker the hosted page cannot use — it belongs to the
+                // embedded integration, where the merchant drives each step.
                 'json' => [
-                    'merchant_api_key' => (string) $this->config('api_key'),
-                    // Both required. The legacy endpoint accepted a session
-                    // without them and returned a tracker the checkout page
-                    // could not use.
-                    'intent'   => (string) $this->config('intent', 'CYBERSOURCE'),
-                    'mode'     => 'payment',
-                    'currency' => 'PKR',
-                    'amount'   => $this->amountFor($price),
+                    'client'      => (string) $this->config('api_key'),
+                    'amount'      => $this->amountFor($price),
+                    'currency'    => 'PKR',
+                    'environment' => $this->config('sandbox') ? 'sandbox' : 'production',
                 ],
                 'timeout' => (int) $this->config('timeout', 20),
             ],
@@ -242,7 +247,27 @@ class SafepayGateway implements PaymentGateway
             return false;
         }
 
-        return hash_equals(hash_hmac('sha256', $rawBody, $secret), $signature);
+        // SHA-512, over the `data` object RE-ENCODED — not SHA-256 over the raw
+        // body, which is what this did first and what the redirect signature
+        // uses. Two different algorithms and two different inputs on the same
+        // integration, taken from Safepay's own SDK (Verify::webhook).
+        //
+        // Getting it wrong is silent in the worst way: every genuine delivery is
+        // rejected as a forgery, so payments succeed at Safepay and never post
+        // here, and the logs show only "invalid signature" — which reads like an
+        // attack rather than our own mistake.
+        $payload = json_decode($rawBody, true);
+
+        if (! is_array($payload) || ! isset($payload['data'])) {
+            return false;
+        }
+
+        // JSON_UNESCAPED_SLASHES matters: PHP escapes forward slashes by
+        // default, so any URL inside the payload would re-encode differently
+        // from what Safepay signed.
+        $canonical = json_encode($payload['data'], JSON_UNESCAPED_SLASHES);
+
+        return hash_equals(hash_hmac('sha512', $canonical, $secret), $signature);
     }
 
     /** Where the API lives — sessions, lookups. */

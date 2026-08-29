@@ -83,27 +83,27 @@ return [
             'production' => env('SAFEPAY_PRODUCTION_URL', 'https://api.getsafepay.com'),
         ],
 
-        // Where the customer is sent. Verified by fetching each and checking the
-        // page title is "Safepay Checkout" rather than a redirect to
-        // getsafepay.pk.
+        // Where the customer is sent. Taken from Safepay's own PHP SDK
+        // (Base::CHECKOUT_ROUTE with SANDBOX_BASE_URL / PRODUCTION_BASE_URL)
+        // rather than from a blog post — the hosts genuinely differ per
+        // environment, and /embedded/ serves a page that looks right and cannot
+        // complete a payment.
         'checkout_url' => [
-            'sandbox'    => env('SAFEPAY_SANDBOX_CHECKOUT_URL', 'https://sandbox.api.getsafepay.com/embedded/'),
+            'sandbox'    => env('SAFEPAY_SANDBOX_CHECKOUT_URL', 'https://sandbox.api.getsafepay.com/checkout/pay'),
             'production' => env('SAFEPAY_CHECKOUT_URL', 'https://getsafepay.com/checkout/pay'),
         ],
 
-        // /order/payments/v3/, not the legacy /order/v1/init. The old endpoint
-        // still answers 200 and returns a tracker, which is why it looked
-        // right — but it silently drops `intent` and `mode`, and the checkout
-        // component cannot proceed without them. Its failure reads "Unable to
-        // make request", which names neither field.
+        // /order/v1/init is what the hosted flow uses — confirmed against
+        // Safepay's own SDK (Base::TRANSACTION_ENDPOINT), which sends exactly
+        // client, amount, currency and environment.
+        //
+        // /order/payments/v3/ also works and returns a richer tracker carrying
+        // intent, mode and a capabilities list, but it belongs to the ADVANCED
+        // (embedded) integration where the merchant drives each next_action.
+        // A tracker from it is not what the hosted checkout page expects.
         'paths' => [
-            'session' => env('SAFEPAY_SESSION_PATH', '/order/payments/v3/'),
+            'session' => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
         ],
-
-        // Card rails. The session comes back advertising CYBERSOURCE, MPGS,
-        // PAYFAST and RAAST, so the customer still chooses their method on
-        // Safepay's page; this only says which processor the intent opens with.
-        'intent' => env('SAFEPAY_INTENT', 'CYBERSOURCE'),
 
         // rupees | paisa — see the warning above.
         'amount_unit' => env('SAFEPAY_AMOUNT_UNIT', 'rupees'),

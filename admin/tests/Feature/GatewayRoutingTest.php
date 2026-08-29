@@ -215,8 +215,18 @@ class GatewayRoutingTest extends TestCase
         );
     }
 
-    /** Webhooks are signed under a DIFFERENT secret, over the raw body. */
-    public function test_safepay_webhooks_use_their_own_secret(): void
+    /**
+     * Webhooks use a different secret, a different ALGORITHM and a different
+     * input from the redirect: SHA-512 over the `data` object re-encoded, not
+     * SHA-256 over the raw body.
+     *
+     * Pinned against Safepay's own SDK (Verify::webhook) because the first
+     * implementation here used the redirect's scheme for both, and the failure
+     * is silent in the worst way — every genuine delivery is rejected as a
+     * forgery, so payments succeed at Safepay and never post, and the logs show
+     * only "invalid signature".
+     */
+    public function test_safepay_webhooks_use_sha512_over_the_data_object(): void
     {
         config([
             'billing.safepay.v1_secret'      => 'v1-test-secret',
@@ -224,12 +234,29 @@ class GatewayRoutingTest extends TestCase
         ]);
 
         $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
-        $body    = '{"event":"payment.succeeded"}';
 
-        $this->assertTrue($safepay->webhookValid($body, hash_hmac('sha256', $body, 'hook-test-secret')));
+        $data = ['tracker' => 'trk_1', 'order_id' => 'ORDER-1', 'url' => 'https://example.com/a/b'];
+        $body = json_encode(['type' => 'payment.succeeded', 'data' => $data]);
+
+        $correct = hash_hmac('sha512', json_encode($data, JSON_UNESCAPED_SLASHES), 'hook-test-secret');
+
+        $this->assertTrue($safepay->webhookValid($body, $correct));
+
         $this->assertFalse(
-            $safepay->webhookValid($body, hash_hmac('sha256', $body, 'v1-test-secret')),
-            'The redirect secret must not validate a webhook — they are separate credentials',
+            $safepay->webhookValid($body, hash_hmac('sha256', $body, 'hook-test-secret')),
+            'SHA-256 over the raw body is the REDIRECT scheme and must not validate a webhook',
+        );
+        $this->assertFalse(
+            $safepay->webhookValid($body, hash_hmac('sha512', json_encode($data), 'hook-test-secret')),
+            'Escaped slashes must not validate — Safepay signs with JSON_UNESCAPED_SLASHES',
+        );
+        $this->assertFalse(
+            $safepay->webhookValid($body, hash_hmac('sha512', json_encode($data, JSON_UNESCAPED_SLASHES), 'v1-test-secret')),
+            'The redirect secret must not validate a webhook — separate credentials',
+        );
+        $this->assertFalse(
+            $safepay->webhookValid('{"type":"x"}', $correct),
+            'A payload with no data object has nothing to verify',
         );
     }
 

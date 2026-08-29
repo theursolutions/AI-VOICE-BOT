@@ -60,22 +60,25 @@ class SafepaySimulate extends Command
         $this->line('  Amount     ' . number_format($charge->amount_cents / 100, 2) . ' ' . $charge->currency);
         $this->line('  Period to  ' . ($charge->period_end ?? '(none — will not extend a subscription)'));
 
-        $payload = [
-            'type' => 'payment.succeeded',
-            'data' => [
-                'tracker'  => 'trk_sim_' . bin2hex(random_bytes(4)),
-                'order_id' => $charge->reference,
-                'state'    => 'TRACKER_ENDED',
-            ],
+        $data = [
+            'tracker'  => 'trk_sim_' . bin2hex(random_bytes(4)),
+            'order_id' => $charge->reference,
+            'state'    => 'TRACKER_ENDED',
         ];
 
-        $raw = json_encode($payload);
+        $raw = json_encode(['type' => 'payment.succeeded', 'data' => $data]);
 
-        // The tamper path sends a signature over different bytes — exactly what
-        // a forgery looks like — so the refusal can be seen rather than assumed.
+        // Signed the way Safepay signs: SHA-512 over the `data` object with
+        // unescaped slashes. Using the redirect's SHA-256-over-raw-body scheme
+        // here would make this command "pass" against an implementation that
+        // rejects every real delivery.
+        $canonical = json_encode($data, JSON_UNESCAPED_SLASHES);
+
+        // The tamper path signs different bytes — what a forgery looks like — so
+        // the refusal is observed rather than assumed.
         $signature = $this->option('tamper')
-            ? hash_hmac('sha256', $raw . 'tampered', $secret)
-            : hash_hmac('sha256', $raw, $secret);
+            ? hash_hmac('sha512', $canonical . 'tampered', $secret)
+            : hash_hmac('sha512', $canonical, $secret);
 
         $this->line('');
         $this->line($this->option('tamper')

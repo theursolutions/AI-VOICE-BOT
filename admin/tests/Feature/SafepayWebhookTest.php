@@ -55,9 +55,19 @@ class SafepayWebhookTest extends TestCase
         return DB::table('gateway_charges')->find($id);
     }
 
-    private function deliver(array $payload, ?string $signature = null)
+    /**
+     * Deliver a webhook signed the way Safepay signs one.
+     *
+     * SHA-512 over the `data` object re-encoded with unescaped slashes — NOT
+     * SHA-256 over the raw body, which is the redirect's scheme. Two different
+     * algorithms over two different inputs on the same integration; this helper
+     * exists so that asymmetry is written down once.
+     *
+     * @param  array<string, mixed>  $data  the payload's `data` object
+     */
+    private function deliver(array $data, ?string $signature = null)
     {
-        $raw = json_encode($payload);
+        $raw = json_encode(['type' => 'payment.succeeded', 'data' => $data]);
 
         return $this->call(
             'POST',
@@ -65,10 +75,15 @@ class SafepayWebhookTest extends TestCase
             [], [], [],
             [
                 'CONTENT_TYPE'          => 'application/json',
-                'HTTP_X_SFPY_SIGNATURE' => $signature ?? hash_hmac('sha256', $raw, self::SECRET),
+                'HTTP_X_SFPY_SIGNATURE' => $signature ?? $this->sign($data),
             ],
             $raw,
         );
+    }
+
+    private function sign(array $data, string $secret = self::SECRET): string
+    {
+        return hash_hmac('sha512', json_encode($data, JSON_UNESCAPED_SLASHES), $secret);
     }
 
     // ── The security boundary ───────────────────────────────────────────
@@ -87,7 +102,7 @@ class SafepayWebhookTest extends TestCase
     {
         $charge = $this->charge();
 
-        $this->deliver(['tracker' => 'trk_1', 'order_id' => $charge->reference], hash_hmac('sha256', 'anything', 'wrong-secret'))
+        $this->deliver(['tracker' => 'trk_1', 'order_id' => $charge->reference], $this->sign(['x' => 1], 'wrong-secret'))
             ->assertStatus(400);
 
         $this->assertSame(
@@ -105,7 +120,7 @@ class SafepayWebhookTest extends TestCase
     public function test_a_signature_for_a_different_body_is_rejected(): void
     {
         $charge = $this->charge();
-        $other  = hash_hmac('sha256', json_encode(['tracker' => 'someone-elses']), self::SECRET);
+        $other  = $this->sign(['tracker' => 'someone-elses']);
 
         $this->deliver(['tracker' => 'trk_1', 'order_id' => $charge->reference], $other)
             ->assertStatus(400);
