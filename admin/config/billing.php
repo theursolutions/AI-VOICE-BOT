@@ -55,14 +55,20 @@ return [
     |   v1_secret       server-side. Signs the redirect back from checkout.
     |   webhook_secret  server-side. Signs the X-SFPY-SIGNATURE webhook header.
     |
-    | AMOUNTS ARE SENT IN RUPEES, not paisa, and that is the single most
-    | dangerous line in this file. Our prices are stored in minor units, so a
-    | Rs 75 plan is 7500. Sending 7500 where Safepay expects rupees charges the
-    | customer Rs 7,500 — a hundred times the price. The conversion below errs
-    | the other way on purpose: if their API turns out to want paisa we
-    | undercharge by 100x, which costs us money and harms nobody, and the
-    | sandbox run will show it immediately. Confirm with a sandbox payment
-    | BEFORE this is switched live.
+    | AMOUNTS ARE SENT IN RUPEES, not paisa. Confirmed empirically: a session
+    | created with amount = 7500 renders as "Rs 7,500" on Safepay's own checkout
+    | page, so the field is whole rupees. Our prices are stored in minor units,
+    | so a Rs 75 plan is 7500 and must be divided by 100 on the way out.
+    |
+    | This was the single most dangerous line in the file, and it was wrong until
+    | a sandbox page was actually read. Sending minor units would have charged
+    | every Pakistani customer a hundred times the price — Rs 7,500 for a Rs 75
+    | plan — and nothing in the code, the tests or the API response would have
+    | said so: Safepay echoes back whatever number it is given.
+    |
+    | Safepay's docs describe amounts as "in the lowest denomination", which is
+    | what made paisa look right. It is not true of this endpoint. Re-check with
+    | safepay:doctor after any API change rather than trusting the prose.
     */
     'safepay' => [
         'api_key'        => env('SAFEPAY_API_KEY'),
