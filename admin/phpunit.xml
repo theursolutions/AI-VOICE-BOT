@@ -19,6 +19,14 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <!--
+            Pinned so tests do not inherit the developer's APP_URL. A local
+            install served from a subdirectory (…/admin/public) makes the test
+            client prefix every request with that path, which then matches no
+            route and fails as a 404 nowhere near its cause. Tests must control
+            their own environment rather than read the machine they run on.
+        -->
+        <env name="APP_URL" value="http://localhost"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_DRIVER" value="array"/>
         <!--
