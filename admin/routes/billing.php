@@ -37,6 +37,22 @@ Route::post('/pricing/checkout', [CheckoutController::class, 'start'])
     ->middleware('throttle:20,1')
     ->name('pricing.checkout');
 
+// PADDLE'S DEFAULT PAYMENT LINK.
+//
+// Paddle appends `?_ptxn=txn_…` and sends customers here — not only as a
+// fallback for a transaction's checkout URL, but as the destination when it
+// asks somebody to update a failing card. Public and session-free on purpose:
+// whoever follows that link came from a Paddle email and may have no login,
+// and stranding them at a sign-in page strands the one customer actively
+// trying to pay us.
+//
+// Nothing of ours is rendered on it. The transaction id belongs to Paddle and
+// their overlay decides what to show for it; all this page contributes is the
+// PUBLIC client token.
+Route::get('/pay', [PricingController::class, 'pay'])
+    ->middleware('web')
+    ->name('paddle.pay');
+
 // The country picker on the public pricing page. No workspace exists yet, so
 // this only sets the cookie — but a visitor who has told us where they are
 // should not be re-guessed from their IP on every page after.

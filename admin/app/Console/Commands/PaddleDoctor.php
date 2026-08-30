@@ -53,6 +53,7 @@ class PaddleDoctor extends Command
             ['Signature tolerance', config('billing.paddle.signature_tolerance') . 's'],
             ['Tax category', config('billing.paddle.tax_category')],
             ['Webhook URL', url('/billing/paddle/webhook')],
+            ['Default payment link', route('paddle.pay')],
         ]);
 
         if (! $paddle->isConfigured()) {
@@ -221,9 +222,11 @@ class PaddleDoctor extends Command
                 if (str_contains($e->getMessage(), 'default payment link')) {
                     $this->line('');
                     $this->line('       <fg=yellow>Paddle Dashboard → Checkout → Checkout settings →</>');
-                    $this->line('       <fg=yellow>Default payment link. Set it to this URL:</>');
-                    $this->line('       <fg=yellow>' . rtrim(config('app.url'), '/') . '</>');
-                    $this->line('       <fg=yellow>Paddle will not create ANY transaction until it is set.</>');
+                    $this->line('       <fg=yellow>Default payment link. Set it to exactly:</>');
+                    $this->line('       <fg=cyan;options=bold>' . route('paddle.pay') . '</>');
+                    $this->line('       <fg=yellow>That page loads Paddle.js and opens the checkout from</>');
+                    $this->line('       <fg=yellow>the ?_ptxn Paddle appends. Paddle will not create ANY</>');
+                    $this->line('       <fg=yellow>transaction until it is set.</>');
                 }
             }
         }
