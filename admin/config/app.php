@@ -160,6 +160,7 @@ return [
          * Package Service Providers...
          */
         Msd\MetaChannels\MetaChannelsServiceProvider::class,
+        Msd\MailChannel\MailChannelServiceProvider::class,
 
         /*
          * Application Service Providers...

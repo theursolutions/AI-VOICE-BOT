@@ -20,6 +20,31 @@ class AiBrain extends Model
     public const KIND_OLLAMA        = 'ollama';
 
     /**
+     * Which calls a brain may serve.
+     *
+     * Of the four LLM calls a customer message costs, only the reply is read by
+     * a human. Letting a cheap model take the other three cut ~22% off the
+     * per-message cost with nothing customer-visible changing.
+     *
+     *   SERVES_ANY        replies and machinery. The default, and the behaviour
+     *                     of every brain that existed before this column.
+     *   SERVES_REPLY      only the answer the customer reads. Put your best
+     *                     model here.
+     *   SERVES_MACHINERY  tool selection, lead extraction, summarisation. All
+     *                     produce JSON or internal prose. Put your cheapest
+     *                     model here.
+     */
+    public const SERVES_ANY       = 'any';
+    public const SERVES_REPLY     = 'reply';
+    public const SERVES_MACHINERY = 'machinery';
+
+    public const SERVES = [
+        self::SERVES_ANY       => 'Replies and background tasks',
+        self::SERVES_REPLY     => 'Customer replies only',
+        self::SERVES_MACHINERY => 'Background tasks only',
+    ];
+
+    /**
      * Providers offered in the UI, with the base_url and models pre-filled.
      *
      * Nearly all of these are one `kind` — openai_compat — because they all
@@ -38,6 +63,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.openai.com/v1',
             'models'   => ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4.1'],
+            'rate_in' => '0.1500', 'rate_out' => '0.6000',
             'needs_key' => true,
         ],
         'deepseek' => [
@@ -45,6 +71,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.deepseek.com/v1',
             'models'   => ['deepseek-chat', 'deepseek-reasoner'],
+            'rate_in' => '0.2700', 'rate_out' => '1.1000',
             'needs_key' => true,
         ],
         'gemini' => [
@@ -60,6 +87,7 @@ class AiBrain extends Model
             // configuration error anyone would think to look for. The field is a
             // datalist, so a name absent here can still be typed.
             'models'   => ['gemini-3.5-flash-lite', 'gemini-3.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.5-flash'],
+            'rate_in' => '0.1000', 'rate_out' => '0.4000',
             'needs_key' => true,
         ],
         'groq' => [
@@ -67,6 +95,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.groq.com/openai/v1',
             'models'   => ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+            'rate_in' => '0.0500', 'rate_out' => '0.0800',
             'needs_key' => true,
         ],
         'cerebras' => [
@@ -74,6 +103,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.cerebras.ai/v1',
             'models'   => ['llama-3.3-70b', 'llama3.1-8b'],
+            'rate_in' => '0.1000', 'rate_out' => '0.1000',
             'needs_key' => true,
         ],
         'openrouter' => [
@@ -81,6 +111,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://openrouter.ai/api/v1',
             'models'   => ['meta-llama/llama-3.3-70b-instruct', 'deepseek/deepseek-chat'],
+            'rate_in' => '0.0000', 'rate_out' => '0.0000',
             'needs_key' => true,
         ],
         'together' => [
@@ -88,6 +119,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => 'https://api.together.xyz/v1',
             'models'   => ['meta-llama/Llama-3.3-70B-Instruct-Turbo'],
+            'rate_in' => '0.2000', 'rate_out' => '0.2000',
             'needs_key' => true,
         ],
         'anthropic' => [
@@ -95,6 +127,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_ANTHROPIC,
             'base_url' => null,
             'models'   => ['claude-haiku-4-5', 'claude-sonnet-4-5'],
+            'rate_in' => '0.2500', 'rate_out' => '1.2500',
             'needs_key' => true,
         ],
         'ollama' => [
@@ -102,6 +135,7 @@ class AiBrain extends Model
             'kind'     => self::KIND_OLLAMA,
             'base_url' => 'http://voice-engine:11434',
             'models'   => ['qwen2.5:7b', 'llama3.1:8b'],
+            'rate_in' => '0.0000', 'rate_out' => '0.0000',
             'needs_key' => false,
         ],
         'custom' => [
@@ -109,13 +143,14 @@ class AiBrain extends Model
             'kind'     => self::KIND_OPENAI_COMPAT,
             'base_url' => null,
             'models'   => [],
+            'rate_in' => '0.0000', 'rate_out' => '0.0000',
             'needs_key' => true,
         ],
     ];
 
     protected $fillable = [
         'client_id', 'name', 'kind', 'preset', 'base_url', 'model', 'api_key',
-        'max_tokens', 'priority', 'is_active', 'is_verified', 'verified_at',
+        'max_tokens', 'rate_in', 'rate_out', 'priority', 'serves', 'is_active', 'is_verified', 'verified_at',
         'verify_error', 'quota_tokens', 'quota_window', 'tokens_used',
         'quota_reset_at', 'public_label', 'created_at', 'updated_at',
     ];
@@ -125,6 +160,10 @@ class AiBrain extends Model
         'is_active'      => 'boolean',
         'is_verified'    => 'boolean',
         'max_tokens'     => 'integer',
+        // Kept as strings by the decimal cast so nothing rounds on the way
+        // through PHP; arithmetic converts explicitly at the point of use.
+        'rate_in'        => 'decimal:4',
+        'rate_out'       => 'decimal:4',
         'priority'       => 'integer',
         'quota_tokens'   => 'integer',
         'tokens_used'    => 'integer',
@@ -197,6 +236,41 @@ class AiBrain extends Model
     public function scopeUsable(Builder $q): Builder
     {
         return $q->where('is_active', true)->where('is_verified', true);
+    }
+
+    /**
+     * Brains allowed to serve a given call type.
+     *
+     * A dedicated brain outranks a general-purpose one for the calls it claims:
+     * ordering by `serves = 'any'` puts the specialists first, so a pool holding
+     * one reply brain, one machinery brain and one catch-all sends each call to
+     * the brain that was chosen for it and still has the catch-all behind both
+     * as cover. Callers add their own `orderBy('priority')` after this.
+     */
+    /**
+     * Brains allowed to serve a given role (SERVES_REPLY or SERVES_MACHINERY).
+     *
+     * A dedicated brain outranks a general-purpose one for the calls it claims:
+     * ordering by `serves = 'any'` puts specialists first, so a pool holding one
+     * reply brain, one machinery brain and one catch-all sends each call to the
+     * brain chosen for it and still has the catch-all behind both as cover.
+     *
+     * Specificity beats priority here, deliberately. The alternative — priority
+     * alone — means marking a brain "background tasks only" does nothing until
+     * its priority is also reordered above every catch-all, so the setting would
+     * appear to have no effect. Callers add their own orderBy('priority') after
+     * this, which then breaks ties within each group.
+     */
+    public function scopeServing(Builder $q, string $role): Builder
+    {
+        return $q->whereIn('serves', [$role, self::SERVES_ANY])
+            ->orderByRaw('serves = ?', [self::SERVES_ANY]);
+    }
+
+    /** Human label for what this brain serves. */
+    public function servesLabel(): string
+    {
+        return self::SERVES[$this->serves] ?? self::SERVES[self::SERVES_ANY];
     }
 
     /** Has this brain spent its allowance? Unlimited when quota_tokens is null. */

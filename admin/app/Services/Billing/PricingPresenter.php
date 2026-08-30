@@ -5,6 +5,7 @@ namespace App\Services\Billing;
 use App\Models\Billing\Feature;
 use App\Models\Billing\Plan;
 use App\Models\Billing\PlanPrice;
+use App\Models\Client;
 use App\Services\Currency\ExchangeRateService;
 use App\Services\Geo\GeoLocationService;
 use App\Services\Geo\GeoResult;
@@ -42,7 +43,14 @@ class PricingPresenter
      *   geo: ?array, disclaimer: string, comparison: array, has_local: bool
      * }
      */
-    public function build(Request $request, ?string $selectedInterval = null): array
+    /**
+     * @param  ?Client  $billFor  the workspace these prices will be CHARGED to,
+     *         when one is known. Given, the cards quote the currency that
+     *         workspace's gateway actually settles, and the approximate local
+     *         line is dropped — an estimate beside the real number is noise at
+     *         best, and at worst two different figures for one price.
+     */
+    public function build(Request $request, ?string $selectedInterval = null, ?Client $billFor = null): array
     {
         $intervals = $this->plans->offeredIntervals();
 
@@ -50,13 +58,19 @@ class PricingPresenter
             ? $selectedInterval
             : ($intervals[0] ?? 'monthly');
 
-        $geo = $this->resolveGeo($request);
+        $billing = $billFor ? $this->billingCurrency($billFor) : null;
+
+        // Geo drives the approximate line, and only for customers charged in
+        // the platform currency. Someone billed in rupees already has both
+        // figures — the rupee price they pay and the dollar price beside it —
+        // and neither is a conversion, so there is nothing to estimate.
+        $geo = $billing ? null : $this->resolveGeo($request);
 
         $plans = $this->plans->publicPlans();
 
         $cards = [];
         foreach ($plans as $plan) {
-            $cards[] = $this->card($plan, $intervals, $geo);
+            $cards[] = $this->card($plan, $intervals, $geo, $billing);
         }
 
         return [
@@ -74,15 +88,130 @@ class PricingPresenter
         ];
     }
 
+    /**
+     * Keep an unchosen country in step with where the customer actually is.
+     *
+     * WRITTEN, not merely displayed. `billing_country` is what GatewayRegistry
+     * routes on and what resolvePrice picks a currency from, so a value that
+     * only looked right on the page would leave the checkout charging in
+     * something else entirely.
+     *
+     * NEVER OVERRIDES A CHOICE. Once someone has picked their country the
+     * source is `manual` and this does nothing, for as long as the workspace
+     * exists — a customer who corrected our guess and found it corrected back
+     * on the next page load would rightly conclude the control does not work.
+     *
+     * Also declines to move a workspace that is mid-period on a paid plan in
+     * another currency: their invoices, their charge history and their renewal
+     * are all denominated already, and silently re-routing them because someone
+     * opened the billing page from an airport is not a decision an IP address
+     * gets to make.
+     */
+    private function followDetectedCountry(Client $client, string $detected): void
+    {
+        $detected = strtoupper($detected);
+
+        if ($client->billing_country === $detected) {
+            return;
+        }
+
+        if (data_get($client->json_data, 'billing.country_source') === 'manual') {
+            return;
+        }
+
+        if (! isset(\App\Support\Payments::sellableCountries()[$detected])) {
+            return;
+        }
+
+        $subscription = $client->currentSubscription();
+
+        if ($subscription
+            && $subscription->unit_amount > 0
+            && $subscription->current_period_end?->isFuture()) {
+            return;
+        }
+
+        $client->forceFill([
+            'billing_country' => $detected,
+            'json_data'       => array_replace_recursive(
+                (array) $client->json_data,
+                ['billing' => ['country_source' => 'ip']],
+            ),
+            'updated_at'      => time(),
+        ])->save();
+    }
+
+    /**
+     * The currency a workspace's gateway settles, or null when it is the
+     * platform's own and the ordinary dollar path applies.
+     */
+    private function billingCurrency(Client $client): ?string
+    {
+        $currency = app(\App\Services\Billing\Gateways\GatewayRegistry::class)
+            ->forClient($client)?->currencies()[0] ?? null;
+
+        $base = strtoupper((string) config('billing.currency', 'usd'));
+
+        return ($currency && strtoupper($currency) !== $base) ? $currency : null;
+    }
+
+    /**
+     * Everything the country picker needs to render and to post back.
+     *
+     * WHOSE ANSWER WINS. A workspace that has stored a country has decided —
+     * that value is what checkout routes on, and re-guessing it from an IP
+     * every page load would let a founder on holiday silently change the
+     * currency of their own invoices. Only when nothing is stored does the
+     * guess apply, and the picker says so, because a guess presented as a fact
+     * is one nobody thinks to correct.
+     *
+     * @return array{action: string, current: ?string, detected: ?string, currency: string}
+     */
+    public function countryContext(Request $request, ?Client $client = null): array
+    {
+        $detected = $this->geo->resolve($request)?->countryCode;
+
+        // Follow the IP until somebody chooses. Not merely for display — the
+        // stored country is what the gateway and the price actually route on,
+        // so leaving it stale would show a German visitor euros while charging
+        // them through Safepay in rupees.
+        if ($client && $detected) {
+            $this->followDetectedCountry($client, $detected);
+        }
+
+        $current = $client?->billing_country ?: $detected;
+
+        // A country an operator has since switched off must not stay selected:
+        // it would route a payment to a gateway we have stopped selling
+        // through, and the picker would show a choice the form rejects.
+        if ($current && ! isset(\App\Support\Payments::sellableCountries()[strtoupper($current)])) {
+            $current = null;
+        }
+
+        return [
+            'action'   => $client
+                ? route('billing.country', ['client' => $client->slug])
+                : route('pricing.country'),
+            'current'  => $current ? strtoupper($current) : null,
+            'detected' => $detected ? strtoupper($detected) : null,
+            'currency' => app(\App\Services\Billing\Gateways\GatewayRegistry::class)
+                ->currencyForCountry($current),
+        ];
+    }
+
     // ── One plan card ────────────────────────────────────────────────
 
-    private function card(Plan $plan, array $intervals, ?GeoResult $geo): array
+    private function card(Plan $plan, array $intervals, ?GeoResult $geo, ?string $billing = null): array
     {
         $prices  = [];
-        $monthly = $plan->priceFor('monthly');
+        $monthly = $plan->priceFor('monthly', $billing);
 
         foreach ($intervals as $interval) {
-            $price = $plan->priceFor($interval);
+            // A plan with no row in the billing currency simply shows no price
+            // for that interval, exactly as one missing a dollar price would.
+            // Quoting the dollar figure instead would show a number the
+            // customer will not be charged.
+            $price = $plan->priceFor($interval, $billing);
 
             if (! $price) {
                 continue;
@@ -226,7 +355,25 @@ class PricingPresenter
         return $text === '' ? null : "{$name}: {$text}";
     }
 
-    /** USD figure plus the optional approximate local line. */
+    /**
+     * The charged figure, plus a second line in the other currency.
+     *
+     * TWO CURRENCIES, AND WHICH IS WHICH MATTERS. The primary figure is always
+     * what the customer is actually CHARGED — the amount on the row the gateway
+     * will collect. The second line is the same money expressed the other way,
+     * marked approximate, and is never what anybody is billed.
+     *
+     * Which way round depends on where they are, and it inverts:
+     *
+     *   Pakistan   charged Rs 22,500  ·  shown "≈ $75"
+     *   elsewhere  charged $75        ·  shown "≈ Rs 20,850"
+     *
+     * Getting this backwards would put the reference figure in the big type and
+     * the real one in the footnote — a page that quotes a price nobody pays.
+     *
+     * The Pakistani second line is EXACT, not converted: both rows are real
+     * prices we set. The international one is a live conversion and says so.
+     */
     private function price(PlanPrice $price, ?PlanPrice $monthly, ?GeoResult $geo): array
     {
         $savings = $price->savingsPercentAgainst($monthly);
@@ -235,8 +382,12 @@ class PricingPresenter
             'interval'          => $price->interval,
             'interval_label'    => $price->intervalLabel(),
             'suffix'            => $price->intervalSuffix(),
-            'usd'               => $price->formatted(),
-            'usd_cents'         => $price->unit_amount,
+            // `amount`, not `usd`: a card may now be quoting rupees, and a key
+            // that names one currency while holding another is how a wrong
+            // symbol gets printed next to a real price.
+            'amount'            => $price->formatted(),
+            'amount_minor'      => $price->unit_amount,
+            'amount_currency'   => strtoupper((string) $price->currency),
             'effective_monthly' => $price->formattedEffectiveMonthly(),
             'savings_percent'   => $savings,
             'savings_label'     => $savings > 0 ? "Save {$savings}%" : null,
@@ -245,8 +396,32 @@ class PricingPresenter
             'local'             => null,
             'local_effective'   => null,
             'currency'          => null,
+            // True when the second line is another real price rather than a
+            // live conversion, so the view can drop the "≈".
+            'local_is_exact'    => false,
         ];
 
+        $base = strtoupper((string) config('billing.currency', 'usd'));
+
+        // ── Charged locally: the second line is the platform price ──────
+        //
+        // Taken from the sibling row rather than converted, because both are
+        // prices we set — so this figure is exact, and labelling it with a "≈"
+        // would understate what we actually know.
+        if (strtoupper((string) $price->currency) !== $base) {
+            $platform = $price->plan?->priceFor($price->interval, $base);
+
+            if ($platform) {
+                $out['currency']        = $base;
+                $out['local']           = $platform->formatted();
+                $out['local_effective'] = $platform->formattedEffectiveMonthly();
+                $out['local_is_exact']  = true;
+            }
+
+            return $out;
+        }
+
+        // ── Charged in the platform currency: convert for display ───────
         if (! $this->localEnabled($geo)) {
             return $out;
         }
@@ -352,21 +527,35 @@ class PricingPresenter
     /**
      * Render one price for a known workspace/visitor. Used by the customer
      * billing page so it shows the same "$59 ≈ Rs 16,600" pairing as /pricing.
+     *
+     * $currency is the currency the AMOUNT is already in — pass it whenever the
+     * figure comes from a price row, because a rupee amount printed with a
+     * dollar sign misstates the charge by a factor of a few hundred. When it is
+     * not the platform currency the approximate local line is dropped: there is
+     * nothing left to approximate, and two figures for one price is worse than
+     * one.
      */
-    public function renderPrice(int $usdCents, string $interval, Request $request): array
+    public function renderPrice(int $minorUnits, string $interval, Request $request, ?string $currency = null): array
     {
-        $geo   = $this->resolveGeo($request);
-        $usd   = $usdCents / 100;
+        $base    = strtoupper((string) config('billing.currency', 'usd'));
+        $code    = strtoupper((string) ($currency ?: $base));
+        $isBase  = $code === $base;
+
+        $geo    = $isBase ? $this->resolveGeo($request) : null;
+        $amount = $minorUnits / 100;
+        $symbol = $this->fx->symbolFor($code);
 
         $out = [
-            'usd'      => '$' . ($usd == floor($usd) ? number_format($usd, 0) : number_format($usd, 2)),
-            'suffix'   => (string) config("billing.intervals.suffixes.{$interval}", ''),
-            'local'    => null,
-            'currency' => null,
+            'amount'          => $symbol . ($amount == floor($amount) ? number_format($amount, 0) : number_format($amount, 2)),
+            'amount_minor'    => $minorUnits,
+            'amount_currency' => $code,
+            'suffix'          => (string) config("billing.intervals.suffixes.{$interval}", ''),
+            'local'           => null,
+            'currency'        => null,
         ];
 
         if ($this->localEnabled($geo)) {
-            $local = $this->fx->convertAndFormat($usdCents, $geo->currency);
+            $local = $this->fx->convertAndFormat($minorUnits, $geo->currency);
 
             if ($local !== null) {
                 $out['local']    = $local;

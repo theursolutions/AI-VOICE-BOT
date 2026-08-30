@@ -25,9 +25,9 @@ class HomepagePlansTest extends BillingTestCase
             $response->assertSee($name, false);
         }
 
-        $response->assertSee('$19', false);
-        $response->assertSee('$59', false);
-        $response->assertSee('$149', false);
+        $response->assertSee('$26', false);
+        $response->assertSee('$75', false);
+        $response->assertSee('$199', false);
         $response->assertSee('Most popular', false);
         $response->assertSee('All plans are charged in USD', false);
         $response->assertSee('id="pricing"', false);
@@ -92,24 +92,24 @@ class HomepagePlansTest extends BillingTestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertDontSee('$149', false);
-        $response->assertSee('$59', false);
+        $response->assertDontSee('$199', false);
+        $response->assertSee('$75', false);
     }
 
     public function test_a_private_plan_is_not_shown_on_the_homepage(): void
     {
         Plan::where('slug', 'starter')->update(['is_public' => false]);
 
-        $this->get('/')->assertOk()->assertDontSee('$19', false);
+        $this->get('/')->assertOk()->assertDontSee('$26', false);
     }
 
     public function test_the_annual_interval_renders_and_shows_the_saving(): void
     {
         $this->get('/?billing=annually')
              ->assertOk()
-             ->assertSee('$590', false)
+             ->assertSee('$750', false)
              ->assertSee('Save 17%', false)
-             ->assertSee('$49.17/mo billed annually', false);
+             ->assertSee('$62.50/mo billed annually', false);
     }
 
     public function test_the_homepage_shows_approximate_local_prices_when_available(): void
@@ -121,8 +121,8 @@ class HomepagePlansTest extends BillingTestCase
 
         $this->get('/?country=PK')
              ->assertOk()
-             ->assertSee('$19', false)          // charged
-             ->assertSee('Rs 5,400', false)     // approximate
+             ->assertSee('$26', false)          // charged
+             ->assertSee('Rs 7,400', false)     // approximate
              ->assertSee('approximate', false);
     }
 
@@ -162,7 +162,7 @@ class HomepagePlansTest extends BillingTestCase
         $home    = $this->get('/')->getContent();
         $pricing = $this->get('/pricing')->getContent();
 
-        foreach (['$19', '$59', '$149', 'Most popular'] as $needle) {
+        foreach (['$26', '$75', '$199', 'Most popular'] as $needle) {
             $this->assertStringContainsString($needle, $home, "homepage: {$needle}");
             $this->assertStringContainsString($needle, $pricing, "/pricing: {$needle}");
         }

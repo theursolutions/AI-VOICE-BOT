@@ -834,31 +834,74 @@
                        font-variant-numeric:tabular-nums; letter-spacing:.01em; }
     html.dark .tva-convo__time { color:#64748b; }
 
-    /* Channel shown as a mark, not a word — see channelIcon().
-     *
-     * A true circle in the platform's OWN colour with a white glyph, rather
-     * than the earlier tinted rounded-rect. Two reasons it reads better: a
-     * column of circles aligns perfectly whatever the provider, and these are
-     * the colours people already recognise from the apps themselves, so the
-     * channel registers without being read. Instagram gets its gradient. */
-    .tva-badge--icon { width:19px; height:19px; padding:0; border-radius:50%;
+    /* Channel shown as its own plain mark — see channelIcon(). No wrapping
+     * disc, no drop shadow: each icon now carries its real brand colour (or
+     * Instagram's gradient) baked straight into the SVG, the way the actual
+     * app icon looks. A CSS circle placed behind a glyph that already draws
+     * its own circular outline (WhatsApp, Facebook/Messenger are single-path
+     * logos with the frame built in) doubled up two slightly-misaligned
+     * curves — that mismatch was what actually read as "blurry", not the
+     * icon itself. Removing the added disc fixes it at the source. */
+    .tva-badge--icon { width:16px; height:16px; padding:0;
                        display:inline-flex; align-items:center; justify-content:center;
-                       line-height:0; color:#fff; flex-shrink:0;
-                       box-shadow:0 1px 2px rgba(15,23,42,.16); }
-    .tva-badge--icon svg { width:11px; height:11px; }
-    .tva-badge--icon.tva-badge--whatsapp  { background:#25d366; color:#fff; }
-    .tva-badge--icon.tva-badge--facebook,
-    .tva-badge--icon.tva-badge--messenger { background:#1877f2; color:#fff; }
-    .tva-badge--icon.tva-badge--instagram { color:#fff;
-        background:radial-gradient(circle at 30% 107%, #fdf497 0%, #fd5949 45%, #d6249f 60%, #285AEB 90%); }
-    /* Channels with no brand mark (web, phone, API) keep a neutral disc so
-       the row still lines up instead of collapsing. */
-    .tva-badge--icon:not([class*="--whatsapp"]):not([class*="--facebook"]):not([class*="--messenger"]):not([class*="--instagram"])
-        { background:#94a3b8; }
-    .tva-badge__txt { font-size:8px; font-weight:700; letter-spacing:.02em; text-transform:uppercase; }
+                       line-height:0; flex-shrink:0; }
+    .tva-badge--icon svg { width:16px; height:16px; }
+    .tva-badge__txt { font-size:8px; font-weight:700; letter-spacing:.02em; text-transform:uppercase;
+                      color:#fff; background:#94a3b8; padding:2px 5px; border-radius:4px; }
     #hdrChannel { display:inline-flex; align-items:center; }
     #hdrName a { color:inherit; text-decoration:none; border-bottom:1px dashed currentColor; }
     #hdrName a:hover { opacity:.8; }
+
+    /* ── Channel bar ──
+     * Every connected channel as its own always-visible mark, sitting flat
+     * on the page the way a real omnichannel console does it (Voiso, etc.):
+     * the brand marks ARE the icon, not a glyph stuffed into a decorative
+     * button — no extra circle frame, no drop shadow, no glow ring. Every
+     * icon stays at full, natural colour all the time; "selected" is shown
+     * by a small bar underneath, not by dimming the rest — dimming a
+     * multi-colour logo down to a pastel smear is what read as "blurry"
+     * before. */
+    .tva-chanbar { display:flex; align-items:center; gap:15px; margin-top:11px; flex-wrap:wrap; }
+    .tva-chanbar__all,
+    .tva-chanbar .tva-badge--icon {
+        position:relative; width:20px; height:20px;
+        display:flex; align-items:center; justify-content:center; cursor:pointer;
+        flex-shrink:0; background:none; box-shadow:none; border:none;
+    }
+    .tva-chanbar__all svg,
+    .tva-chanbar .tva-badge--icon svg {
+        width:20px !important; height:20px !important; shape-rendering:geometricPrecision;
+    }
+    .tva-chanbar__all { background:none; color:#94a3b8; border-radius:6px; }
+    html.dark .tva-chanbar__all { color:#64748b; }
+    .tva-chanbar__all:hover { color:#475569; }
+    html.dark .tva-chanbar__all:hover { color:#cbd5e1; }
+
+    /* The underline bar: exactly one is ever showing — "All" holds it by
+       default (no channel picked yet), and clicking a channel is what moves
+       it there instead, the same way a tab's active indicator works. Scaled
+       from the centre out rather than just appearing, so the move reads as
+       motion rather than a flicker. */
+    .tva-chanbar__all::after,
+    .tva-chanbar .tva-badge--icon::after {
+        content:''; position:absolute; left:50%; bottom:-6px; width:16px; height:3px;
+        border-radius:2px; background:#4f46e5; transform:translateX(-50%) scaleX(0);
+        transition:transform .16s ease;
+    }
+    .tva-chanbar__all.is-active::after,
+    .tva-chanbar .tva-badge--icon.is-on::after { transform:translateX(-50%) scaleX(1); }
+    html.dark .tva-chanbar__all.is-active::after,
+    html.dark .tva-chanbar .tva-badge--icon.is-on::after { background:#818cf8; }
+
+    .tva-chanbar__all.is-active { color:#4f46e5; }
+    html.dark .tva-chanbar__all.is-active { color:#818cf8; }
+
+    .tva-chanbar__n { position:absolute; top:-6px; right:-7px; min-width:13px; height:13px;
+        padding:0 3px; border-radius:999px; background:#0f172a; color:#fff;
+        font-size:8px; font-weight:800; display:flex; align-items:center; justify-content:center;
+        box-shadow:0 0 0 2px #fff; font-variant-numeric:tabular-nums; }
+    .tva-chanbar__n:empty { display:none; }
+    html.dark .tva-chanbar__n { box-shadow:0 0 0 2px #0f172a; }
 </style>
 
 <div class="content">
@@ -905,6 +948,23 @@
                     <i data-lucide="search"></i>
                     <input id="chatSearch" type="text" class="form-control form-control-sm" placeholder="Search conversations…">
                 </div>
+
+                {{-- One mark per channel, always visible — "All" is the
+                     default (no channel filter applied) and clicking a mark
+                     narrows to just that channel; clicking it again, or
+                     "All", clears it. Built in JS (chanBarInit) because the
+                     brand glyphs live in CHANNEL_MARKS there. --}}
+                <div class="tva-chanbar" id="chanBar">
+                    <button type="button" class="tva-chanbar__all is-active" id="chanAll" title="All channels">
+                        <i data-lucide="inbox"></i>
+                    </button>
+                </div>
+
+                {{-- Only when the project has a connected mailbox — starts a
+                     brand new outbound thread, not a reply to anything inbound. --}}
+                <button type="button" id="btnNewEmail" class="tva-iconbtn" title="Compose a new email" style="display:none;" onclick="openComposeEmail()">
+                    <i data-lucide="pen-square" class="w-4 h-4"></i>
+                </button>
 
                 {{-- The three toggles are icon-only so all four fit one line in
                      a 302px column. Nothing becomes discoverable-by-icon-alone,
@@ -993,6 +1053,8 @@
                                 <button data-v="whatsapp">WhatsApp <b data-n="channels.whatsapp"></b></button>
                                 <button data-v="instagram">Instagram <b data-n="channels.instagram"></b></button>
                                 <button data-v="facebook">Facebook <b data-n="channels.facebook"></b></button>
+                                <button data-v="email">Email <b data-n="channels.email"></b></button>
+                                <button data-v="web">Web chat <b data-n="channels.web"></b></button>
                             </div>
                         </div>
 
@@ -1154,6 +1216,16 @@
                          the explanation can never contradict the enforcement. --}}
                     <div id="policyNote" class="tva-policy" hidden></div>
 
+                    {{-- Email-only: subject/Cc/Bcc, shown only while the open
+                         thread's channel is email (toggled in applyHeader()). --}}
+                    <div id="emailFields" style="display:none; flex-direction:column; gap:6px; margin-bottom:6px;">
+                        <input id="emailSubject" type="text" class="form-control form-control-sm" placeholder="Subject">
+                        <div style="display:flex; gap:6px;">
+                            <input id="emailCc" type="text" class="form-control form-control-sm flex-1" placeholder="Cc (comma-separated)">
+                            <input id="emailBcc" type="text" class="form-control form-control-sm flex-1" placeholder="Bcc (comma-separated)">
+                        </div>
+                    </div>
+
                     <div class="tva-composer-row" id="composerRow">
                         {{-- One button, two faces: a plus on desktop where it
                              only adds attachments, three dots on a phone where
@@ -1236,8 +1308,11 @@ const CHAT = {
     base: '{{ url('c/'.$client->slug.'/chat') }}',
     convosUrl: '{{ route('chat.conversations', ['client' => $client->slug]) }}',
     leadsUrl:  '{{ route('leads.index', ['client' => $client->slug]) }}',
+    composeUrl: '{{ route('chat.email.compose', ['client' => $client->slug]) }}',
     csrf: '{{ csrf_token() }}',
+    emailAccounts: @json($emailAccounts->map(fn ($a) => ['id' => $a->id, 'label' => $a->label ?: ($a->from_name ? "{$a->from_name} <{$a->from_email}>" : $a->from_email), 'email' => $a->from_email])),
 };
+let currentChannel = null;
 const EMOJIS = '😀 😁 😂 🤣 😊 😍 😘 👍 🙏 🙌 👏 🔥 ✅ ❌ ❤️ 🎉 😎 🤔 😅 😢 😡 🙂 👌 💯 📞 📦 🛒 💳 ⏰ 📅 ✨ 🚀'.split(' ');
 let activeSid=null, lastMsgId=0, threadTimer=null;
 
@@ -1311,21 +1386,66 @@ const CHANNEL_MARKS = {
 // badge. Both spellings are mapped so either vocabulary resolves.
 CHANNEL_MARKS.facebook  = CHANNEL_MARKS.facebook_page;
 CHANNEL_MARKS.messenger = CHANNEL_MARKS.facebook_page;
+// Standard envelope glyph — email has no single "brand" mark the way a
+// platform logo does.
+CHANNEL_MARKS.email = 'M2 5.5C2 4.67 2.67 4 3.5 4h17c.83 0 1.5.67 1.5 1.5v13c0 .83-.67 1.5-1.5 1.5h-17A1.5 1.5 0 0 1 2 18.5v-13zm2.2.5 7.8 6.1L19.8 6H4.2zM20 7.9l-7.4 5.8a1 1 0 0 1-1.2 0L4 7.9V18h16V7.9z';
+// Chat-bubble glyph for the site's own webchat widget — no platform to brand
+// this one against, so a plain speech bubble stands in.
+CHANNEL_MARKS.web = 'M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z';
 
 const CHANNEL_LABELS = {
     whatsapp: 'WhatsApp', instagram: 'Instagram',
     facebook: 'Facebook', facebook_page: 'Facebook', messenger: 'Messenger',
+    email: 'Email',
     web: 'Web chat', voice: 'Voice', phone: 'Phone', sms: 'SMS',
     twilio: 'Phone', plivo: 'Phone', api: 'API', internal: 'Internal',
 };
 
 function channelLabel(ch){ return CHANNEL_LABELS[ch] || (ch||'').replace(/_/g,' '); }
 
+// Real brand colour baked straight into the fill — whatsapp/facebook_page
+// are single-path logos that already draw their own circular frame, so the
+// colour IS the icon. No wrapping disc needed (or wanted).
+const CHANNEL_FILLS = {
+    whatsapp: '#25d366',
+    facebook: '#1877f2', facebook_page: '#1877f2', messenger: '#1877f2',
+    email: '#f59e0b',
+    web: '#6366f1',
+};
+let _igGradSeq = 0;
+
 function channelIcon(ch){
     const d = CHANNEL_MARKS[ch];
     if(!d) return '<span class="tva-badge__txt">' + h(channelLabel(ch)) + '</span>';
-    return '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="' + d + '"/></svg>';
+
+    // Instagram's mark is only recognisable in its real gradient — a flat
+    // fill just reads as "some app icon". A unique gradient id per call
+    // avoids duplicate-id collisions where several marks render on one page.
+    if (ch === 'instagram') {
+        const gid = 'igGrad' + (_igGradSeq++);
+        return '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true">'
+            + '<defs><radialGradient id="' + gid + '" cx="30%" cy="107%" r="150%">'
+            + '<stop offset="0%" stop-color="#fdf497"/><stop offset="45%" stop-color="#fd5949"/>'
+            + '<stop offset="60%" stop-color="#d6249f"/><stop offset="90%" stop-color="#285AEB"/>'
+            + '</radialGradient></defs>'
+            + '<path fill="url(#' + gid + ')" d="' + d + '"/></svg>';
+    }
+
+    const fill = CHANNEL_FILLS[ch] || 'currentColor';
+    return '<svg viewBox="0 0 24 24" width="20" height="20" fill="' + fill + '" aria-hidden="true"><path d="' + d + '"/></svg>';
 }
+
+// One mark per channel this inbox shows, built once from the same
+// CHANNEL_MARKS/CHANNEL_LABELS the conversation list badges use — so the top
+// bar can never drift out of sync with what a row actually renders.
+const CHANNEL_BAR_ORDER = ['whatsapp', 'instagram', 'facebook', 'email', 'web'];
+document.getElementById('chanBar').insertAdjacentHTML('beforeend', CHANNEL_BAR_ORDER.map(ch =>
+    '<button type="button" class="tva-badge tva-badge--' + ch + ' tva-badge--icon" data-v="' + ch + '" '
+    + 'title="' + h(channelLabel(ch)) + '">' + channelIcon(ch)
+    // tva-qf__n: same "hide a zero" rule the quick-filter chips use — an
+    // icon-only row has no room for a badge that only ever says "nothing".
+    + '<span class="tva-chanbar__n tva-qf__n" data-n="channels.' + ch + '"></span></button>'
+).join(''));
 async function api(url,opts={}){ opts.headers=Object.assign({'X-CSRF-TOKEN':CHAT.csrf,'X-Requested-With':'XMLHttpRequest','Accept':'application/json'},opts.headers||{}); return fetch(url,opts); }
 function msgUrl(p){ return `${CHAT.base}/${activeSid}/${p}`; }
 
@@ -1341,6 +1461,8 @@ function tvaPrompt({title, text, fields, confirmText='Send'}){
         dlg.innerHTML = `<div class="tva-dlg__title">${h(title||'')}</div>`+(text?`<div class="tva-dlg__text">${h(text)}</div>`:'')+
             (fields||[]).map(f=>`<label>${h(f.label)}</label>`+(f.type==='textarea'
                 ? `<textarea data-f="${f.name}" rows="3" placeholder="${h(f.placeholder||'')}">${h(f.value||'')}</textarea>`
+                : f.type==='select'
+                ? `<select data-f="${f.name}">`+(f.options||[]).map(o=>`<option value="${h(o.value)}" ${o.value===f.value?'selected':''}>${h(o.label)}</option>`).join('')+`</select>`
                 : `<input data-f="${f.name}" placeholder="${h(f.placeholder||'')}" value="${h(f.value||'')}">`)).join('')+
             `<div class="tva-dlg__foot"><button class="btn btn-secondary btn-sm" data-act="cancel">Cancel</button><button class="btn btn-primary btn-sm" data-act="ok">${h(confirmText)}</button></div>`;
         ov.classList.add('open');
@@ -1382,7 +1504,7 @@ const FILTERS = {
 };
 const FILTER_LABELS = {
     states:   {active:'Active', expiring:'Expiring soon', expired:'Expired', closed:'Closed'},
-    channels: {whatsapp:'WhatsApp', instagram:'Instagram', facebook:'Facebook'},
+    channels: {whatsapp:'WhatsApp', instagram:'Instagram', facebook:'Facebook', email:'Email', web:'Web chat'},
     kinds:    {dm:'Direct messages', comment:'Post comments'},
     handlers: {bot:'AI agent', agent:'A person', queued:'Queued'},
     read:     {unread:'Unread', read:'Read'},
@@ -1491,6 +1613,13 @@ function syncFilterUI(){
     document.querySelector('[data-quick="unread"]').classList.toggle('is-on', FILTERS.read === 'unread');
     document.querySelector('[data-quick="needs_reply"]').classList.toggle('is-on', isNeedsReply());
     document.querySelector('[data-quick="needs_human"]').classList.toggle('is-on', FILTERS.needs_human);
+
+    // The always-visible channel bar mirrors the same FILTERS.channels Set
+    // the Filters popover uses, so picking a channel from either place keeps
+    // both in sync — there is only ever one selection to reason about.
+    document.querySelectorAll('#chanBar [data-v]').forEach(b =>
+        b.classList.toggle('is-on', FILTERS.channels.has(b.dataset.v)));
+    document.getElementById('chanAll').classList.toggle('is-active', FILTERS.channels.size === 0);
 
     const n = activeFilterCount(), badge = document.getElementById('filterCount');
     badge.textContent = n; badge.hidden = n === 0;
@@ -1711,6 +1840,8 @@ function applyHeader(d){
     document.getElementById('hdrAvatar').innerHTML=avatarHtml(c.avatar, activeSid, c.name);
     setBot(d.bot_paused);
     document.querySelectorAll('.wa-only').forEach(b=> b.style.display=(c.channel==='whatsapp')?'flex':'none');
+    currentChannel = c.channel;
+    document.getElementById('emailFields').style.display = (c.channel==='email') ? 'flex' : 'none';
 }
 function applyWindow(d){
     // The countdown itself now lives in the metric strip, which ticks every
@@ -2417,6 +2548,7 @@ function appendMessages(msgs){
             m.author==='owner' ? '<div class="tva-msg__author"><span class="tva-msg__admin">Admin</span>'
                                  + h(m.author_name||'')+'</div>'
                                : '<div class="tva-msg__author">🙋 '+h(m.author_name||'Agent')+'</div>');
+        const subj=(currentChannel==='email' && m.subject)?`<div class="tva-msg__author" style="opacity:.75;">✉ ${h(m.subject)}</div>`:'';
         const txt=m.content?`<div class="tva-msg__txt">${h(m.content)}</div>`:'';
         const atts=renderAtts(m.attachments||[]);
         const who=r=>r==='customer'?'Customer':(r==='bot'?'AI':'Agent');
@@ -2425,7 +2557,7 @@ function appendMessages(msgs){
         const canEdit=(m.author==='agent' && (Date.now()/1000 - m.created_at) < 900) ? 1 : 0;
         box.insertAdjacentHTML('beforeend',`<div class="tva-row tva-row--${m.direction==='in'?'in':'out'}">
             <button class="tva-row__more" onclick="openMsgMenu(event,${m.id},${canEdit})">⋮</button>
-            <div class="tva-msg ${cls}" data-id="${m.id}">${quote}${author}${txt}${atts}<div class="tva-msg__time">${fmtTime(m.created_at)}${edited}${ticks(m)}</div></div>
+            <div class="tva-msg ${cls}" data-id="${m.id}">${quote}${author}${subj}${txt}${atts}<div class="tva-msg__time">${fmtTime(m.created_at)}${edited}${ticks(m)}</div></div>
         </div>`);
     });
     if(nearBottom) box.scrollTop=box.scrollHeight;
@@ -2538,10 +2670,69 @@ function openGallery(){
 // ── Sending ──
 async function sendText(){
     const ta=document.getElementById('chatInput'); const text=ta.value.trim(); if(!text||!activeSid) return;
+    if(currentChannel==='email') return sendEmailReply(text);
     ta.value=''; ta.style.height='auto';
     const r=await api(msgUrl('reply'),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({project_id:CHAT.projectId,text,reply_to:replyTarget})});
     if(r.status===409){ tvaToast('The 24-hour window has closed — send a template to re-open.','error'); return; }
     if(!r.ok){ tvaToast('Could not send.','error'); return; }
+    appendMessages([(await r.json()).message]); clearReply();
+}
+function splitAddrs(v){ return String(v||'').split(',').map(s=>s.trim()).filter(Boolean); }
+
+// ── Compose a brand-new outbound email (not a reply to anything inbound) ──
+async function openComposeEmail(){
+    const accounts = CHAT.emailAccounts||[];
+    if(!accounts.length) return;
+
+    const fields = [];
+    if(accounts.length > 1){
+        fields.push({name:'account_id', label:'From', type:'select',
+            options: accounts.map(a=>({value:String(a.id), label:a.label}))});
+    }
+    fields.push(
+        {name:'to', label:'To', placeholder:'customer@example.com'},
+        {name:'cc', label:'Cc (comma-separated)'},
+        {name:'subject', label:'Subject'},
+        {name:'text', label:'Message', type:'textarea'},
+    );
+
+    const v = await tvaPrompt({title:'Compose email', fields, confirmText:'Send'});
+    if(!v || !v.to || !v.subject || !v.text) return;
+
+    const accountId = accounts.length > 1 ? v.account_id : String(accounts[0].id);
+    const fd = new FormData();
+    fd.append('project_id', CHAT.projectId);
+    fd.append('account_id', accountId);
+    fd.append('to', v.to.trim());
+    fd.append('subject', v.subject);
+    fd.append('text', v.text);
+    splitAddrs(v.cc).forEach(a=>fd.append('cc[]', a));
+
+    const r = await api(CHAT.composeUrl, {method:'POST', body:fd});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); tvaToast(d.message||'Could not send email.','error'); return; }
+    const d = await r.json();
+    tvaToast('Email sent','success');
+    loadConvos();
+    openThread(d.session_id);
+}
+async function sendEmailReply(text){
+    const ta=document.getElementById('chatInput');
+    const fd=new FormData();
+    fd.append('project_id', CHAT.projectId);
+    fd.append('text', text);
+    fd.append('subject', document.getElementById('emailSubject').value.trim());
+    splitAddrs(document.getElementById('emailCc').value).forEach(a=>fd.append('cc[]', a));
+    splitAddrs(document.getElementById('emailBcc').value).forEach(a=>fd.append('bcc[]', a));
+    const files = document.getElementById('fileInput').files;
+    for (const f of files) fd.append('attachments[]', f);
+
+    ta.value=''; ta.style.height='auto';
+    const r=await api(msgUrl('email/reply'),{method:'POST',body:fd});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); tvaToast(d.message||'Could not send email.','error'); return; }
+    document.getElementById('emailSubject').value='';
+    document.getElementById('emailCc').value='';
+    document.getElementById('emailBcc').value='';
+    document.getElementById('fileInput').value='';
     appendMessages([(await r.json()).message]); clearReply();
 }
 async function sendFile(file){
@@ -2734,13 +2925,38 @@ document.getElementById('galleryBtn').onclick=openGallery;
 document.getElementById('btnVoice').onclick=startRec;
 document.getElementById('recSend').onclick=()=>stopRec(false);
 document.getElementById('recCancel').onclick=()=>stopRec(true);
-document.getElementById('fileInput').onchange=e=>{ if(e.target.files[0]) sendFile(e.target.files[0]); e.target.value=''; };
+document.getElementById('fileInput').onchange=e=>{
+    if(!e.target.files[0]) return;
+    // Email attaches to the pending message instead of sending immediately —
+    // every other channel sends the file as its own message right away.
+    if(currentChannel==='email'){
+        tvaToast(e.target.files.length+' file(s) attached — attached to your next message', 'info');
+        return;
+    }
+    sendFile(e.target.files[0]); e.target.value='';
+};
 document.getElementById('lightbox').onclick=e=>{ if(e.target.id==='lightbox') closeLightbox(); };
 document.getElementById('btnMore').onclick=()=>{ const m=document.getElementById('composerMenu'); const show=m.style.display!=='block'; closePops(); m.style.display=show?'block':'none'; if(show && window.lucide) try{lucide.createIcons();}catch(_){} };
 document.querySelectorAll('#filterTabs button').forEach(b=>b.onclick=()=>{
     currentFilter=b.dataset.f;
     document.querySelectorAll('#filterTabs button').forEach(x=>x.classList.toggle('is-active', x===b));
     loadConvos();
+});
+
+// ── Channel bar ──
+// A single-pick affordance over the same multi-select Set the Filters panel
+// uses: choosing a channel here replaces whatever was selected there, and
+// "All" (or re-clicking the active mark) clears back to every channel.
+document.getElementById('chanAll').onclick=()=>{
+    FILTERS.channels.clear();
+    syncFilterUI(); loadConvos();
+};
+document.querySelectorAll('#chanBar [data-v]').forEach(b=>b.onclick=()=>{
+    const v = b.dataset.v;
+    const wasOnlyThis = FILTERS.channels.size === 1 && FILTERS.channels.has(v);
+    FILTERS.channels.clear();
+    if (!wasOnlyThis) FILTERS.channels.add(v);
+    syncFilterUI(); loadConvos();
 });
 
 // ── Filter interactions ──
@@ -2825,6 +3041,7 @@ document.getElementById('btnEmoji').onclick=()=>{ const show=ep.style.display!==
 // nav-collapse partial so it isn't overridden). The top-bar menu button
 // toggles full ↔ icon for the whole app.
 window.addEventListener('load',()=>document.body.classList.add('tva-nav-collapsed'));
+if(CHAT.emailAccounts && CHAT.emailAccounts.length) document.getElementById('btnNewEmail').style.display='flex';
 loadConvos(); setInterval(loadConvos,6000);
 if(window.lucide) try{ lucide.createIcons(); }catch(_){}
 </script>

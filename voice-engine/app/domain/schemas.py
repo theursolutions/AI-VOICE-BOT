@@ -95,6 +95,19 @@ class ExtractRequest(BaseModel):
     # mentioned earlier in the chat (e.g. "my email is x@y.com" 5 turns ago).
     history: List[ChatMessage] = Field(default_factory=list)
     existing_fields: Dict[str, Any] = Field(default_factory=dict)
+    # Per-request provider + credentials, exactly as LLMRequest carries them.
+    #
+    # Without these, extraction was the one call in a turn that could not be
+    # pointed at an admin-configured brain: it always used this service's own
+    # env. That was two problems, not one. A client who brought their own key had
+    # their conversation transcript sent to OUR provider account on every turn —
+    # the precise thing bring-your-own-key exists to prevent — and because the
+    # caller never learned which brain served the call, none of its tokens landed
+    # in the usage table the pricing is derived from.
+    provider: Optional[str] = None
+    model: Optional[str] = None
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 class LeadFields(BaseModel):
@@ -117,6 +130,14 @@ class LeadFields(BaseModel):
 class ExtractResult(BaseModel):
     fields: LeadFields
     confidence: float = 0.0
+    # What the call actually cost, so the caller can bill it to the brain that
+    # served it. Zero when the provider reported no usage — which the caller
+    # reads as a failed call, the same convention BrainResolver::record() uses.
+    tokens_in: int = 0
+    tokens_out: int = 0
+    # The model that answered. Lets the caller detect that its brain was NOT the
+    # one that served the request, i.e. the fallback chain stepped in.
+    model: str = ""
 
 
 # ---------------------------------------------------------------------------

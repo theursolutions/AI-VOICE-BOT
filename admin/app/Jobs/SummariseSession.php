@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Message;
 use App\Models\Session;
 use App\Models\SessionSummary;
+use App\Services\Conversation\BrainResolver;
 use App\Services\Conversation\PythonClient;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Bus\Queueable;
@@ -108,19 +109,40 @@ class SummariseSession implements ShouldQueue
         $prompt = $this->prompt($existing->summary ?? null, $transcript);
 
         try {
-            // Routed to the cheap model explicitly. Summarising is compression,
-            // not conversation — it never reaches a customer, so paying reply
-            // rates for it is waste.
-            $resp = $python->llm(
-                [['role' => 'system', 'content' => $prompt]],
-                [
-                    'project_id'   => $this->projectId,
-                    'respond_with' => 'text',
-                    'provider'     => config('services.llm.cheap_provider', 'gemini'),
-                    'model'        => config('services.llm.cheap_model'),
-                    'max_tokens'   => 500,
-                ],
-            );
+            // Routed through the brain that serves machinery. Summarising is
+            // compression, not conversation — it never reaches a customer, so
+            // paying reply rates for it is waste.
+            //
+            // Resolved rather than read from cheap_provider config, which is what
+            // this did before. Two things were wrong with that. It bypassed the
+            // brain entirely, so a client on their own key had their whole
+            // conversation summarised on OUR provider account — the same leak the
+            // capture call had. And because only PythonClient::llm() records
+            // against a brain_id, every token spent here was invisible in
+            // ai_brain_usage, which is the table the pricing is derived from.
+            //
+            // The cheap_* config stays as the floor for an install with no brains
+            // configured: optionsFor() returns [] there, and these keys survive.
+            // The brain's keys must WIN over the cheap_* defaults, so they go on
+            // the left: PHP's array + keeps the left operand for a duplicate key.
+            // Written the other way round, the config would override the brain
+            // and the whole resolution would be dead code that still logged a
+            // brain_id — usage attributed to a brain that never saw the call.
+            $options = app(BrainResolver::class)
+                ->optionsFor($this->projectId, BrainResolver::CALL_SUMMARY) + [
+                    'provider' => config('services.llm.cheap_provider', 'gemini'),
+                    'model'    => config('services.llm.cheap_model'),
+                ];
+
+            // Ours regardless of the brain's own ceiling: MAX_SUMMARY_CHARS
+            // truncates past this anyway, so a larger allowance only pays for
+            // tokens that are then thrown away.
+            $options['project_id']   = $this->projectId;
+            $options['respond_with'] = 'text';
+            $options['call_type']    = BrainResolver::CALL_SUMMARY;
+            $options['max_tokens']   = 500;
+
+            $resp = $python->llm([['role' => 'system', 'content' => $prompt]], $options);
         } catch (\Throwable $e) {
             Log::warning('SummariseSession: LLM call failed', [
                 'session' => $this->sessionId, 'error' => $e->getMessage(),

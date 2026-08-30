@@ -35,8 +35,26 @@ class BillingSeeder extends Seeder
             $this->seedAddonGrants($features);
         });
 
+        // Local selling prices, for the gateways that settle a currency the
+        // platform does not price in.
+        //
+        // HERE rather than only in a migration: migrations run against an empty
+        // plans table on a fresh install, so a mint that lives only there mints
+        // nothing and the first Pakistani customer meets "this plan has no
+        // price in PKR" at checkout. Idempotent, so an existing install and a
+        // re-seed are both no-ops.
+        $minted = app(\App\Services\Billing\LocalPriceService::class)->mirrorAll('PKR');
+
         $this->command?->info('Billing catalogue seeded.');
-        $this->command?->warn('Next: php artisan billing:sync-stripe  (creates the Stripe Products/Prices)');
+
+        if ($minted > 0) {
+            $this->command?->info("Minted {$minted} local (PKR) price(s).");
+        }
+
+        $this->command?->warn('Next, for whichever gateways you sell through:');
+        $this->command?->warn('  php artisan billing:sync-stripe   Stripe Products/Prices');
+        $this->command?->warn('  php artisan paddle:sync           Paddle Products/Prices');
+        $this->command?->warn('  php artisan billing:local-prices  re-mint local prices after a reprice');
     }
 
     // ── Features ─────────────────────────────────────────────────────
@@ -250,7 +268,7 @@ class BillingSeeder extends Seeder
                 'sort' => 1, 'cta' => 'Get started',
                 'free_window_days' => null, 'trial_days' => 0,
                 // monthly cents, annual cents ("2 months free")
-                'prices' => ['monthly' => 1900, 'annually' => 19000],
+                'prices' => ['monthly' => 2600, 'annually' => 26000],
                 'values' => [
                     'conversations' => '1000', 'telephony_minutes' => '60', 'voice_messages' => '500',
                     'projects' => '1', 'seats' => '3', 'agents' => '2',
@@ -272,7 +290,7 @@ class BillingSeeder extends Seeder
                 'sort' => 2, 'cta' => 'Get started',
                 'featured' => true, 'badge' => 'Most popular',
                 'free_window_days' => null, 'trial_days' => 0,
-                'prices' => ['monthly' => 5900, 'annually' => 59000],
+                'prices' => ['monthly' => 7500, 'annually' => 75000],
                 'values' => [
                     'conversations' => '5000', 'telephony_minutes' => '300', 'voice_messages' => '3000',
                     'projects' => '3', 'seats' => '10', 'agents' => '10',
@@ -293,7 +311,7 @@ class BillingSeeder extends Seeder
                 'tagline' => 'Multi-location, agencies, and teams with compliance requirements.',
                 'sort' => 3, 'cta' => 'Get started',
                 'free_window_days' => null, 'trial_days' => 0,
-                'prices' => ['monthly' => 14900, 'annually' => 149000],
+                'prices' => ['monthly' => 19900, 'annually' => 199000],
                 'values' => [
                     'conversations' => '20000', 'telephony_minutes' => '1200', 'voice_messages' => '-1',
                     'projects' => '10', 'seats' => '25', 'agents' => '-1',
@@ -358,10 +376,16 @@ class BillingSeeder extends Seeder
             // Prices: only ever ADDED when the interval has none. Never
             // overwritten — an existing price may already be live in Stripe
             // with subscribers attached to it.
+            //
+            // Scoped to the PLATFORM CURRENCY. A plan also carries a rupee row
+            // for the local gateway, and a check that ignored currency would
+            // see it, conclude the interval was covered, and leave a plan with
+            // no dollar price at all.
             foreach ($spec['prices'] as $interval => $cents) {
                 $exists = PlanPrice::query()
                     ->where('plan_id', $plan->id)
                     ->where('interval', $interval)
+                    ->where('currency', strtolower((string) config('billing.currency', 'usd')))
                     ->exists();
 
                 if ($exists) {

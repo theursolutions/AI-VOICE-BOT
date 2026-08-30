@@ -19,6 +19,7 @@ class ConversationManager
         private ToolPicker $toolPicker,
         private HumanRouter $humans,
         private BrainResolver $brains,
+        private ConversationBudget $budget,
     ) {}
 
     public function handle(Session $session, Message $userMessage, string $respondWith = 'text'): Message
@@ -34,6 +35,17 @@ class ConversationManager
                 'content'    => 'A member of our team is handling your request and will reply here shortly.',
                 'metadata'   => ['handoff' => true, 'transient' => true],
             ]);
+        }
+
+        // This conversation has used the replies its plan allows it.
+        //
+        // Checked BEFORE any LLM work, which is the whole point: the tool
+        // picker, the retrieval and the reply are what cost money, so a cap
+        // enforced after them would bound nothing. Handing off pauses the bot,
+        // so every message after this one takes the branch above and this is
+        // evaluated once per conversation, not once per message.
+        if ($this->budget->reached($session)) {
+            return $this->escalateForBudget($session);
         }
 
         $contextResults = [];
@@ -219,6 +231,77 @@ class ConversationManager
                 'error'      => $e->getMessage(),
             ]);
         }
+
+        return $assistant;
+    }
+
+    /**
+     * The conversation hit its per-conversation reply limit.
+     *
+     * Same handoff as any other escalation — assigns or queues, pauses the bot —
+     * but it writes TWO records, because two different people need to understand
+     * what happened and they need to be told different things:
+     *
+     *   the customer   an assistant message, in the ordinary voice of the
+     *                  conversation. They must never read "limit reached": that
+     *                  is our billing arrangement, not something they did, and
+     *                  telling them makes our plan the reason nobody is helping
+     *                  them.
+     *   the operator   a `system` row naming the real reason, so the inbox can
+     *                  say why this landed in the queue. Without it an agent sees
+     *                  a chat that stopped for no visible reason and reasonably
+     *                  assumes the bot broke.
+     *
+     * A system row rather than metadata on the assistant message because the
+     * transcript is what an agent actually reads, and MemoryBuilder filters
+     * history to user+assistant — so this note is visible to people and invisible
+     * to the model, which is exactly right. Were it an assistant message the AI
+     * would later read its own limit notice as part of the conversation.
+     */
+    private function escalateForBudget(Session $session): Message
+    {
+        $limit = $this->budget->limitFor((int) $session->project_id);
+        $human = $this->humans->handoff($session);
+        $now   = time();
+
+        Message::create([
+            'session_id' => $session->id,
+            'project_id' => $session->project_id,
+            'role'       => 'system',
+            'content'    => "Automatic handoff: this conversation reached its limit of {$limit} AI replies. "
+                          . 'The assistant has stopped replying — a team member needs to take it from here.',
+            // Same shape ChatController::systemNote() writes, so the inbox
+            // renders this through the path it already has for internal notes
+            // rather than needing a second one.
+            'metadata'   => [
+                'author'         => 'system',
+                'internal'       => true,
+                'handoff'        => true,
+                'handoff_reason' => 'per_conversation_limit',
+                'limit'          => $limit,
+            ],
+            'created_at' => $now,
+        ]);
+
+        $assistant = Message::create([
+            'session_id' => $session->id,
+            'project_id' => $session->project_id,
+            'role'       => 'assistant',
+            'content'    => $human
+                ? "Let me bring in {$human->name} from our team to help you properly from here."
+                : 'Let me bring a member of our team into this — they will reply here shortly.',
+            'metadata'   => array_filter([
+                'handoff'           => true,
+                'handoff_reason'    => 'per_conversation_limit',
+                'assigned_agent_id' => $human?->id,
+                'queued'            => $human ? null : true,
+            ]),
+            'created_at' => $now,
+        ]);
+
+        $session->last_activity_at = $now;
+        $session->update_at = $now;
+        $session->save();
 
         return $assistant;
     }

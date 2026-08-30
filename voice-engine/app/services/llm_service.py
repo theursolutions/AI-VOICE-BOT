@@ -112,6 +112,22 @@ class ChatResult:
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class ExtractResult:
+    """A parsed extraction plus what it cost.
+
+    Extraction used to return the bare parsed dict, so its usage was discarded at
+    the backend boundary and the caller had no way to bill the call to the brain
+    that served it. Every other path already reported tokens via ChatResult;
+    this is the same idea for the one that did not.
+    """
+
+    data: Dict[str, Any] = field(default_factory=dict)
+    tokens_in: int = 0
+    tokens_out: int = 0
+    model: str = ""
+
+
 # ---------------------------------------------------------------------------
 # Anthropic backend
 # ---------------------------------------------------------------------------
@@ -225,27 +241,35 @@ class _AnthropicBackend:
             "model": final.model,
         }
 
-    async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract(self, prompt: str, response_schema: Dict[str, Any],
+                      model: Optional[str] = None) -> ExtractResult:
         import anthropic
         try:
             response = await self._client.messages.create(
-                model=self.model,
+                model=model or self.model,
                 max_tokens=self.max_tokens,
                 messages=[{"role": "user", "content": prompt}],
                 output_config={"format": {"type": "json_schema", "schema": response_schema}},
             )
         except anthropic.BadRequestError as exc:
             logger.warning("extract: BadRequest from Anthropic: %s", exc)
-            return {}
+            return ExtractResult()
+
+        usage = response.usage
+        result = ExtractResult(
+            tokens_in=usage.input_tokens,
+            tokens_out=usage.output_tokens,
+            model=response.model,
+        )
 
         text = "".join(b.text for b in response.content if b.type == "text").strip()
         if not text:
-            return {}
+            return result
         try:
-            return json.loads(text)
+            result.data = json.loads(text)
         except json.JSONDecodeError:
             logger.warning("extract: model returned non-JSON output: %r", text[:200])
-            return {}
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +397,8 @@ class _GroqBackend:
             "model": final_model,
         }
 
-    async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
+    async def extract(self, prompt: str, response_schema: Dict[str, Any],
+                      model: Optional[str] = None) -> ExtractResult:
         # Groq supports JSON mode. Schema isn't enforced server-side the way
         # Anthropic's output_config.format is, so we attach the schema to the
         # user message and let the model emit a JSON object that conforms.
@@ -383,19 +408,26 @@ class _GroqBackend:
             f"Input:\n{prompt}"
         )
         resp = await self._client.chat.completions.create(
-            model=self.model,
+            model=model or self.model,
             messages=[{"role": "user", "content": schema_hint}],
             max_tokens=self.max_tokens,
             response_format={"type": "json_object"},
         )
+        usage = resp.usage
+        result = ExtractResult(
+            tokens_in=usage.prompt_tokens if usage else 0,
+            tokens_out=usage.completion_tokens if usage else 0,
+            model=getattr(resp, "model", "") or (model or self.model),
+        )
+
         text = (resp.choices[0].message.content or "").strip()
         if not text:
-            return {}
+            return result
         try:
-            return json.loads(text)
+            result.data = json.loads(text)
         except json.JSONDecodeError:
             logger.warning("extract: groq returned non-JSON output: %r", text[:200])
-            return {}
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -756,8 +788,25 @@ class LLMService:
             primary=primary,
         )
 
-    async def extract(self, prompt: str, response_schema: Dict[str, Any]) -> Dict[str, Any]:
-        return await self._resilient(lambda b: b.extract(prompt, response_schema), "extract")
+    async def extract(self, prompt: str, response_schema: Dict[str, Any],
+                      provider: Optional[str] = None, model: Optional[str] = None,
+                      api_key: Optional[str] = None,
+                      base_url: Optional[str] = None) -> ExtractResult:
+        primary = self._backend_for(provider, api_key=api_key, base_url=base_url, model=model)
+
+        # Per-request model on the PRIMARY only, for the reason spelled out in
+        # chat(): a model name belongs to one provider, so carrying it into a
+        # failover guarantees a request no fallback can serve and replaces the
+        # real error with a meaningless one from the wrong vendor.
+        return await self._resilient(
+            lambda b: b.extract(
+                prompt,
+                response_schema,
+                model=model if b is primary else None,
+            ),
+            "extract",
+            primary=primary,
+        )
 
     async def stream_chat(
         self,

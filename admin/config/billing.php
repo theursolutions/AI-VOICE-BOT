@@ -38,6 +38,246 @@ return [
     | and it keeps Stripe behind BillingService so the provider stays swappable.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Safepay (Pakistan)
+    |--------------------------------------------------------------------------
+    |
+    | Regulated by the State Bank of Pakistan. Hosted checkout: the customer is
+    | handed to Safepay's page and pays by card, bank account, JazzCash or
+    | Easypaisa there, so every method they support works without a form per
+    | method and no card number reaches this server.
+    |
+    | THREE SECRETS, three jobs, and mixing them up fails in ways that look like
+    | something else:
+    |
+    |   api_key         public, `sec_…`. Identifies the merchant on a session.
+    |   v1_secret       server-side. Signs the redirect back from checkout.
+    |   webhook_secret  server-side. Signs the X-SFPY-SIGNATURE webhook header.
+    |
+    | AMOUNTS ARE SENT IN RUPEES, not paisa. Confirmed empirically: a session
+    | created with amount = 7500 renders as "Rs 7,500" on Safepay's own checkout
+    | page, so the field is whole rupees. Our prices are stored in minor units,
+    | so a Rs 75 plan is 7500 and must be divided by 100 on the way out.
+    |
+    | This was the single most dangerous line in the file, and it was wrong until
+    | a sandbox page was actually read. Sending minor units would have charged
+    | every Pakistani customer a hundred times the price — Rs 7,500 for a Rs 75
+    | plan — and nothing in the code, the tests or the API response would have
+    | said so: Safepay echoes back whatever number it is given.
+    |
+    | Safepay's docs describe amounts as "in the lowest denomination", which is
+    | what made paisa look right. It is not true of this endpoint. Re-check with
+    | safepay:doctor after any API change rather than trusting the prose.
+    */
+    /*
+    |--------------------------------------------------------------------------
+    | Paddle — international
+    |--------------------------------------------------------------------------
+    |
+    | Paddle is a MERCHANT OF RECORD, not a payment processor. It sells to the
+    | customer in its own name, then pays us — which means Paddle owns the sales
+    | tax, VAT and GST obligation in every country it sells into, and owns the
+    | invoice the customer receives. That is the whole reason to choose it over
+    | a processor: a business with no foreign entity cannot register for VAT in
+    | forty jurisdictions, and Paddle removes the need to.
+    |
+    | Two credentials, and they are NOT interchangeable:
+    |
+    |   api_key       server-side, secret. Creates transactions. Never rendered.
+    |   client_token  public, safe in HTML. Opens the checkout overlay.
+    |
+    | Sending the API key to the browser would let anyone create transactions,
+    | issue refunds and read every customer, so the two live in separate keys
+    | rather than one "paddle key" that could be printed in the wrong place.
+    |
+    */
+    'paddle' => [
+        'api_key'        => env('PADDLE_API_KEY'),
+        'client_token'   => env('PADDLE_CLIENT_TOKEN'),
+        'webhook_secret' => env('PADDLE_WEBHOOK_SECRET'),
+
+        // Sandbox unless explicitly told otherwise — the opposite default would
+        // let a missing env var take real money.
+        'sandbox' => (bool) env('PADDLE_SANDBOX', true),
+
+        'base_url' => [
+            'sandbox'    => env('PADDLE_SANDBOX_URL', 'https://sandbox-api.paddle.com'),
+            'production' => env('PADDLE_PRODUCTION_URL', 'https://api.paddle.com'),
+        ],
+
+        // Paddle.js, which draws the overlay. Version-pinned in the path by
+        // Paddle themselves; there is no other build.
+        'js_url' => env('PADDLE_JS_URL', 'https://cdn.paddle.com/paddle/v2/paddle.js'),
+
+        'timeout' => (int) env('PADDLE_TIMEOUT', 20),
+
+        // Which tax rules Paddle applies as Merchant of Record.
+        //
+        // `saas` — hyphenated-style, NOT `software_as_a_service`, which is what
+        // the API reference page implies and what Paddle rejects. The full set
+        // Paddle accepts is: digital-goods, ebooks, implementation-services,
+        // professional-services, saas, software-programming-services, standard,
+        // software-programming-services, training-services, website-hosting.
+        //
+        // Configurable because this is the value most likely to be revised, and
+        // a rejected category should be an env change rather than a deploy.
+        'tax_category' => env('PADDLE_TAX_CATEGORY', 'saas'),
+
+        /*
+         | How long after Paddle signed a webhook we still accept it.
+         |
+         | Paddle's own documentation suggests five SECONDS. Do not copy that
+         | number: a retry is re-sent with the ORIGINAL timestamp and signature,
+         | so a five-second window rejects every retry Paddle makes — which is
+         | precisely the delivery you most need to accept, because it only
+         | happens when the first one failed. Wide enough to survive retries and
+         | a clock a little out of step, narrow enough that a captured request
+         | is not replayable tomorrow.
+         */
+        'signature_tolerance' => (int) env('PADDLE_SIGNATURE_TOLERANCE', 86400),
+    ],
+
+    'safepay' => [
+        'api_key'        => env('SAFEPAY_API_KEY'),
+        'v1_secret'      => env('SAFEPAY_V1_SECRET'),
+        'webhook_secret' => env('SAFEPAY_WEBHOOK_SECRET'),
+
+        // Sandbox unless explicitly told otherwise — the opposite default would
+        // let a missing env var take real money.
+        'sandbox' => (bool) env('SAFEPAY_SANDBOX', true),
+
+        // The API and the CHECKOUT PAGE are on different hosts, which cost an
+        // hour to discover: api.getsafepay.com serves the session endpoint but
+        // 404s the checkout page, and the sandbox serves both. Deriving one from
+        // the other produces a URL that 301s to the marketing site, which looks
+        // like a bad tracker rather than a wrong host.
+        'base_url' => [
+            'sandbox'    => env('SAFEPAY_SANDBOX_URL', 'https://sandbox.api.getsafepay.com'),
+            'production' => env('SAFEPAY_PRODUCTION_URL', 'https://api.getsafepay.com'),
+        ],
+
+        // Where the customer is sent. Taken from Safepay's own PHP SDK
+        // (Base::CHECKOUT_ROUTE with SANDBOX_BASE_URL / PRODUCTION_BASE_URL)
+        // rather than from a blog post — the hosts genuinely differ per
+        // environment, and /embedded/ serves a page that looks right and cannot
+        // complete a payment.
+        'checkout_url' => [
+            'sandbox'    => env('SAFEPAY_SANDBOX_CHECKOUT_URL', 'https://sandbox.api.getsafepay.com/checkout/pay'),
+            'production' => env('SAFEPAY_CHECKOUT_URL', 'https://getsafepay.com/checkout/pay'),
+        ],
+
+        // /order/v1/init is what the hosted flow uses — confirmed against
+        // Safepay's own SDK (Base::TRANSACTION_ENDPOINT), which sends exactly
+        // client, amount, currency and environment.
+        //
+        // /order/payments/v3/ also works and returns a richer tracker carrying
+        // intent, mode and a capabilities list, but it belongs to the ADVANCED
+        // (embedded) integration where the merchant drives each next_action.
+        // A tracker from it is not what the hosted checkout page expects.
+        'paths' => [
+            'session' => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
+        ],
+
+        // rupees | paisa — see the warning above.
+        'amount_unit' => env('SAFEPAY_AMOUNT_UNIT', 'rupees'),
+
+        'timeout' => (int) env('SAFEPAY_TIMEOUT', 20),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PayFast (Pakistan)
+    |--------------------------------------------------------------------------
+    |
+    | Avanza Premier Payment Services, State Bank of Pakistan commercially
+    | licensed since 2021. Used for customers paying in Pakistan; Stripe stays
+    | for everyone else, and the two coexist rather than one replacing the other.
+    |
+    | HOSTED CHECKOUT, not the direct API. The customer is handed to PayFast's
+    | own page and picks their method there — Visa, Mastercard, bank account,
+    | JazzCash, Easypaisa — so every method they support is available without us
+    | building a form per method, and no card ever touches this server. The
+    | direct API would mean handling PAN entry and OTP ourselves for a narrower
+    | set of methods.
+    |
+    | WHAT PAYFAST DOES NOT DO, which shapes everything downstream: there is no
+    | saved-card token, no subscription object, no invoice API and no proration.
+    | It authorises one payment at a time. A recurring plan on PayFast is
+    | therefore OUR periodic charge against a fresh checkout, not a mandate the
+    | gateway honours — see PayFastGateway.
+    */
+    /*
+    |--------------------------------------------------------------------------
+    | Renewal notices
+    |--------------------------------------------------------------------------
+    |
+    | Only for customers on a gateway that CANNOT bill them itself. On Stripe a
+    | renewal simply happens and reminding someone about it is noise; on a
+    | Pakistani gateway with no reusable card token the customer has to act, so
+    | silence means the subscription lapses.
+    |
+    | Three notices at widening gaps, on both email and WhatsApp. The first is
+    | information, the second is a nudge, the third is the last chance — sending
+    | all three the day before would be three copies of one message rather than
+    | an escalation.
+    |
+    | WHATSAPP NEEDS AN APPROVED TEMPLATE. A renewal notice is always outside
+    | Meta's 24-hour service window — the customer has not messaged us — so it
+    | can only be sent as a template Meta has approved. With no template name
+    | configured the WhatsApp leg is skipped and email still goes, which is the
+    | right failure: a missing template must not silence the reminder entirely.
+    */
+    'renewals' => [
+        'days_before' => [7, 3, 1],
+
+        'whatsapp' => [
+            'enabled'  => (bool) env('BILLING_RENEWAL_WHATSAPP', true),
+            // Approved template name and locale, from WhatsApp Manager.
+            'template' => env('BILLING_RENEWAL_TEMPLATE'),
+            'language' => env('BILLING_RENEWAL_TEMPLATE_LANG', 'en'),
+        ],
+
+        'email' => [
+            'enabled' => (bool) env('BILLING_RENEWAL_EMAIL', true),
+        ],
+
+        // How long a renewal payment link stays valid. Longer than the last
+        // notice, so a customer who acts on the final reminder still has a
+        // working link.
+        'link_ttl_days' => (int) env('BILLING_RENEWAL_LINK_DAYS', 10),
+    ],
+
+    'payfast' => [
+        'merchant_id'   => env('PAYFAST_MERCHANT_ID'),
+        'merchant_name' => env('PAYFAST_MERCHANT_NAME', env('APP_NAME')),
+        'secured_key'   => env('PAYFAST_SECURED_KEY'),
+
+        // Live unless explicitly told otherwise. The opposite default would let
+        // a missing env var take real money through a sandbox that silently
+        // approves everything.
+        'sandbox'       => (bool) env('PAYFAST_SANDBOX', false),
+
+        'endpoints' => [
+            'live' => [
+                'token'    => env('PAYFAST_TOKEN_URL', 'https://ipg1.apps.net.pk/Ecommerce/api/Transaction/GetAccessToken'),
+                'checkout' => env('PAYFAST_CHECKOUT_URL', 'https://ipg1.apps.net.pk/Ecommerce/api/Transaction/PostTransaction'),
+            ],
+            'sandbox' => [
+                'token'    => env('PAYFAST_SANDBOX_TOKEN_URL', 'https://ipguat.apps.net.pk/Ecommerce/api/Transaction/GetAccessToken'),
+                'checkout' => env('PAYFAST_SANDBOX_CHECKOUT_URL', 'https://ipguat.apps.net.pk/Ecommerce/api/Transaction/PostTransaction'),
+            ],
+        ],
+
+        // Their access token is short-lived and fetched per checkout. Cached
+        // only long enough to serve one request rather than kept, because a
+        // token reused past its life fails the checkout with an error the
+        // customer cannot act on.
+        'token_ttl' => (int) env('PAYFAST_TOKEN_TTL', 60),
+
+        'timeout' => (int) env('PAYFAST_TIMEOUT', 20),
+    ],
+
     'stripe' => [
         'key'            => env('STRIPE_KEY'),
         'secret'         => env('STRIPE_SECRET'),
@@ -226,6 +466,14 @@ return [
     |
     */
     'metrics' => [
+        // The metered unit. One AI reply = one message, which is the unit our
+        // cost is actually incurred in: a reply costs four LLM calls whether it
+        // is the first of a session or the two hundredth.
+        'messages'          => ['label' => 'AI messages', 'unit' => 'message'],
+        // Recorded alongside, as a statistic. Plans are still SOLD in
+        // conversations because that is the unit a customer can picture; whether
+        // it also CAPS anything depends on a feature row claiming
+        // metric_key = conversations, which is data, not code.
         'conversations'     => ['label' => 'AI conversations', 'unit' => 'conversation'],
         'telephony_minutes' => ['label' => 'Phone call minutes', 'unit' => 'minute'],
         'voice_messages'    => ['label' => 'Widget voice messages', 'unit' => 'message'],
@@ -399,6 +647,61 @@ return [
     | Currency presentation
     |--------------------------------------------------------------------------
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Smallest amount worth charging
+    |--------------------------------------------------------------------------
+    |
+    | Per currency, in MINOR UNITS, because a single number cannot serve both:
+    | 5000 is fifty dollars and fifty rupees, which are not remotely the same
+    | decision. Getting that wrong once already refused two $5 seats as "too
+    | little to charge for".
+    |
+    | Below this a top-up is not billed at all — the customer is told to buy it
+    | next period instead. The floor exists because gateways reject trivial
+    | amounts and because a fee on a twenty-cent charge costs more than the
+    | charge collects.
+    |
+    */
+    'minimum_charge' => [
+        'USD' => (int) env('BILLING_MIN_CHARGE_USD', 50),      // $0.50
+        'PKR' => (int) env('BILLING_MIN_CHARGE_PKR', 10000),   // Rs 100
+        '*'   => (int) env('BILLING_MIN_CHARGE', 50),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local selling prices
+    |--------------------------------------------------------------------------
+    |
+    | A price a customer is actually CHARGED in their own currency — which is a
+    | different thing from the approximate figure `fx` renders beside a dollar
+    | amount, and must never be confused with it. An FX rate moves daily; a
+    | selling price does not, and a customer quoted Rs 21,500 must be charged
+    | Rs 21,500 whether or not a rate provider answered this morning.
+    |
+    | So these rates are used ONCE, by `billing:local-prices`, to MINT rows in
+    | `plan_prices` — after which the row is the price and this config is only
+    | the recipe that produced it. Changing the rate here does not reprice
+    | anything until the command is run again, and existing subscribers are
+    | grandfathered by `changePrice()` as always.
+    |
+    | `step` keeps the result a number a human would quote: Rs 21,500, never
+    | Rs 21,372. Rounded UP, because rounding a selling price down is a discount
+    | nobody decided to give.
+    |
+    */
+    'local_pricing' => [
+        // Only currencies a gateway actually settles in belong here.
+        'PKR' => [
+            // Deliberately above the interbank rate: the gateway's fee, the
+            // spread and a month of drift all come out of this number, and a
+            // rate set exactly at spot means every sale is slightly short.
+            'rate' => (float) env('BILLING_PKR_RATE', 300),
+            'step' => (int) env('BILLING_PKR_STEP', 500),
+        ],
+    ],
+
     'currencies' => [
         'USD' => ['symbol' => '$',    'decimals' => 2, 'position' => 'before'],
         'PKR' => ['symbol' => 'Rs',   'decimals' => 0, 'position' => 'before'],
@@ -530,6 +833,30 @@ return [
         'success_route' => 'billing.checkout.success',
         'cancel_route'  => 'billing.checkout.cancel',
 
+        /*
+         * KEEP THE WHOLE PURCHASE INSIDE THE PRODUCT.
+         *
+         * true  — every purchase runs through our own Stripe Elements form
+         *         (BillingService::subscribeWithElements), and the hosted
+         *         Checkout redirect plus the hosted Billing Portal are refused.
+         *         The customer never leaves the app, so they never see a second
+         *         brand mid-payment and never land somewhere our own session
+         *         does not follow them.
+         * false — the hosted paths are available again.
+         *
+         * The Elements path is not a reimplementation: it already existed
+         * alongside the redirect and handles 3DS. This switch decides which of
+         * the two the product actually uses, and it refuses at the ENDPOINT
+         * rather than only hiding the buttons, because a hidden button in front
+         * of a live POST route is not disabled.
+         *
+         * Retiring the portal costs the customer nothing they cannot do here:
+         * cards are managed in-app, invoices are rendered by us, and billing
+         * details have their own form. Anything genuinely Stripe-only — a
+         * disputed charge, say — is an operator task, not a self-serve one.
+         */
+        'in_app_only' => (bool) env('BILLING_IN_APP_ONLY', true),
+
         'allow_promotion_codes' => true,
         'collect_billing_address' => 'auto',      // 'auto' | 'required'
         'automatic_tax'         => (bool) env('STRIPE_AUTOMATIC_TAX', false),
@@ -553,13 +880,15 @@ return [
         'show_local_currency' => true,
         'pricing_page_enabled' => true,
 
-        // true  — sections the plan doesn't include vanish from the sidebar, so
-        //         the menu matches what the customer bought (no dead ends).
-        // false — they stay visible and clicking lands on the 402 upsell page,
-        //         which advertises the feature instead of hiding it.
+        // false — sections the plan doesn't include stay in the sidebar under a
+        //         padlock, and clicking one raises the upgrade dialog. Nobody
+        //         upgrades to reach a feature they have never seen, so this is
+        //         the default: the same menu becomes the shortest sales pitch
+        //         available, at no cost to a paying customer who sees no locks.
+        // true  — they vanish, so the menu matches exactly what was bought.
         // Either way the route gate (EnsurePlanFeature) is unchanged; this only
         // controls visibility.
-        'hide_locked_modules' => (bool) env('BILLING_HIDE_LOCKED_MODULES', true),
+        'hide_locked_modules' => (bool) env('BILLING_HIDE_LOCKED_MODULES', false),
         'enterprise_cta_url'  => '/contact',
         'enterprise_from'     => 499,     // USD/mo "from" anchor on the page
     ],

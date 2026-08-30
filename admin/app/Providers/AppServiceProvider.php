@@ -79,6 +79,13 @@ class AppServiceProvider extends ServiceProvider
             \App\Meta\CrmMessageStatusHandler::class,
         );
 
+        // mail-channel package → CRM brain bridge, same seam as the Meta
+        // bindings above.
+        $this->app->bind(
+            \Msd\MailChannel\Contracts\HandlesInboundEmail::class,
+            \App\EmailChannel\CrmInboundEmailHandler::class,
+        );
+
         $this->app->singleton(DataSourceRouter::class, function ($app) {
             $router = new DataSourceRouter();
             $router->register($app->make(WebsiteResolver::class));
@@ -197,16 +204,40 @@ class AppServiceProvider extends ServiceProvider
             // direction the middleware fails, so nothing an existing customer
             // could see yesterday disappears today.
             //
-            // Set billing.settings.hide_locked_modules = false to keep locked
-            // sections visible instead and let the upsell page do the selling.
-            if ($client && config('billing.settings.hide_locked_modules', true)) {
+            // HIDING vs LOCKING. Hiding a module the plan excludes makes the
+            // menu match what was bought, but it also makes the product look
+            // smaller than it is — nobody upgrades to reach a feature they have
+            // never seen. Showing it under a padlock turns the same menu into
+            // the shortest sales pitch there is, and the route gate refuses it
+            // anyway, so nothing is actually reachable either way.
+            //
+            // So the default is now to LOCK rather than hide, and the locked
+            // keys are published separately for the sidebar to mark up. They
+            // stay in $tvaModules deliberately: every @if($can(...)) in the
+            // menu is a ROLE question, and a plan-locked item still has to
+            // render in order to be shown locked.
+            //
+            // Fails OPEN on a module no feature declares, and on a workspace
+            // with no plan resolved (pre-billing / grandfathered) — the same
+            // direction EnsurePlanFeature fails, so the sidebar and the route
+            // gate can never disagree about what is reachable.
+            $tvaLockedModules = [];
+
+            if ($client) {
                 try {
                     $planFeatures = app(\App\Services\Billing\PlanFeatureService::class);
 
-                    $tvaModules = array_values(array_filter(
+                    $tvaLockedModules = array_values(array_filter(
                         $tvaModules,
-                        fn (string $key) => $planFeatures->clientHasModule($client, $key),
+                        fn (string $key) => ! $planFeatures->clientHasModule($client, $key),
                     ));
+
+                    // Still supported, for an operator who would rather sell
+                    // from the pricing page than from the menu.
+                    if (config('billing.settings.hide_locked_modules', false)) {
+                        $tvaModules = array_values(array_diff($tvaModules, $tvaLockedModules));
+                        $tvaLockedModules = [];
+                    }
                 } catch (\Throwable $e) {
                     // Billing tables missing (fresh install) — leave the menu
                     // exactly as RBAC left it rather than hiding the product.
@@ -229,6 +260,7 @@ class AppServiceProvider extends ServiceProvider
             $view->with('tvaProject', $activeProject);
             $view->with('tvaProfile', $activeProfile);
             $view->with('tvaModules', $tvaModules);
+            $view->with('tvaLockedModules', $tvaLockedModules ?? []);
             $view->with('tvaWorkspaceReady', $tvaWorkspaceReady);
         });
     }

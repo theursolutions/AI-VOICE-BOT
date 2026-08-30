@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Billing\BillingController;
 use App\Http\Controllers\Billing\CheckoutController;
+use App\Http\Controllers\Billing\CountryController;
+use App\Http\Controllers\Billing\CustomPlanController;
 use App\Http\Controllers\Billing\AddonController;
 use App\Http\Controllers\Billing\PaymentMethodController;
 use App\Http\Controllers\PricingController;
@@ -35,6 +37,13 @@ Route::post('/pricing/checkout', [CheckoutController::class, 'start'])
     ->middleware('throttle:20,1')
     ->name('pricing.checkout');
 
+// The country picker on the public pricing page. No workspace exists yet, so
+// this only sets the cookie — but a visitor who has told us where they are
+// should not be re-guessed from their IP on every page after.
+Route::post('/pricing/country', [CountryController::class, 'update'])
+    ->middleware(['web', 'throttle:30,1'])
+    ->name('pricing.country');
+
 // ── Workspace billing area ──────────────────────────────────────────────
 // Scoped exactly like the rest of the admin (/c/{client:slug}/…), but WITHOUT
 // `workspace.provisioned` or the module gates: a workspace whose free window
@@ -49,6 +58,26 @@ Route::middleware(['auth', 'active.client'])
         // Upgrade / change plan → on-site checkout.
         Route::get('/billing/plans',    [BillingController::class, 'plans'])->name('billing.plans');
         Route::get('/billing/checkout', [CheckoutController::class, 'page'])->name('billing.checkout');
+
+        // Leaving for a gateway that hosts its own page (Safepay, PayFast).
+        // POST because it creates a charge record and opens a session at a
+        // third party — neither of which may happen on a prefetch or a refresh.
+        Route::post('/billing/checkout/pay', [CheckoutController::class, 'pay'])
+            ->middleware('throttle:12,1')->name('billing.checkout.pay');
+
+        // Coming back from the overlay. The browser says a transaction
+        // completed; this asks Paddle whether it did, and grants only on their
+        // answer. The webhook remains the source of truth — this stops a
+        // customer staring at an unchanged page while it is in flight, and is
+        // the only way a machine with no public address ever settles at all.
+        Route::get('/billing/paddle/confirm', [\App\Http\Controllers\Billing\PaddleWebhookController::class, 'confirm'])
+            ->middleware('throttle:20,1')->name('billing.paddle.confirm');
+
+        // "I'm buying from here." Decides the gateway, the currency and the
+        // price, so an owner's choice is stored on the workspace rather than
+        // left in a cookie a payment would hang from.
+        Route::post('/billing/country', [CountryController::class, 'update'])
+            ->middleware('throttle:30,1')->name('billing.country');
 
         // Elements flow (JSON). `subscribe` creates the subscription from a
         // tokenised card; `confirm` pulls state forward after a 3-D Secure
@@ -74,6 +103,12 @@ Route::middleware(['auth', 'active.client'])
             ->middleware('throttle:60,1')->name('billing.addons.preview');
         Route::post('/billing/addons',         [AddonController::class, 'update'])->name('billing.addons.update');
 
+        // A printable receipt for a gateway payment. Stripe invoices have
+        // their own route below; a Safepay or Paddle payment has no Stripe
+        // invoice and had nothing to download at all before this.
+        Route::get('/billing/receipt/{reference}', [BillingController::class, 'receipt'])
+            ->where('reference', '[A-Za-z0-9_-]+')->name('billing.receipt');
+
         // Branded invoice. `invoice` is deliberately not an *_id param name.
         Route::get('/billing/invoices/{invoice}', [BillingController::class, 'invoice'])
             ->where('invoice', '[A-Za-z0-9_]+')->name('billing.invoice');
@@ -84,8 +119,24 @@ Route::middleware(['auth', 'active.client'])
         Route::get ('/billing/checkout/success', [CheckoutController::class, 'success'])->name('billing.checkout.success');
         Route::get ('/billing/checkout/cancel',  [CheckoutController::class, 'cancel'])->name('billing.checkout.cancel');
 
-        Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
-        Route::post('/billing/change', [BillingController::class, 'change'])->name('billing.change');
+        // Billing details — what appears on an invoice. Replaces the hosted
+    // portal, which is refused while billing.checkout.in_app_only holds.
+    Route::patch('/billing/details', [BillingController::class, 'updateDetails'])->name('billing.details');
+    Route::post('/billing/portal', [BillingController::class, 'portal'])->name('billing.portal');
+        // ── Build your own plan ─────────────────────────────────────────
+    // For the workspace no published tier fits. Owner-only, and the price is
+    // always recomputed server-side from the posted CONFIGURATION — the browser
+    // sends what it wants, never what it should cost.
+    Route::get ('/billing/custom', [CustomPlanController::class, 'show'])->name('billing.custom');
+    Route::post('/billing/custom/quote', [CustomPlanController::class, 'quote'])->name('billing.custom.quote');
+    Route::post('/billing/custom', [CustomPlanController::class, 'store'])->name('billing.custom.store');
+
+    // How many AI replies each conversation gets before a human takes over.
+    // Lives here rather than in project settings because it decides how far the
+    // plan's message allowance stretches, which is a billing decision.
+    Route::post('/billing/conversation-budget', [BillingController::class, 'conversationBudget'])
+        ->name('billing.conversation-budget');
+    Route::post('/billing/change', [BillingController::class, 'change'])->name('billing.change');
         Route::post('/billing/cancel', [BillingController::class, 'cancel'])->name('billing.cancel');
         Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
     });
@@ -99,6 +150,7 @@ Route::middleware(['auth', 'super-admin'])
         $prices   = \App\Http\Controllers\SuperAdmin\Billing\PlanPricesController::class;
         $features = \App\Http\Controllers\SuperAdmin\Billing\FeaturesController::class;
         $subs     = \App\Http\Controllers\SuperAdmin\Billing\SubscriptionsController::class;
+        $spaces   = \App\Http\Controllers\SuperAdmin\Billing\WorkspacePlansController::class;
 
         // Plans
         Route::get ('/plans',              [$plans, 'index'])->name('plans.index');
@@ -129,10 +181,32 @@ Route::middleware(['auth', 'super-admin'])
         Route::patch ('/features/{id}',      [$features, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('features.update');
         Route::delete('/features/{id}',      [$features, 'destroy'])->where('id', Hashid::ROUTE_PATTERN)->name('features.destroy');
 
+        // Every payment taken through a gateway, and every one that stalled.
+        // The money view — subscriptions above show entitlement, these show
+        // what was actually collected. Reference is ours and opaque, so it is
+        // not an *_id and DecodeHashids leaves it alone.
+        Route::get('/charges', [\App\Http\Controllers\SuperAdmin\Billing\ChargesController::class, 'index'])
+            ->name('charges.index');
+        Route::get('/charges/{reference}', [\App\Http\Controllers\SuperAdmin\Billing\ChargesController::class, 'show'])
+            ->where('reference', '[A-Za-z0-9_-]+')->name('charges.show');
+
         // Subscriptions & Stripe events
         Route::get ('/subscriptions',                     [$subs, 'index'])->name('subscriptions.index');
         Route::get ('/events',                            [$subs, 'events'])->name('subscriptions.events');
         Route::post('/subscriptions/{id}/extend-free',     [$subs, 'extendFreeWindow'])->where('id', Hashid::ROUTE_PATTERN)->name('subscriptions.extend-free');
         Route::post('/subscriptions/{id}/reconcile',       [$subs, 'reconcile'])->where('id', Hashid::ROUTE_PATTERN)->name('subscriptions.reconcile');
         Route::post('/clients/{clientId}/waive-trial',     [$subs, 'waiveFingerprints'])->where('clientId', Hashid::ROUTE_PATTERN)->name('subscriptions.waive-trial');
+
+        // Workspace plans — assign any plan at no charge, and grant allowances
+        // beyond what a plan includes. The operator counterpart to the
+        // customer's own billing page.
+        Route::get ('/workspaces',                       [$spaces, 'index'])->name('workspaces.index');
+        Route::get ('/workspaces/{id}',                  [$spaces, 'show'])->where('id', Hashid::ROUTE_PATTERN)->name('workspaces.show');
+        Route::post('/workspaces/{id}/assign',           [$spaces, 'assign'])->where('id', Hashid::ROUTE_PATTERN)->name('workspaces.assign');
+        Route::post('/workspaces/{id}/grant',            [$spaces, 'grant'])->where('id', Hashid::ROUTE_PATTERN)->name('workspaces.grant');
+        // feature_key is a slug, not an id, so it is NOT run through the hashid
+        // pattern — doing so would reject every real key.
+        Route::delete('/workspaces/{id}/grant/{featureKey}', [$spaces, 'revoke'])
+            ->where(['id' => Hashid::ROUTE_PATTERN, 'featureKey' => '[a-z0-9_]+'])
+            ->name('workspaces.revoke');
     });

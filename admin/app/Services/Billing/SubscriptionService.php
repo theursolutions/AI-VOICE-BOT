@@ -326,6 +326,38 @@ class SubscriptionService
             'ends_at'                 => $this->resolveEndsAt($data),
         ]);
 
+        // A real Stripe subscription supersedes a complimentary assignment.
+        //
+        // syncFromStripe fills every column but metadata, so the
+        // `assigned_by_super_admin` flag a free assignment leaves behind would
+        // survive the customer actually paying — and that flag is what the
+        // add-ons page and the workspaces list read to say "on us" and "assigned
+        // free". A paying customer would be told their plan was complimentary,
+        // and shown a message explaining why they cannot buy add-ons they can in
+        // fact buy. Cleared here because this is the one place a Stripe
+        // subscription becomes the local truth.
+        if ($stripeId) {
+            $meta = (array) $subscription->metadata;
+
+            if (array_key_exists('assigned_by_super_admin', $meta)) {
+                // The history of the assignment is kept — who did it and why is
+                // still worth having — but it is no longer the current state.
+                $meta['superseded_assignment'] = array_intersect_key(
+                    $meta,
+                    array_flip(['assigned_by', 'assigned_at', 'note'])
+                );
+
+                unset(
+                    $meta['assigned_by_super_admin'],
+                    $meta['assigned_by'],
+                    $meta['assigned_at'],
+                    $meta['note'],
+                );
+
+                $subscription->metadata = $meta;
+            }
+        }
+
         // A successful payment clears the dunning clock and the degraded
         // access flags in one place, so recovery is never half-applied.
         if (in_array($stripeStatus, ['active', 'trialing'], true)) {
