@@ -46,7 +46,30 @@ abstract class BillingTestCase extends TestCase
             // false (information-only) while billing is being finished — the
             // off state has its own coverage in CheckoutDisabledTest.
             'billing.checkout.enabled'      => true,
+
+            // EVERY OTHER GATEWAY OFF, so this suite's baseline is Stripe and
+            // does not depend on which credentials happen to be in the
+            // developer's .env. Leaving these to the environment means a
+            // machine with Paddle keys routes a country-less workspace to
+            // Paddle and fails a dozen Stripe assertions — a test that passes
+            // or fails according to whose laptop it runs on is not a test.
+            //
+            // A suite that wants another gateway configures it itself; see
+            // PaymentRoutingTest and GatewayCheckoutTest.
+            'billing.safepay.api_key'       => '',
+            'billing.safepay.v1_secret'     => '',
+            'billing.safepay.webhook_secret'=> '',
+            'billing.paddle.api_key'        => '',
+            'billing.paddle.client_token'   => '',
+            'billing.paddle.webhook_secret' => '',
+            'billing.payfast.merchant_id'   => '',
+            'billing.payfast.secured_key'   => '',
         ]);
+
+        // The switchboard is a static-cached settings table, so a narrowed
+        // gateway or country list survives the transaction rollback and leaks
+        // into whatever runs next.
+        \App\Models\SiteSetting::flushCache();
 
         // SiteSetting memoises the whole table in a STATIC property, which
         // survives RefreshDatabase's rollback and therefore leaks between
@@ -59,14 +82,23 @@ abstract class BillingTestCase extends TestCase
         // Give every seeded price a Stripe reference so checkout is reachable
         // without calling Stripe. resolvePrice() refuses an unsynced price on
         // purpose, which is the behaviour a "sync first" test asserts.
-        PlanPrice::query()->whereNull('stripe_price_ref')->get()->each(function (PlanPrice $price) {
-            $price->forceFill([
-                'stripe_price_ref'   => 'price_test_' . $price->plan_id . '_' . $price->interval,
-                'stripe_product_ref' => 'prod_test_' . $price->plan_id,
-                'stripe_livemode'    => false,
-                'stripe_synced_at'   => now(),
-            ])->save();
-        });
+        //
+        // ONLY the platform currency. A plan also carries a local-currency row
+        // for the Pakistani gateway, which has no Stripe Price and never will —
+        // stamping one would both misrepresent production and, since the ref is
+        // unique, collide with the dollar row for the same interval.
+        PlanPrice::query()
+            ->whereNull('stripe_price_ref')
+            ->where('currency', strtolower((string) config('billing.currency', 'usd')))
+            ->get()
+            ->each(function (PlanPrice $price) {
+                $price->forceFill([
+                    'stripe_price_ref'   => 'price_test_' . $price->plan_id . '_' . $price->interval,
+                    'stripe_product_ref' => 'prod_test_' . $price->plan_id,
+                    'stripe_livemode'    => false,
+                    'stripe_synced_at'   => now(),
+                ])->save();
+            });
     }
 
     // ── Fixtures ─────────────────────────────────────────────────────

@@ -87,7 +87,7 @@
     <div class="cf-wrap intro-y">
         <div class="bl-card">
             <div class="bl-card__head">
-                <i data-lucide="sliders-horizontal" class="w-4 h-4" style="color:#6366f1"></i>
+                <i data-lucide="sliders" class="w-4 h-4" style="color:#6366f1"></i>
                 <div class="bl-card__title">What you need</div>
             </div>
 
@@ -221,12 +221,12 @@
             const data = await res.json();
             const q = data.quote;
 
-            el.price.textContent  = data.formatted.usd;
+            el.price.textContent  = data.formatted.amount;
             el.local.textContent  = data.formatted.local ? '≈ ' + data.formatted.local : '';
             el.msgs.textContent   = q.messages.toLocaleString();
             el.seats.textContent  = q.included_seats.toLocaleString();
             el.agents.textContent = q.included_agents.toLocaleString();
-            el.annual.textContent = data.annual.usd;
+            el.annual.textContent = data.annual.amount;
 
             // Seats and agents are bundled with volume, so the summary shows what
             // the volume ALLOWS rather than a line item. The tier minimum is

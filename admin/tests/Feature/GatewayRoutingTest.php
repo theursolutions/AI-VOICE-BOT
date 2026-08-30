@@ -50,6 +50,12 @@ class GatewayRoutingTest extends TestCase
             // Safepay explicitly absent, so these tests keep testing PayFast.
             'billing.safepay.api_key'     => null,
             'billing.safepay.v1_secret'   => null,
+            // And Paddle, for the same reason: with it configured, every
+            // non-Pakistani customer routes to Paddle rather than Stripe, and
+            // these assertions would pass or fail according to which keys are
+            // in the developer's .env.
+            'billing.paddle.api_key'      => null,
+            'billing.paddle.client_token' => null,
         ]);
 
         app()->forgetInstance(GatewayRegistry::class);
@@ -64,6 +70,8 @@ class GatewayRoutingTest extends TestCase
             'billing.safepay.v1_secret' => 'v1-test-secret',
             'billing.payfast.merchant_id' => 'TEST-MERCHANT',
             'billing.payfast.secured_key' => 'TEST-KEY',
+            'billing.paddle.api_key'      => null,
+            'billing.paddle.client_token' => null,
         ]);
 
         app()->forgetInstance(GatewayRegistry::class);
@@ -110,12 +118,33 @@ class GatewayRoutingTest extends TestCase
         $this->assertSame('PKR', $registry->currencyFor($client));
     }
 
-    /** @dataProvider foreignCountries */
-    public function test_everyone_else_gets_stripe(?string $country): void
+    /**
+     * Everyone outside Pakistan goes to the international gateway.
+     *
+     * Stripe with no Paddle configured, which is the fallback; Paddle when it
+     * is, because it is Merchant of Record and carries the tax. Asserted both
+     * ways so the preference order is pinned rather than inferred from whatever
+     * happens to have credentials.
+     *
+     * @dataProvider foreignCountries
+     */
+    public function test_everyone_else_gets_the_international_gateway(?string $country): void
     {
         $registry = $this->registryWithPayFast();
 
         $this->assertSame('stripe', $registry->forClient($this->client($country))?->key());
+
+        config([
+            'billing.paddle.api_key'      => 'apikey_test',
+            'billing.paddle.client_token' => 'test_token',
+        ]);
+        app()->forgetInstance(GatewayRegistry::class);
+
+        $this->assertSame(
+            'paddle',
+            app(GatewayRegistry::class)->forClient($this->client($country))?->key(),
+            'Paddle is preferred over Stripe internationally — it is Merchant of Record',
+        );
     }
 
     public static function foreignCountries(): array
@@ -146,6 +175,8 @@ class GatewayRoutingTest extends TestCase
             'billing.payfast.secured_key' => null,
             'billing.safepay.api_key'     => null,
             'billing.safepay.v1_secret'   => null,
+            'billing.paddle.api_key'      => null,
+            'billing.paddle.client_token' => null,
         ]);
         app()->forgetInstance(GatewayRegistry::class);
 

@@ -108,8 +108,16 @@ class CustomPlanController extends Controller
             // Formatted through the same presenter as every other price on the
             // site, so the local-currency line and the rounding are identical
             // here and on /pricing.
-            'formatted' => $this->presenter->renderPrice($quote['price_cents'], 'monthly', $request),
-            'annual'    => $this->presenter->renderPrice($quote['price_cents'] * 10, 'annually', $request),
+            // Quoted in the currency this workspace will actually be charged.
+            // The conversion is the same one that mints the plan's price row a
+            // moment later, so the figure quoted here is the figure billed —
+            // not an estimate that drifts by the time they reach checkout.
+            'formatted' => $this->presenter->renderPrice(
+                $this->localise($quote['price_cents'], $client), 'monthly', $request, $this->quoteCurrency($client)
+            ),
+            'annual'    => $this->presenter->renderPrice(
+                $this->localise($quote['price_cents'] * 10, $client), 'annually', $request, $this->quoteCurrency($client)
+            ),
         ]);
     }
 
@@ -156,6 +164,33 @@ class CustomPlanController extends Controller
     }
 
     /** @return array<string, int> */
+    /**
+     * The currency this workspace is quoted in, or null for the platform's own.
+     *
+     * A quote shown in dollars to someone who will be charged rupees is not
+     * wrong so much as unusable: they cannot tell whether the plan they are
+     * configuring is affordable.
+     */
+    private function quoteCurrency(Client $client): ?string
+    {
+        $currency = app(\App\Services\Billing\Gateways\GatewayRegistry::class)
+            ->forClient($client)?->currencies()[0] ?? null;
+
+        $base = strtoupper((string) config('billing.currency', 'usd'));
+
+        return ($currency && strtoupper($currency) !== $base) ? $currency : null;
+    }
+
+    /** Platform-currency minor units → the currency this workspace pays in. */
+    private function localise(int $minor, Client $client): int
+    {
+        $currency = $this->quoteCurrency($client);
+
+        return $currency
+            ? app(\App\Services\Billing\LocalPriceService::class)->convert($minor, $currency)
+            : $minor;
+    }
+
     private function validated(Request $request): array
     {
         $rules = [];

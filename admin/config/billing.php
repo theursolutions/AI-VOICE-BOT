@@ -70,6 +70,74 @@ return [
     | what made paisa look right. It is not true of this endpoint. Re-check with
     | safepay:doctor after any API change rather than trusting the prose.
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Paddle — international
+    |--------------------------------------------------------------------------
+    |
+    | Paddle is a MERCHANT OF RECORD, not a payment processor. It sells to the
+    | customer in its own name, then pays us — which means Paddle owns the sales
+    | tax, VAT and GST obligation in every country it sells into, and owns the
+    | invoice the customer receives. That is the whole reason to choose it over
+    | a processor: a business with no foreign entity cannot register for VAT in
+    | forty jurisdictions, and Paddle removes the need to.
+    |
+    | Two credentials, and they are NOT interchangeable:
+    |
+    |   api_key       server-side, secret. Creates transactions. Never rendered.
+    |   client_token  public, safe in HTML. Opens the checkout overlay.
+    |
+    | Sending the API key to the browser would let anyone create transactions,
+    | issue refunds and read every customer, so the two live in separate keys
+    | rather than one "paddle key" that could be printed in the wrong place.
+    |
+    */
+    'paddle' => [
+        'api_key'        => env('PADDLE_API_KEY'),
+        'client_token'   => env('PADDLE_CLIENT_TOKEN'),
+        'webhook_secret' => env('PADDLE_WEBHOOK_SECRET'),
+
+        // Sandbox unless explicitly told otherwise — the opposite default would
+        // let a missing env var take real money.
+        'sandbox' => (bool) env('PADDLE_SANDBOX', true),
+
+        'base_url' => [
+            'sandbox'    => env('PADDLE_SANDBOX_URL', 'https://sandbox-api.paddle.com'),
+            'production' => env('PADDLE_PRODUCTION_URL', 'https://api.paddle.com'),
+        ],
+
+        // Paddle.js, which draws the overlay. Version-pinned in the path by
+        // Paddle themselves; there is no other build.
+        'js_url' => env('PADDLE_JS_URL', 'https://cdn.paddle.com/paddle/v2/paddle.js'),
+
+        'timeout' => (int) env('PADDLE_TIMEOUT', 20),
+
+        // Which tax rules Paddle applies as Merchant of Record.
+        //
+        // `saas` — hyphenated-style, NOT `software_as_a_service`, which is what
+        // the API reference page implies and what Paddle rejects. The full set
+        // Paddle accepts is: digital-goods, ebooks, implementation-services,
+        // professional-services, saas, software-programming-services, standard,
+        // software-programming-services, training-services, website-hosting.
+        //
+        // Configurable because this is the value most likely to be revised, and
+        // a rejected category should be an env change rather than a deploy.
+        'tax_category' => env('PADDLE_TAX_CATEGORY', 'saas'),
+
+        /*
+         | How long after Paddle signed a webhook we still accept it.
+         |
+         | Paddle's own documentation suggests five SECONDS. Do not copy that
+         | number: a retry is re-sent with the ORIGINAL timestamp and signature,
+         | so a five-second window rejects every retry Paddle makes — which is
+         | precisely the delivery you most need to accept, because it only
+         | happens when the first one failed. Wide enough to survive retries and
+         | a clock a little out of step, narrow enough that a captured request
+         | is not replayable tomorrow.
+         */
+        'signature_tolerance' => (int) env('PADDLE_SIGNATURE_TOLERANCE', 86400),
+    ],
+
     'safepay' => [
         'api_key'        => env('SAFEPAY_API_KEY'),
         'v1_secret'      => env('SAFEPAY_V1_SECRET'),
@@ -579,6 +647,61 @@ return [
     | Currency presentation
     |--------------------------------------------------------------------------
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Smallest amount worth charging
+    |--------------------------------------------------------------------------
+    |
+    | Per currency, in MINOR UNITS, because a single number cannot serve both:
+    | 5000 is fifty dollars and fifty rupees, which are not remotely the same
+    | decision. Getting that wrong once already refused two $5 seats as "too
+    | little to charge for".
+    |
+    | Below this a top-up is not billed at all — the customer is told to buy it
+    | next period instead. The floor exists because gateways reject trivial
+    | amounts and because a fee on a twenty-cent charge costs more than the
+    | charge collects.
+    |
+    */
+    'minimum_charge' => [
+        'USD' => (int) env('BILLING_MIN_CHARGE_USD', 50),      // $0.50
+        'PKR' => (int) env('BILLING_MIN_CHARGE_PKR', 10000),   // Rs 100
+        '*'   => (int) env('BILLING_MIN_CHARGE', 50),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Local selling prices
+    |--------------------------------------------------------------------------
+    |
+    | A price a customer is actually CHARGED in their own currency — which is a
+    | different thing from the approximate figure `fx` renders beside a dollar
+    | amount, and must never be confused with it. An FX rate moves daily; a
+    | selling price does not, and a customer quoted Rs 21,500 must be charged
+    | Rs 21,500 whether or not a rate provider answered this morning.
+    |
+    | So these rates are used ONCE, by `billing:local-prices`, to MINT rows in
+    | `plan_prices` — after which the row is the price and this config is only
+    | the recipe that produced it. Changing the rate here does not reprice
+    | anything until the command is run again, and existing subscribers are
+    | grandfathered by `changePrice()` as always.
+    |
+    | `step` keeps the result a number a human would quote: Rs 21,500, never
+    | Rs 21,372. Rounded UP, because rounding a selling price down is a discount
+    | nobody decided to give.
+    |
+    */
+    'local_pricing' => [
+        // Only currencies a gateway actually settles in belong here.
+        'PKR' => [
+            // Deliberately above the interbank rate: the gateway's fee, the
+            // spread and a month of drift all come out of this number, and a
+            // rate set exactly at spot means every sale is slightly short.
+            'rate' => (float) env('BILLING_PKR_RATE', 300),
+            'step' => (int) env('BILLING_PKR_STEP', 500),
+        ],
+    ],
+
     'currencies' => [
         'USD' => ['symbol' => '$',    'decimals' => 2, 'position' => 'before'],
         'PKR' => ['symbol' => 'Rs',   'decimals' => 0, 'position' => 'before'],

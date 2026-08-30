@@ -125,7 +125,7 @@
         <button type="button" id="ck-pay" class="bl-btn bl-btn--primary" style="width:100%;margin-top:16px;padding:13px">
             <span class="js-label">
                 <i data-lucide="lock" class="w-4 h-4"></i>
-                Pay {{ $priceDisplay['usd'] }} and {{ $isChange ? 'switch plan' : 'subscribe' }}
+                Pay {{ $priceDisplay['amount'] }} and {{ $isChange ? 'switch plan' : 'subscribe' }}
             </span>
             <span class="js-busy" hidden>Processing…</span>
         </button>
@@ -176,7 +176,7 @@
 
         <div class="ck-sum__row ck-sum__row--total">
             <span>Total due today</span>
-            <span>{{ $priceDisplay['usd'] }}</span>
+            <span>{{ $priceDisplay['amount'] }}</span>
         </div>
 
         @if ($priceDisplay['local'])

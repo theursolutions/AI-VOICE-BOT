@@ -44,9 +44,11 @@ class ChatController extends Controller
      * META_CHANNELS, which still gates Meta-only behaviour below (the 24h
      * service window, HUMAN_AGENT tag, and the media/template/interactive/
      * flow/product endpoints that only make sense against the Graph API) —
-     * email has none of that, but does belong in the same inbox.
+     * email has none of that, but does belong in the same inbox. Same for
+     * `web` (the site's own chat widget) — no Meta service window, no Graph
+     * connection, just a session/messages pair like any other channel.
      */
-    private const INBOX_CHANNELS = [...self::META_CHANNELS, 'email'];
+    private const INBOX_CHANNELS = [...self::META_CHANNELS, 'email', 'web'];
 
     /**
      * How much of Meta's 24h window counts as "expiring soon".
@@ -78,7 +80,11 @@ class ChatController extends Controller
         $projectId = (int) ($request->query('project_id') ?: optional($projects->first())->id);
         $project = $projects->firstWhere('id', $projectId);
 
-        return view('chat.index', compact('client', 'projects', 'project', 'projectId'));
+        $emailAccounts = $project
+            ? EmailAccount::where('project_id', $project->id)->enabled()->orderBy('from_email')->get(['id', 'from_email', 'from_name', 'label'])
+            : collect();
+
+        return view('chat.index', compact('client', 'projects', 'project', 'projectId', 'emailAccounts'));
     }
 
     /** JSON conversation list (used for initial load + polling). */
@@ -160,8 +166,8 @@ class ChatController extends Controller
                 'profile_url'     => $this->profileUrl($s, $meta),
                 'last_message'    => $this->preview($last),
                 'last_at'         => $s->last_activity_at,
-                'window_open'     => $this->meta->serviceWindowOpen($s->last_inbound_at, $now),
-                'window_expires'  => $this->meta->serviceWindowExpiresAt($s->last_inbound_at),
+                'window_open'     => $this->windowOpenFor($s, $now),
+                'window_expires'  => $this->windowExpiresFor($s),
                 'unread'          => (int) ($s->last_inbound_at ?? 0) > (int) ($meta['read_at'] ?? 0),
                 // A dot only said "something new"; a count says how much is
                 // waiting, which is what decides who an agent opens first.
@@ -437,9 +443,10 @@ class ChatController extends Controller
      */
     private function replyPolicy(Session $session): array
     {
-        // Email has no expiring service window — a mailbox can be replied to
-        // at any time, exactly like a normal email client.
-        if ($session->channel === 'email') {
+        // Email and the site's own webchat have no expiring service window —
+        // both can be replied to at any time, exactly like a normal email
+        // client (webchat has no Meta window to begin with).
+        if (in_array($session->channel, ['email', 'web'], true)) {
             return ['allowed' => true, 'mode' => 'free', 'reason' => null, 'expires_at' => null];
         }
 
@@ -1078,14 +1085,25 @@ class ChatController extends Controller
      *   expired   window shut; only an approved template will reopen it
      *   closed    resolved or ended on our side
      */
+    /** Email and webchat have no expiring service window — always "open". */
+    private function windowOpenFor(Session $s, int $now): bool
+    {
+        return in_array($s->channel, ['email', 'web'], true) || $this->meta->serviceWindowOpen($s->last_inbound_at, $now);
+    }
+
+    private function windowExpiresFor(Session $s): ?int
+    {
+        return in_array($s->channel, ['email', 'web'], true) ? null : $this->meta->serviceWindowExpiresAt($s->last_inbound_at);
+    }
+
     private function conversationState(Session $s, int $now): string
     {
         if ($s->status !== 'active' || $s->handoff_status === 'resolved') {
             return 'closed';
         }
-        // Email has no expiring service window — it stays "active" until
-        // closed on our side, same as a normal email client would show it.
-        if ($s->channel === 'email') {
+        // Email and webchat have no expiring service window — they stay
+        // "active" until closed on our side, same as a normal email client.
+        if (in_array($s->channel, ['email', 'web'], true)) {
             return 'active';
         }
         if (! $this->meta->serviceWindowOpen($s->last_inbound_at, $now)) {
@@ -1217,8 +1235,8 @@ class ChatController extends Controller
 
         return response()->json([
             'messages' => $msgs->map(fn (Message $m) => $this->shapeMessage($m, $sessionId))->values(),
-            'window_open'    => $this->meta->serviceWindowOpen($session->last_inbound_at),
-            'window_expires' => $this->meta->serviceWindowExpiresAt($session->last_inbound_at),
+            'window_open'    => $this->windowOpenFor($session, time()),
+            'window_expires' => $this->windowExpiresFor($session),
             'bot_paused'     => (bool) data_get($session->metadata, 'meta.bot_paused', false),
             'handoff'        => $session->handoff_status ?: 'bot',
             'assigned_to'    => $session->assigned_agent_id ? (BotAgent::find($session->assigned_agent_id)->name ?? 'Agent') : null,
@@ -1265,6 +1283,16 @@ class ChatController extends Controller
             return $deny;
         }
         $session = $this->session($project, $sessionId);
+
+        // Webchat has no outbound API to call — a reply is simply written to
+        // the session's own message log, the same way the bot's replies are.
+        // The widget's own polling picks it up from there; there is no Graph
+        // connection to resolve and no wamid to record.
+        if ($session->channel === 'web') {
+            $msg = $this->persistOutbound($session, $data['text']);
+
+            return response()->json(['message' => $this->shapeMessage($msg, $sessionId)], 201);
+        }
 
         [$conn, $provider] = $this->connectionFor($session);
         if (!$conn) {

@@ -5,11 +5,13 @@ namespace App\Services\Billing\Gateways;
 /**
  * How the browser continues a payment the server has started.
  *
- * Two shapes, because providers genuinely differ. Stripe hands back a URL to
+ * Three shapes, because providers genuinely differ. Stripe hands back a URL to
  * redirect to (or a client secret to confirm in-page); PayFast expects a form
- * POSTed to its host carrying a signed set of fields. Collapsing both into "a
- * URL" would mean synthesising a GET for a provider that only accepts a POST,
- * so the difference is represented rather than hidden.
+ * POSTed to its host carrying a signed set of fields; Paddle draws an overlay
+ * on the page we are already on and never navigates at all. Collapsing these
+ * into "a URL" would mean synthesising a GET for a provider that only accepts a
+ * POST, and a navigation for one whose entire point is not navigating — so the
+ * difference is represented rather than hidden.
  */
 class CheckoutHandoff
 {
@@ -42,8 +44,30 @@ class CheckoutHandoff
         return new self('post', $url, $fields, $reference);
     }
 
+    /**
+     * Open the provider's own overlay on the current page.
+     *
+     * No navigation: `url` is empty because there is nowhere to go. The browser
+     * needs the provider's public token and a reference to the payment the
+     * server has already created — the AMOUNT is not among them, and must never
+     * be, because anything handed to the browser can be edited before it is
+     * used.
+     *
+     * @param  array<string, scalar>  $fields  what the provider's JS needs
+     */
+    public static function overlay(string $reference, array $fields = []): self
+    {
+        return new self('overlay', '', $fields, $reference);
+    }
+
     public function isPost(): bool
     {
         return $this->type === 'post';
+    }
+
+    /** Drawn on our own page rather than somewhere else. */
+    public function isOverlay(): bool
+    {
+        return $this->type === 'overlay';
     }
 }

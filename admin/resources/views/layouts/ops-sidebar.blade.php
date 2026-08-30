@@ -126,6 +126,18 @@
             </a>
         </li>
         <li>
+            <a href="{{ route('ops.billing.charges.index') }}" class="side-menu {{ $is('ops.billing.charges.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="banknote"></i></div>
+                <div class="side-menu__title">Payments</div>
+            </a>
+        </li>
+        <li>
+            <a href="{{ route('ops.payments.index') }}" class="side-menu {{ $is('ops.payments.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="credit-card"></i></div>
+                <div class="side-menu__title">Payment settings</div>
+            </a>
+        </li>
+        <li>
             <a href="{{ route('ops.ai-brains.index') }}" class="side-menu {{ $is('ops.ai-brains.*') ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="cpu"></i></div>
                 <div class="side-menu__title">AI Brains</div>

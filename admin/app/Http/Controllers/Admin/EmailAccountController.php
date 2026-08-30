@@ -58,12 +58,29 @@ class EmailAccountController extends Controller
 
     public function update(Request $request, Client $client, int $id): RedirectResponse
     {
+        $projectId = (int) $request->validate(['project_id' => 'required|integer'])['project_id'];
+        $project = $this->guard($client, $projectId);
+        $account = $this->find($project, $id);
+
+        // An OAuth-connected account has no user-editable host/port/
+        // credentials — those live on the provider's side. Only the display
+        // fields are ours to change; re-authenticating happens via
+        // "Reconnect" (EmailOAuthController::start()), not this form.
+        if ($account->oauth_provider) {
+            $data = $request->validate([
+                'label'     => 'nullable|string|max:191',
+                'from_name' => 'nullable|string|max:191',
+            ]);
+            $account->update($data);
+
+            return back()
+                ->withInput(['project_id' => $project->id])
+                ->with('success', 'Mailbox updated.');
+        }
+
         $data = $request->validate(array_merge(self::RULES, [
             'project_id' => 'required|integer',
         ]));
-
-        $project = $this->guard($client, (int) $data['project_id']);
-        $account = $this->find($project, $id);
 
         // Passwords are optional on update — blank means "keep the one on file".
         if ($data['imap_password'] === null || $data['imap_password'] === '') {
@@ -114,21 +131,14 @@ class EmailAccountController extends Controller
      */
     public function test(Request $request, Client $client, int $id = 0): JsonResponse
     {
-        $data = $request->validate(array_merge(self::RULES, [
-            'project_id' => 'required|integer',
-        ]));
-        $project = $this->guard($client, (int) $data['project_id']);
-
+        $projectId = (int) $request->validate(['project_id' => 'required|integer'])['project_id'];
+        $project = $this->guard($client, $projectId);
         $account = $id ? $this->find($project, $id) : null;
 
-        // Build a throwaway (unsaved) account from the submitted values, so
-        // "Test" works before the form has ever been saved. Blank passwords
-        // on an edit fall back to what's already stored.
-        $probe = new EmailAccount(array_merge($data, ['project_id' => $project->id]));
-        if ($account) {
-            $probe->imap_password = $data['imap_password'] ?: $account->imap_password;
-            $probe->smtp_password = $data['smtp_password'] ?: $account->smtp_password;
-        }
+        // An OAuth account has no posted credentials to probe — test the
+        // stored account directly (ImapClient/SmtpMailer pull a fresh token
+        // through OAuthTokenBroker as needed).
+        $probe = $account && $account->oauth_provider ? $account : $this->manualProbe($request, $project, $account);
 
         $errors = [];
         try {
@@ -147,6 +157,24 @@ class EmailAccountController extends Controller
         }
 
         return response()->json(['ok' => true, 'message' => 'IMAP and SMTP both connected successfully.']);
+    }
+
+    /**
+     * Build a throwaway (unsaved) account from the submitted manual SMTP/IMAP
+     * fields, so "Test" works before the form has ever been saved. Blank
+     * passwords on an edit fall back to what's already stored.
+     */
+    private function manualProbe(Request $request, Project $project, ?EmailAccount $account): EmailAccount
+    {
+        $data = $request->validate(self::RULES);
+        $probe = new EmailAccount(array_merge($data, ['project_id' => $project->id]));
+
+        if ($account) {
+            $probe->imap_password = $data['imap_password'] ?: $account->imap_password;
+            $probe->smtp_password = $data['smtp_password'] ?: $account->smtp_password;
+        }
+
+        return $probe;
     }
 
     private function find(Project $project, int $id): EmailAccount

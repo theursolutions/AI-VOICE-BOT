@@ -198,11 +198,41 @@ class Plan extends Model
      * way to resolve what a new customer pays — never trust an amount or a
      * price reference supplied by the client.
      */
-    public function priceFor(string $interval): ?PlanPrice
+    /**
+     * The active price for an interval, in a given currency.
+     *
+     * A plan can carry more than one currency: a dollar price everyone pays
+     * through Stripe, and a rupee price minted for the local gateway, which
+     * settles nothing else. So an interval alone no longer identifies a price.
+     *
+     * $currency null means "the platform's own", and falls back to any active
+     * row for the interval when no row matches — without that fallback, a plan
+     * priced only in a local currency would look unpriced, and every existing
+     * single-argument caller would change behaviour on the day a second
+     * currency appeared.
+     *
+     * A currency asked for EXPLICITLY does not fall back: a caller that needs
+     * rupees cannot be handed dollars, because the number would be charged as
+     * though it were rupees.
+     */
+    public function priceFor(string $interval, ?string $currency = null): ?PlanPrice
     {
-        return $this->relationLoaded('prices')
-            ? $this->prices->first(fn (PlanPrice $p) => $p->interval === $interval && $p->is_active)
-            : $this->prices()->where('interval', $interval)->where('is_active', true)->first();
+        $prices = $this->relationLoaded('prices')
+            ? $this->prices->where('is_active', true)
+            : $this->prices()->where('interval', $interval)->where('is_active', true)->get();
+
+        $prices = $prices->filter(fn (PlanPrice $p) => $p->interval === $interval);
+
+        $explicit = $currency !== null;
+        $wanted   = strtolower($currency ?? (string) config('billing.currency', 'usd'));
+
+        $match = $prices->first(fn (PlanPrice $p) => strtolower((string) $p->currency) === $wanted);
+
+        if ($match || $explicit) {
+            return $match;
+        }
+
+        return $prices->first();
     }
 
     /** Intervals this plan can actually be bought on right now. */

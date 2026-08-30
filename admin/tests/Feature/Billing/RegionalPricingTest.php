@@ -304,9 +304,10 @@ class RegionalPricingTest extends BillingTestCase
         $response = $this->get('/pricing?country=PK');
 
         $response->assertOk();
-        $response->assertSee('$19', false);
-        $response->assertSee('$59', false);
-        $response->assertSee('Rs 5,400', false);
+        $response->assertSee('$26', false);
+        $response->assertSee('$75', false);
+        // $26 × 283.4123 = 7,368.72 → rounded to a "nice" step for display.
+        $response->assertSee('Rs 7,400', false);
         $response->assertSee('All plans are charged in USD', false);
         $response->assertSee('approximate', false);
     }
@@ -318,8 +319,8 @@ class RegionalPricingTest extends BillingTestCase
         $response = $this->get('/pricing');
 
         $response->assertOk();
-        $response->assertSee('$19', false);
-        $response->assertSee('$149', false);
+        $response->assertSee('$26', false);
+        $response->assertSee('$199', false);
         $response->assertDontSee('≈', false);
     }
 
@@ -329,7 +330,7 @@ class RegionalPricingTest extends BillingTestCase
         $response = $this->get('/pricing?country=PK');
 
         $response->assertOk();
-        $response->assertSee('$19', false);
+        $response->assertSee('$26', false);
         $response->assertDontSee('Rs ', false);
     }
 
@@ -337,7 +338,7 @@ class RegionalPricingTest extends BillingTestCase
     {
         $this->get('/pricing?billing=annually')
              ->assertOk()
-             ->assertSee('$590', false)
+             ->assertSee('$750', false)
              ->assertSee('Save 17%', false);
     }
 

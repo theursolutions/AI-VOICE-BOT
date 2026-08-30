@@ -117,6 +117,12 @@ Route::middleware(['auth', 'super-admin'])
         Route::get ('/modules', [App\Http\Controllers\SuperAdmin\ModulesController::class, 'index'])->name('modules.index');
         Route::post('/modules', [App\Http\Controllers\SuperAdmin\ModulesController::class, 'update'])->name('modules.update');
 
+        // Payment switchboard — which providers may take money, and from which
+        // countries. This is where the eventual move to Stripe happens: switch
+        // it on, switch the others off, no deploy.
+        Route::get ('/payments', [App\Http\Controllers\SuperAdmin\PaymentsController::class, 'index'])->name('payments.index');
+        Route::post('/payments', [App\Http\Controllers\SuperAdmin\PaymentsController::class, 'update'])->name('payments.update');
+
         // The platform's pool of model backends, and the order they are used in.
         // Replaces the per-workspace brain-settings page, which wrote to a file
         // the voice-engine container cannot see and applied to everyone at once.
@@ -227,6 +233,17 @@ Route::middleware('auth')
 Route::middleware('auth')
     ->get('/meta/instagram/callback', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'instagramCallback'])
     ->name('meta.instagram.callback');
+
+// Mail OAuth callback ("Connect Google" / "Connect Microsoft") — same
+// fixed-redirect-URI technique as /meta/oauth/callback above: client +
+// project + provider travel in the encrypted `state`, not the URL, because
+// Google/Microsoft require the redirect_uri to match byte-for-byte and it
+// cannot carry a per-workspace {client} slug. Register this exact URL (with
+// {provider} literally 'google' or 'microsoft') in the respective app's
+// OAuth redirect-URI allowlist.
+Route::middleware('auth')
+    ->get('/mail/oauth/{provider}/callback', [App\Http\Controllers\Admin\EmailOAuthController::class, 'callback'])
+    ->name('mail.oauth.callback');
 
 // Instagram calls these two server-to-server, with no session and no CSRF
 // token — authorisation is the HMAC on `signed_request` and nothing else.
@@ -366,6 +383,10 @@ Route::middleware(['auth', 'active.client'])
         Route::post('/chat/{sessionId}/toggle-bot',     [App\Http\Controllers\Admin\ChatController::class, 'toggleBot'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.toggle-bot');
         Route::post('/chat/presence',                   [App\Http\Controllers\Admin\ChatController::class, 'presence'])->name('chat.presence');
 
+        // Email channel — reply within a thread, or start a brand new one.
+        Route::post('/chat/{sessionId}/email/reply',    [App\Http\Controllers\Admin\ChatController::class, 'emailReply'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.email.reply');
+        Route::post('/chat/email/compose',              [App\Http\Controllers\Admin\ChatController::class, 'composeEmail'])->name('chat.email.compose');
+
         // Contact profile — the person behind the conversation, across every
         // channel they have ever used.
         Route::get  ('/chat/{sessionId}/contact', [App\Http\Controllers\Admin\ChatController::class, 'contact'])->where('sessionId', \App\Support\Hashid::ROUTE_PATTERN)->name('chat.contact');
@@ -404,6 +425,19 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/channels',             [App\Http\Controllers\Admin\ChannelWebController::class, 'store'])->name('channels.store');
         Route::post  ('/channels/{id}/toggle', [App\Http\Controllers\Admin\ChannelWebController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.toggle');
         Route::delete('/channels/{id}',        [App\Http\Controllers\Admin\ChannelWebController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.destroy');
+
+        // Channels — Email (multiple mailboxes per project, SMTP/IMAP)
+        Route::post  ('/channels/email',            [App\Http\Controllers\Admin\EmailAccountController::class, 'store'])->name('channels.email.store');
+        Route::post  ('/channels/email/test',       [App\Http\Controllers\Admin\EmailAccountController::class, 'test'])->name('channels.email.test');
+        Route::post  ('/channels/email/{id}',       [App\Http\Controllers\Admin\EmailAccountController::class, 'update'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.email.update');
+        Route::post  ('/channels/email/{id}/toggle',[App\Http\Controllers\Admin\EmailAccountController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.email.toggle');
+        Route::post  ('/channels/email/{id}/test',  [App\Http\Controllers\Admin\EmailAccountController::class, 'test'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.email.test-existing');
+        Route::delete('/channels/email/{id}',       [App\Http\Controllers\Admin\EmailAccountController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.email.destroy');
+
+        // Channels — Email OAuth ("Connect Google" / "Connect Microsoft").
+        // The popup starts here; it finishes at the FIXED callback below
+        // (no {client} segment — see that route's comment for why).
+        Route::get   ('/channels/email/oauth/{provider}/start', [App\Http\Controllers\Admin\EmailOAuthController::class, 'start'])->name('channels.email.oauth.start');
 
         // Conversation Flow builder (per-project)
         Route::get   ('/flows',                            [App\Http\Controllers\Admin\FlowWebController::class, 'index'])->name('flows.index');

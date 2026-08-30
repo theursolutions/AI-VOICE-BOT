@@ -2,12 +2,39 @@
 
 @section('content')
 @php
-    $money    = fn (int $cents) => '$' . number_format($cents / 100, 2);
+    // The currency an ADD-ON will be charged in — which is not necessarily the
+    // currency the existing subscription is in. A workspace that bought a plan
+    // in rupees and has since moved country is quoted new purchases in dollars
+    // while still holding a rupee subscription; both figures appear on this
+    // page and each must say what it actually is.
+    $addonCurrency = app(\App\Services\Billing\Gateways\GatewayRegistry::class)->currencyFor($client);
+    $addonSymbol   = app(\App\Services\Currency\ExchangeRateService::class)->symbolFor($addonCurrency);
+    $addonDecimals = (int) (config("billing.currencies.{$addonCurrency}.decimals") ?? 2);
+
+    // What the SUBSCRIPTION is denominated in. Its own currency, never the
+    // page's — rendering Rs 22,500 as "$22,500.00" was exactly this mistake.
+    $planCurrency = strtoupper((string) ($subscription->currency ?: $addonCurrency));
+
+    $money    = fn (int $cents) => tva_money($cents, $addonCurrency, false);
     $per      = $subscription->interval === 'annually' ? 'year' : 'month';
     $perShort = $subscription->interval === 'annually' ? 'yr' : 'mo';
 @endphp
 
 @include('billing._styles')
+
+<style>
+    .ad-billed {
+        display:flex; gap:10px; align-items:flex-start; margin:0 0 18px;
+        background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;
+        padding:12px 15px; font-size:12.5px; color:#475569; line-height:1.6;
+    }
+    .ad-billed strong { color:#0f172a; font-weight:750; }
+    .ad-billed a { color:#4f46e5; font-weight:650; text-decoration:none; }
+    .ad-billed a:hover { text-decoration:underline; }
+
+    html.dark .ad-billed { background:#0f172a; border-color:#334155; color:#94a3b8; }
+    html.dark .ad-billed strong { color:#e2e8f0; }
+</style>
 
 <style>
     /* 32px top matches the mt-8 every other billing page opens with — without
@@ -125,6 +152,30 @@
         </p>
     </div>
 
+    {{--
+        Why there is no country or payment choice on this page, said rather than
+        left as a puzzle. An add-on rides on the plan you already have and is
+        re-charged with it, so it has to use the same currency and the same
+        provider — a dollar seat on a rupee subscription would make the renewal
+        that adds them together wrong by the exchange rate.
+
+        Changing it is possible; it just happens where it can actually take
+        effect, which is on the plan.
+    --}}
+    @if (! empty($billedIn))
+        <div class="ad-billed intro-y">
+            <i data-lucide="info" class="w-4 h-4" style="flex:none;color:#6366f1"></i>
+            <div>
+                Billed in <strong>{{ $billedIn }}</strong>, the same as your plan, and
+                {{ $billedVia }}.
+                <a href="{{ route('billing.plans', ['client' => $client->slug]) }}">
+                    Change country or payment method
+                </a>
+                — it applies from your next plan change.
+            </div>
+        </div>
+    @endif
+
     @include('billing._flash')
 
     {{-- The page renders for anyone on a paid plan, but completing the purchase
@@ -230,11 +281,18 @@
                     </div>
 
                     @if ($checkoutOpen && ($canBuy ?? true))
-                        {{-- Starts disabled and is enabled by the stepper script
-                             once the quantity differs from what they own, so
-                             "Save" is never offered for a no-op. --}}
+                        {{-- "Pay", not "Save". A top-up is a purchase that
+                             happens now — the old wording promised a settings
+                             change and then took money, which is the wrong way
+                             round to surprise somebody.
+
+                             Starts disabled and is enabled by the stepper once
+                             the quantity differs from what they hold, so it is
+                             never offered for a no-op. The amount is filled in
+                             by the same script that quotes the proration. --}}
                         <button type="submit" class="bl-btn bl-btn--primary bl-btn--sm js-submit" disabled>
-                            Save
+                            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+                            <span class="js-submit-label">Pay</span>
                         </button>
                     @elseif (! ($canBuy ?? true))
                         <span style="font-size:12px;color:#98a2b3">Unlocks when active</span>
@@ -253,7 +311,7 @@
 
             <div class="ad-sum__row">
                 <span>{{ $plan?->name ?? 'Plan' }}</span>
-                <b>{{ $money((int) ($subscription->unit_amount ?? 0)) }}<span style="font-weight:500;color:#98a2b3">/{{ $perShort }}</span></b>
+                <b>{{ tva_money((int) ($subscription->unit_amount ?? 0), $planCurrency, false) }}<span style="font-weight:500;color:#98a2b3">/{{ $perShort }}</span></b>
             </div>
 
             <div class="ad-sum__row">
@@ -325,9 +383,14 @@
     var labelEl   = document.getElementById('ad-change-label');
     var noteEl    = document.getElementById('ad-note');
 
+    // Same currency the server rendered with, handed over rather than assumed —
+    // the two must agree or the page contradicts itself the moment a quantity
+    // changes.
+    var CURRENCY = { symbol: @json($addonSymbol), decimals: @json($addonDecimals) };
+
     function money(cents) {
         var sign = cents < 0 ? '−' : '';
-        return sign + '$' + (Math.abs(cents) / 100).toFixed(2);
+        return sign + CURRENCY.symbol + (Math.abs(cents) / 100).toFixed(CURRENCY.decimals);
     }
 
     var timer = null;
@@ -370,6 +433,16 @@
         var input  = form.querySelector('input[name="quantity"]');
         var line   = form.querySelector('.js-line');
         var submit = form.querySelector('.js-submit');
+        var payLbl = form.querySelector('.js-submit-label');
+
+        // The button says what it will take. "Pay" alone is a button somebody
+        // presses to find out.
+        function setPayLabel(cents) {
+            if (!payLbl) return;
+            payLbl.textContent = (cents === null || typeof cents === 'undefined')
+                ? 'Pay'
+                : 'Pay ' + money(cents);
+        }
         var unit   = parseInt(form.dataset.unit, 10);
         var owned  = parseInt(form.dataset.owned, 10);
 
@@ -380,7 +453,7 @@
             input.value = qty;
 
             // Recurring cost is our own price × quantity — exact, no call needed.
-            line.firstChild.nodeValue = '$' + ((unit * qty) / 100).toFixed(2) + ' ';
+            line.firstChild.nodeValue = money(unit * qty) + ' ';
 
             var changed = qty !== owned;
             if (submit) { submit.disabled = !changed; }
@@ -411,12 +484,31 @@
             .then(function (r) { return r.ok ? r.json() : Promise.reject(r); })
             .then(function (d) {
                 if (d.due_today === null || typeof d.due_today === 'undefined') {
-                    // Stripe couldn't be asked. Say so rather than guess.
+                    // The provider could not be asked. Say so rather than guess.
                     dueEl.textContent = '—';
                     noteEl.textContent = 'The exact prorated amount will appear on your next invoice.';
+                    setPayLabel(null);
                     return;
                 }
+
                 dueEl.textContent = money(d.due_today);
+
+                if (d.immediate) {
+                    // A purchase, happening now. The button carries the amount
+                    // so nobody presses it without knowing what leaves their
+                    // account.
+                    setPayLabel(d.chargeable ? d.due_today : null);
+
+                    noteEl.textContent = d.chargeable
+                        ? 'Charged now, separately from your plan. Covers the rest of this billing period'
+                          + (d.covers_to ? ' — until ' + d.covers_to + '.' : '.')
+                        : (d.reason || 'Nothing to pay for that change.');
+
+                    if (submit) { submit.disabled = !d.chargeable; }
+                    return;
+                }
+
+                setPayLabel(null);
                 noteEl.textContent = d.due_today < 0
                     ? 'Credited against your next invoice.'
                     : 'Prorated for the rest of your current billing period.';
@@ -424,6 +516,7 @@
             .catch(function () {
                 dueEl.textContent = '—';
                 noteEl.textContent = 'The exact prorated amount will appear on your next invoice.';
+                setPayLabel(null);
             });
         }
 

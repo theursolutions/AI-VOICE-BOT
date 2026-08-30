@@ -37,6 +37,17 @@ class Kernel extends ConsoleKernel
             ->everySixHours()
             ->withoutOverlapping();
 
+        // The safety net under the Paddle webhook.
+        //
+        // A webhook is one delivery to one URL, and every way it can fail ends
+        // identically: the customer paid and their plan never arrived. This asks
+        // Paddle about anything still pending and settles what it confirms — so
+        // a missed delivery costs a customer minutes rather than a support
+        // ticket. Hourly, and a no-op when nothing is pending.
+        $schedule->command('paddle:reconcile')
+            ->hourly()
+            ->withoutOverlapping();
+
         // Warn → expire → warn again → report purge queue.
         // This is a JANITOR, NOT A GATE: access is decided live by
         // Subscription::grantsAccess() comparing free_ends_at to the clock, so

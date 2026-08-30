@@ -212,6 +212,18 @@
     </div>
 @endif
 
+{{-- Above the prices, not beside them: the currency every figure below is
+     quoted in is decided here, so it has to be read before them, not found
+     afterwards. --}}
+<div class="intro-y" style="max-width:620px;margin:0 auto 18px">
+    @include('billing._country-picker', [
+        'countryAction'   => $country['action'],
+        'countryCurrent'  => $country['current'],
+        'countryDetected' => $country['detected'],
+        'countryCurrency' => $country['currency'],
+    ])
+</div>
+
 <div class="pk-head intro-y">
     <h1>{{ $currentPlan ? 'Change your plan' : 'Choose your plan' }}</h1>
     <p>
@@ -233,7 +245,11 @@
      nothing — the cards are directly below — and saves everyone else the
      comparison entirely. --}}
 <a href="{{ route('billing.custom', ['client' => $client->slug]) }}" class="pk-byo intro-y">
-    <span class="pk-byo__icon"><i data-lucide="sliders-horizontal"></i></span>
+    {{-- `sliders`, not `sliders-horizontal`. The latter exists in the lucide
+         package but NOT in the built bundle this app actually loads
+         (public/assets/dist/js/app.js), so it rendered as nothing at all.
+         Check any new icon against the BUNDLE, not against node_modules. --}}
+    <span class="pk-byo__icon"><i data-lucide="sliders"></i></span>
     <span class="pk-byo__text">
         <strong>Build your own plan</strong>
         Set your own conversations, team size and AI agents, and we price it from what it costs to
@@ -282,7 +298,7 @@
             @foreach ($planCard['prices'] as $key => $price)
                 <div class="pk-block" data-pk="{{ $key }}" @if($key !== $selected) hidden @endif>
                     <div class="pk-price">
-                        <span class="pk-price__amt">{{ $price['usd'] }}</span>
+                        <span class="pk-price__amt">{{ $price['amount'] }}</span>
                         <span class="pk-price__per">/{{ $price['months'] > 1 ? 'yr' : 'mo' }}</span>
                     </div>
 
@@ -294,8 +310,14 @@
                         @endif
                     </div>
 
+                    {{-- The same money the other way round. Exact when it is
+                         another real price of ours (a rupee customer seeing the
+                         dollar figure), approximate when it is a live
+                         conversion — and the "≈" is the difference. --}}
                     @if ($price['local'])
-                        <div class="pk-price__local">≈ {{ $price['local'] }}</div>
+                        <div class="pk-price__local">
+                            {{ $price['local_is_exact'] ? '' : '≈ ' }}{{ $price['local'] }}
+                        </div>
                     @endif
 
                     @if ($price['savings_label'])
@@ -304,7 +326,12 @@
 
                     @php
                         $sameExact = $isCurrentPlan && $currentInterval === $key;
-                        $isUpgrade = $currentPrice && $price['usd_cents'] > $currentPrice->unit_amount;
+                        // Only meaningful within one currency. A rupee figure
+                        // set against a dollar one compares 22500 to 7500 and
+                        // calls a downgrade an upgrade.
+                        $isUpgrade = $currentPrice
+                            && strtoupper((string) $currentPrice->currency) === $price['amount_currency']
+                            && $price['amount_minor'] > $currentPrice->unit_amount;
                     @endphp
 
                     <div class="pk-cta">

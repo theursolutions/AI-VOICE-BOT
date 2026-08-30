@@ -109,7 +109,7 @@
 
             @if ($price && $priceDisplay)
                 <div class="bl-plan__price">
-                    <div class="bl-plan__amount">{{ $priceDisplay['usd'] }}</div>
+                    <div class="bl-plan__amount">{{ $priceDisplay['amount'] }}</div>
                     <div class="bl-plan__per">
                         per {{ $price->months() > 1 ? strtolower($price->intervalLabel()) : 'month' }} · USD
                     </div>
@@ -435,7 +435,11 @@
                                             {{ $inv['status'] }}
                                         </span>
                                     </td>
-                                    <td class="bl-amt">${{ number_format($inv['total'] / 100, 2) }}</td>
+                                    {{-- Invoices come from Stripe and carry their
+                                         own currency; falling back to the
+                                         platform's is right for a historical
+                                         row that predates the field. --}}
+                                    <td class="bl-amt">{{ tva_money((int) $inv['total'], $inv['currency'] ?? null, false) }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -485,7 +489,7 @@
                                 <span style="font-size:12.5px;color:#334155;flex:1;">{{ $ap->name }}</span>
                                 @if (! empty($item['price']))
                                     <span style="font-size:12px;color:#64748b;">
-                                        ${{ number_format($item['price']->unit_amount / 100, 2) }}/{{ $item['price']->interval === 'annually' ? 'yr' : 'mo' }}
+                                        {{ tva_money((int) $item['price']->unit_amount, $item['price']->currency, false) }}/{{ $item['price']->interval === 'annually' ? 'yr' : 'mo' }}
                                     </span>
                                 @endif
                             </div>
@@ -517,7 +521,10 @@
                     <div class="bl-card__title">Add-ons</div>
                     @if ($addonTotal > 0)
                         <div class="bl-card__action" style="font-size:12px;color:#64748b">
-                            +${{ number_format($addonTotal / 100, 2) }}/{{ $subscription->interval === 'annually' ? 'yr' : 'mo' }}
+                            {{-- The add-ons' own currency, which is the
+                                 subscription's — not the page's, and not a
+                                 hard-coded dollar. --}}
+                            +{{ tva_money((int) $addonTotal, $subscription->currency, false) }}/{{ $subscription->interval === 'annually' ? 'yr' : 'mo' }}
                         </div>
                     @endif
                 </div>
@@ -636,7 +643,7 @@
         @if ($isOwner)
             <div class="bl-card intro-y">
                 <div class="bl-card__head">
-                    <i data-lucide="receipt" class="w-4 h-4" style="color:#6366f1"></i>
+                    <i data-lucide="file-text" class="w-4 h-4" style="color:#6366f1"></i>
                     <div class="bl-card__title">Billing details</div>
                 </div>
                 <p style="font-size:13px;color:#64748b;line-height:1.6;margin:0 0 14px">
@@ -694,4 +701,10 @@
 @if ($isOwner && $canBuy && $stripeReady)
     @include('billing._card-modal', ['client' => $client, 'stripeKey' => config('billing.stripe.key')])
 @endif
+
+{{-- Shown once, when this page was reached from a payment that has settled. --}}
+@if (! empty($paidCharge))
+    @include('billing._paid-modal', ['paidCharge' => $paidCharge])
+@endif
+
 @endsection

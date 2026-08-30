@@ -49,6 +49,11 @@ class RouteServiceProvider extends ServiceProvider
             // no middleware group, signature-authenticated in the controller.
             Route::group([], base_path('routes/safepay.php'));
 
+            // Paddle's webhook, same treatment again. There is no return route
+            // to register: the overlay never navigates away, so this endpoint
+            // is the only thing Paddle talks to.
+            Route::group([], base_path('routes/paddle.php'));
+
             Route::middleware('web')
                 ->group(base_path('routes/web.php'));
         });

@@ -122,7 +122,10 @@ class SafepayWebhookController extends Controller
             : url('/');
 
         if ($result->paid) {
-            return redirect($billing)->with('success', 'Payment received — thank you. Your plan is active.');
+            // The reference travels so the page can show a receipt for THIS
+            // payment — amount, plan and period — rather than a bare "thanks".
+            return redirect($billing . ($charge ? '?paid=' . urlencode($charge->reference) : ''))
+                ->with('success', 'Payment received — thank you. Your plan is active.');
         }
 
         // Not proven paid. Deliberately NOT phrased as a failure: the webhook
@@ -184,27 +187,35 @@ class SafepayWebhookController extends Controller
             return;   // the other path got there first
         }
 
-        if (! $charge->subscription_id || ! $charge->period_end) {
+        if (! $charge->period_end) {
+            Log::warning('safepay.charge.no_period', ['charge' => $charge->id]);
+
             return;
         }
 
-        // Extend from the period the charge was raised for, not from now: a
-        // customer who pays two days early keeps those two days rather than
-        // losing them, and a customer who pays two days late is not silently
-        // granted a longer month.
-        DB::table('subscriptions')->where('id', $charge->subscription_id)->update([
-            'status'               => 'active',
-            'current_period_start' => $charge->period_start,
-            'current_period_end'   => $charge->period_end,
-            'past_due_since'       => null,
-            'read_only_since'      => null,
-            'purge_after'          => null,
-            'updated_at'           => now(),
-        ]);
+        // Puts them ON THE PLAN, not merely forward in time. Extending dates
+        // alone would leave someone who paid for Growth sitting on Starter —
+        // billed correctly and limited wrongly. Also creates the subscription
+        // when there wasn't one, which is every first purchase.
+        //
+        // The period comes from the charge, decided when checkout began: a
+        // customer who pays two days early keeps those two days, and one who
+        // pays two days late is not silently granted a longer month.
+        $subscription = app(\App\Services\Billing\GatewayCheckoutService::class)
+            ->applyPaidCharge($charge);
+
+        if ($subscription && ! $charge->subscription_id) {
+            // First purchase — the charge was raised before the subscription
+            // existed. Linking it back keeps the payment history joinable.
+            DB::table('gateway_charges')->where('id', $charge->id)->update([
+                'subscription_id' => $subscription->id,
+                'updated_at'      => now(),
+            ]);
+        }
 
         Log::info('safepay.charge.paid', [
             'charge'       => $charge->id,
-            'subscription' => $charge->subscription_id,
+            'subscription' => $subscription?->id,
             'until'        => $charge->period_end,
         ]);
     }

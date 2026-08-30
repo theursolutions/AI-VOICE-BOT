@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1e62a626d930101a782562ed8ff3827f",
+    "content-hash": "669a473672ff2a39462a992554bcc610",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -6444,6 +6444,87 @@
                 }
             ],
             "time": "2024-11-21T01:49:47+00:00"
+        },
+        {
+            "name": "webklex/php-imap",
+            "version": "5.5.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/Webklex/php-imap.git",
+                "reference": "3c23c8f66b772ce8597772816e068326559e7e4b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/Webklex/php-imap/zipball/3c23c8f66b772ce8597772816e068326559e7e4b",
+                "reference": "3c23c8f66b772ce8597772816e068326559e7e4b",
+                "shasum": ""
+            },
+            "require": {
+                "ext-fileinfo": "*",
+                "ext-iconv": "*",
+                "ext-json": "*",
+                "ext-libxml": "*",
+                "ext-mbstring": "*",
+                "ext-openssl": "*",
+                "ext-zip": "*",
+                "illuminate/pagination": ">=5.0.0",
+                "nesbot/carbon": "^2.62.1",
+                "php": "^8.0.2",
+                "symfony/http-foundation": ">=2.8.0"
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^9.5.10"
+            },
+            "suggest": {
+                "symfony/mime": "Recomended for better extension support",
+                "symfony/var-dumper": "Usefull tool for debugging"
+            },
+            "type": "library",
+            "extra": {
+                "branch-alias": {
+                    "dev-master": "1.0-dev"
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Webklex\\PHPIMAP\\": "src"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Malte Goldenbaum",
+                    "email": "github@webklex.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "PHP IMAP client",
+            "homepage": "https://github.com/webklex/php-imap",
+            "keywords": [
+                "imap",
+                "mail",
+                "php-imap",
+                "pop3",
+                "webklex"
+            ],
+            "support": {
+                "issues": "https://github.com/Webklex/php-imap/issues",
+                "source": "https://github.com/Webklex/php-imap/tree/5.5.0"
+            },
+            "funding": [
+                {
+                    "url": "https://www.buymeacoffee.com/webklex",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://ko-fi.com/webklex",
+                    "type": "ko_fi"
+                }
+            ],
+            "time": "2023-06-28T01:57:03+00:00"
         },
         {
             "name": "webmozart/assert",

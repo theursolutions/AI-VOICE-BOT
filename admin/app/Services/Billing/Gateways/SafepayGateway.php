@@ -89,7 +89,11 @@ class SafepayGateway implements PaymentGateway
             throw new \InvalidArgumentException('Safepay needs a basket_id to correlate the redirect.');
         }
 
-        $tracker = $this->createSession($price);
+        // An add-on is sold for the REMAINDER of a period, so the amount is
+        // computed by the caller and is deliberately not the price row's. Passed
+        // explicitly rather than mutating the row, which would reprice the plan
+        // for everybody.
+        $tracker = $this->createSession($price, $context['amount_override'] ?? null);
 
         // The checkout page, NOT the API host — they are different services and
         // the production API host 404s this path entirely.
@@ -124,7 +128,7 @@ class SafepayGateway implements PaymentGateway
      *         around an empty tracker would send the customer to a broken page
      *         rather than fail here where the reason is visible.
      */
-    private function createSession(PlanPrice $price): string
+    private function createSession(PlanPrice $price, ?int $amountOverride = null): string
     {
         $response = $this->http->post(
             rtrim($this->baseUrl(), '/') . (string) $this->config('paths.session', '/order/v1/init'),
@@ -135,7 +139,7 @@ class SafepayGateway implements PaymentGateway
                 // embedded integration, where the merchant drives each step.
                 'json' => [
                     'client'      => (string) $this->config('api_key'),
-                    'amount'      => $this->amountFor($price),
+                    'amount'      => $this->amountFor($price, $amountOverride),
                     'currency'    => 'PKR',
                     'environment' => $this->config('sandbox') ? 'sandbox' : 'production',
                 ],
@@ -174,11 +178,17 @@ class SafepayGateway implements PaymentGateway
      * is one explicit conversion in one place rather than arithmetic scattered
      * through the caller.
      */
-    private function amountFor(PlanPrice $price): int
+    private function amountFor(PlanPrice $price, ?int $override = null): int
     {
+        // The override is in the same minor units as the row, so it goes
+        // through exactly the same conversion. Converting it anywhere else
+        // would reintroduce the factor-of-a-hundred bug this method exists to
+        // hold in one place.
+        $minor = $override ?? (int) $price->unit_amount;
+
         return $this->config('amount_unit', 'rupees') === 'paisa'
-            ? (int) $price->unit_amount
-            : (int) round($price->unit_amount / 100);
+            ? $minor
+            : (int) round($minor / 100);
     }
 
     /**

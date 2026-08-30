@@ -233,6 +233,19 @@ class CustomPlanService
                 ]);
             }
         }
+
+        // A custom plan is built for one workspace, and that workspace may be
+        // the one paying in rupees — so it needs a local price for the same
+        // reason the published tiers do. Without this the customer configures a
+        // plan, is quoted a price, and is then told at checkout that the plan
+        // has no price in their currency.
+        try {
+            app(LocalPriceService::class)->mirror($plan->refresh(), 'PKR');
+        } catch (\Throwable $e) {
+            Log::warning('billing.custom_plan.local_price_failed', [
+                'plan_id' => $plan->id, 'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

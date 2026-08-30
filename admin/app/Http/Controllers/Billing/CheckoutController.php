@@ -199,12 +199,92 @@ class CheckoutController extends Controller
         $planSlug = (string) $request->query('plan', '');
         $interval = (string) $request->query('interval', 'monthly');
 
+        // Which providers this customer may choose between, and which one they
+        // are looking at. A country can offer more than one — Pakistan offers
+        // local methods in rupees AND an international card in dollars — and
+        // which suits a given buyer is not something we can know for them.
+        $registry  = app(\App\Services\Billing\Gateways\GatewayRegistry::class);
+        $available = $registry->availableFor($client->billing_country);
+
+        $via = (string) $request->query('via', '');
+
+        if ($via === '' || ! $registry->isAvailableFor($client->billing_country, $via)) {
+            $via = $available[0]?->key() ?? '';
+        }
+
+        $chosen = $registry->get($via);
+
         try {
-            $price = $this->plans->resolvePrice($planSlug, $interval, $client);
+            $price = $this->plans->resolvePrice(
+                $planSlug,
+                $interval,
+                $client,
+                // Priced in what the CHOSEN provider settles, not in what the
+                // country would default to.
+                $chosen?->currencies()[0] ?? null,
+            );
         } catch (\RuntimeException $e) {
             return redirect()
                 ->route('billing.plans', ['client' => $client->slug])
                 ->with('error', $e->getMessage());
+        }
+
+        // A customer whose gateway hosts its own page never sees the Elements
+        // form. It is Stripe-specific in every part that matters — the card
+        // fields, the payment intent, the confirmation — so rendering it for a
+        // Safepay customer would show a card form that cannot take their money,
+        // and would hide the bank account, JazzCash and Easypaisa they came to
+        // pay with.
+        $checkout = app(\App\Services\Billing\GatewayCheckoutService::class);
+
+        if ($chosen && $chosen->key() !== 'stripe') {
+            $gateway = $chosen;
+
+            return view('billing.checkout-hosted', [
+                'title'        => 'Checkout',
+                'client'       => $client,
+                'plan'         => $price->plan,
+                'price'        => $price,
+                'priceDisplay' => $price->formatted(),
+                // The same money the other way round, so the figure the
+                // customer recognises is always on the page whichever currency
+                // we are charging in. Never itself charged.
+                'priceAlso'    => $this->secondaryPrice($price, $request),
+                'gateway'      => $gateway,
+                'subscription' => $client->currentSubscription(),
+                // Still changeable here: someone who reaches checkout and finds
+                // the wrong currency should be able to fix it on the spot
+                // rather than hunt back through the plans page.
+                'country'      => app(\App\Services\Billing\PricingPresenter::class)
+                                    ->countryContext($request, $client),
+                // What switching costs them, when it costs anything. Shown
+                // before the button, not discovered afterwards.
+                'forfeits'     => $checkout->forfeits($client, $price),
+                'isRenewal'    => $checkout->isRenewal($price, $client->currentSubscription()),
+                // The other ways this customer could pay, so the choice is on
+                // the page rather than decided for them.
+                'options'      => $this->payOptions($available, $client, $planSlug, $interval, $via),
+                'via'          => $via,
+                // Subtotal, tax and total — shown whenever a figure other than
+                // the sticker price is about to be charged, because the moment
+                // to learn that is before the button, not after.
+                'tax'          => app(\App\Services\Billing\TaxService::class)
+                                    ->breakdown($client, (int) $price->unit_amount, $gateway),
+                // Paddle draws its checkout over this page and never navigates;
+                // Safepay is a redirect. The page has to know which, because
+                // one of them needs a script and a click handler and the other
+                // needs a plain form submit.
+                'overlay'      => $gateway instanceof \App\Services\Billing\Gateways\PaddleGateway
+                    ? [
+                        'js'          => (string) config('billing.paddle.js_url'),
+                        // The PUBLIC token. The API key must never appear in a
+                        // view — it would be in the page source of every
+                        // checkout.
+                        'token'       => $gateway->clientToken(),
+                        'environment' => $gateway->environment(),
+                    ]
+                    : null,
+            ]);
         }
 
         $cards = app(\App\Services\Billing\PaymentMethodService::class)->all($client);
@@ -215,7 +295,7 @@ class CheckoutController extends Controller
             'plan'         => $price->plan,
             'price'        => $price,
             'priceDisplay' => app(\App\Services\Billing\PricingPresenter::class)
-                                ->renderPrice($price->unit_amount, $price->interval, $request),
+                                ->renderPrice($price->unit_amount, $price->interval, $request, $price->currency),
             'cards'        => $cards,
             'subscription' => $client->currentSubscription(),
             'stripeKey'    => (string) config('billing.stripe.key'),
@@ -369,6 +449,257 @@ class CheckoutController extends Controller
         $user = $request->user();
 
         return $user?->activeClient ?: $user?->clients()->first();
+    }
+
+    /**
+     * Leave for the gateway's own checkout page.
+     *
+     * POST, not GET, and that is not ceremony: this creates a charge record and
+     * opens a payment session at a third party. On a GET, a browser prefetch, a
+     * back button or a refresh would each raise another one, and the customer
+     * would arrive at a page listing payments they never attempted.
+     */
+    public function pay(Request $request, Client $client)
+    {
+        $this->authorizeWorkspace($request, $client);
+
+        abort_unless(config('billing.checkout.enabled', false), 404);
+
+        // Same two opaque identifiers the Stripe path takes, for the same
+        // reason: no request field in this flow carries money. See the class
+        // docblock — `plan` and `interval`, never `*_id`.
+        $validated = $request->validate([
+            'plan'     => ['required', 'string', 'max:64'],
+            'interval' => ['required', 'string', 'max:32'],
+            // Which provider they picked. Validated against what their country
+            // actually offers, below — never trusted as sent.
+            'via'      => ['nullable', 'string', 'max:24'],
+        ]);
+
+        $registry = app(\App\Services\Billing\Gateways\GatewayRegistry::class);
+        $via      = (string) ($validated['via'] ?? '');
+
+        if ($via === '' || ! $registry->isAvailableFor($client->billing_country, $via)) {
+            $via = $registry->forClient($client)?->key() ?? '';
+        }
+
+        try {
+            $price = $this->plans->resolvePrice(
+                $validated['plan'],
+                $validated['interval'],
+                $client,
+                $registry->get($via)?->currencies()[0] ?? null,
+            );
+        } catch (\RuntimeException $e) {
+            return $request->expectsJson()
+                ? response()->json(['ok' => false, 'message' => $e->getMessage()], 422)
+                : redirect()->route('billing.plans', ['client' => $client->slug])->with('error', $e->getMessage());
+        }
+
+        $checkout = app(\App\Services\Billing\GatewayCheckoutService::class);
+
+        try {
+            $started = $checkout->begin($client, $price, [
+                'success_url'  => route('safepay.return'),
+                'cancel_url'   => route('billing.checkout', [
+                    'client' => $client->slug,
+                    'plan' => $validated['plan'], 'interval' => $validated['interval'], 'via' => $via,
+                ]),
+                'callback_url' => route('safepay.webhook'),
+            ], $via);
+        } catch (\Throwable $e) {
+            Log::error('billing.gateway_checkout_failed', [
+                'client_id' => $client->id,
+                'plan'      => $validated['plan'],
+                'error'     => $e->getMessage(),
+            ]);
+
+            $message = $this->checkoutFailureMessage($request, $e);
+
+            // An overlay checkout asked by fetch() and cannot follow a redirect
+            // — answering one would leave the button spinning with nothing
+            // shown.
+            return $request->expectsJson()
+                ? response()->json(['ok' => false, 'message' => $message], 502)
+                : back()->with('error', $message);
+        }
+
+        AuditLog::record('billing.checkout.started', [
+            'payload' => [
+                'client_id' => $client->id,
+                'plan'      => $price->plan?->slug,
+                'interval'  => $price->interval,
+                'gateway'   => $started['gateway'],
+                'reference' => $started['reference'],
+                'amount'    => $price->unit_amount,
+                'currency'  => strtoupper((string) $price->currency),
+            ],
+        ]);
+
+        $handoff = $started['handoff'];
+
+        // An overlay never navigates: the page that asked stays put and draws
+        // the provider's checkout over itself, so the answer is data rather
+        // than a destination. Only the transaction id crosses — never an
+        // amount, which the browser could edit before using.
+        if ($handoff->isOverlay()) {
+            return response()->json([
+                'ok'          => true,
+                'style'       => 'overlay',
+                'transaction' => $handoff->reference,
+                // OUR reference, so the page can show a receipt for the right
+                // payment afterwards. The provider's transaction id means
+                // nothing to our own records.
+                'reference'   => $started['reference'],
+                'token'       => (string) ($handoff->fields['token'] ?? ''),
+                'environment' => (string) ($handoff->fields['environment'] ?? 'sandbox'),
+            ]);
+        }
+
+        if ($handoff->isPost()) {
+            // A gateway that wants a signed POST rather than a redirect. The
+            // fields are echoed exactly as produced — the signature covers
+            // these values.
+            return response()->view('billing.gateway-handoff', [
+                'action' => $handoff->url,
+                'fields' => $handoff->fields,
+            ]);
+        }
+
+        return redirect()->away($handoff->url);
+    }
+
+    /**
+     * The price expressed in the other currency, for the line under the total.
+     *
+     * Exact when there is a sibling price row — a rupee customer seeing the
+     * dollar figure is reading another price we set, not an estimate. A live
+     * conversion otherwise, and marked approximate by the caller.
+     *
+     * Null when there is nothing useful to add, which is the ordinary case for
+     * a customer already being charged in the platform currency with no local
+     * currency of their own.
+     *
+     * @return array{amount: string, exact: bool}|null
+     */
+    private function secondaryPrice(\App\Models\Billing\PlanPrice $price, Request $request): ?array
+    {
+        $base = strtoupper((string) config('billing.currency', 'usd'));
+
+        if (strtoupper((string) $price->currency) !== $base) {
+            $platform = $price->plan?->priceFor($price->interval, $base);
+
+            return $platform ? ['amount' => $platform->formatted(), 'exact' => true] : null;
+        }
+
+        $geo = app(\App\Services\Geo\GeoLocationService::class)->resolve($request);
+
+        if (! $geo?->hasCurrency() || $geo->isUsd()) {
+            return null;
+        }
+
+        $local = app(\App\Services\Currency\ExchangeRateService::class)
+            ->convertAndFormat($price->unit_amount, $geo->currency);
+
+        // A failed conversion omits the line rather than showing an empty "≈".
+        return $local ? ['amount' => $local, 'exact' => false] : null;
+    }
+
+    /**
+     * What to say when a checkout could not be started.
+     *
+     * TWO PROBLEMS WITH ONE MESSAGE FOR EVERYTHING, and this fixes both.
+     *
+     * First, "please try again in a moment" is a lie when the cause is
+     * configuration. A missing API key or an unset dashboard option will not
+     * resolve itself, and a customer told to retry will retry, fail, and
+     * conclude the product is broken — which, for them, it is.
+     *
+     * Second, the person who CAN fix it learns nothing. A super-admin hitting
+     * this sees the same bland sentence as a customer and has to go digging
+     * through logs for a message the provider already spelled out. So they get
+     * the provider's own words, and everyone else gets an honest apology.
+     */
+    private function checkoutFailureMessage(Request $request, \Throwable $e): string
+    {
+        // Wrong on our side and not going to right itself. Recognised by the
+        // provider's own vocabulary rather than by exception class, because
+        // every one of these arrives as a plain HTTP 400.
+        $configFault = (bool) preg_match(
+            '/payment link|not configured|no api key|unauthorized|forbidden|invalid.*(key|token|credential)/i',
+            $e->getMessage(),
+        );
+
+        if ($request->user()?->isSuperAdmin() || config('app.debug')) {
+            // The real reason, to the only people who can act on it.
+            return 'Checkout could not start: ' . $e->getMessage();
+        }
+
+        return $configFault
+            // No "try again": it cannot work until somebody changes something.
+            ? 'Payments are temporarily unavailable. Our team has been notified — please contact us '
+              . 'and we will get you set up right away.'
+            : 'We could not reach the payment provider. Please try again in a moment.';
+    }
+
+    /**
+     * The ways this customer could pay, described by what they would get.
+     *
+     * Never by provider name — a buyer choosing between "Safepay" and "Paddle"
+     * is choosing between two companies they have not heard of. They are
+     * choosing between paying in rupees with Easypaisa and paying in dollars
+     * with a card, so that is what the options say.
+     *
+     * The PRICE is resolved per option, because it genuinely differs: the same
+     * plan is Rs 22,500 one way and $75 the other, and revealing that after
+     * they click would be the worst possible moment.
+     *
+     * @param  array<int, \App\Services\Billing\Gateways\PaymentGateway>  $available
+     * @return array<int, array<string, mixed>>
+     */
+    private function payOptions(array $available, Client $client, string $plan, string $interval, string $via): array
+    {
+        if (count($available) < 2) {
+            return [];   // no choice to offer
+        }
+
+        $out = [];
+
+        foreach ($available as $gateway) {
+            $currency = $gateway->currencies()[0] ?? null;
+
+            try {
+                $price = $this->plans->resolvePrice($plan, $interval, $client, $currency);
+            } catch (\RuntimeException $e) {
+                // A provider we cannot price for is not an option we can offer.
+                // Skipped silently: the customer does not need to know that one
+                // of several routes has no price row yet.
+                continue;
+            }
+
+            $key   = $gateway->key();
+            $local = in_array($key, ['safepay', 'payfast'], true);
+
+            $out[] = [
+                'key'      => $key,
+                'label'    => $local
+                    ? 'Pay in ' . strtoupper((string) $currency)
+                    : 'Pay by card in ' . strtoupper((string) $currency),
+                'blurb'    => $local
+                    ? 'Card, bank account, JazzCash or Easypaisa'
+                    : 'Card, PayPal, Apple Pay or Google Pay',
+                'methods'  => $local
+                    ? ['card', 'bank', 'jazzcash', 'easypaisa']
+                    : ['card', 'paypal', 'applepay', 'googlepay'],
+                'price'    => $price->formatted(),
+                'selected' => $key === $via,
+                'url'      => route('billing.checkout', [
+                    'client' => $client->slug, 'plan' => $plan, 'interval' => $interval, 'via' => $key,
+                ]),
+            ];
+        }
+
+        return count($out) > 1 ? $out : [];
     }
 
     /** Only a workspace owner may change what the workspace pays. */

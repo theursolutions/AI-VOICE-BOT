@@ -3,93 +3,155 @@
 namespace App\Services\Billing\Gateways;
 
 use App\Models\Client;
+use App\Support\Payments;
 
 /**
  * Which payment provider serves a given customer.
  *
- * The rule is the customer's country, not ours: a business in Pakistan pays in
+ * The rule is the customer's country, not ours. A business in Pakistan pays in
  * rupees through a Pakistani gateway that offers the methods they actually have
  * — bank account, JazzCash, Easypaisa, a local card — and everyone else goes to
- * Stripe. Offering a Karachi SME a Visa-only checkout is how a sale is lost to
+ * Paddle. Offering a Karachi SME a Visa-only checkout is how a sale is lost to
  * a payment method rather than to a price.
  *
- * BOTH COEXIST, deliberately and permanently. This is not a migration from one
- * to the other with a switch to flip: PayFast cannot settle USD and Stripe
- * cannot take Easypaisa, so each is the only option for its own customers. When
- * a foreign entity exists and Stripe becomes available for international sales,
- * nothing here changes — Stripe was never removed.
+ * THE COUNTRY IS THE CUSTOMER'S TO SET. It is seeded from their IP, but they
+ * can change it, and their choice is what is stored on the workspace. A VPN, a
+ * business registered somewhere other than where its founder sits, and a plain
+ * wrong guess are all ordinary — and each one would otherwise route somebody to
+ * a gateway that cannot take their money, with no way to correct it.
  *
- * CONFIGURED, NOT MERELY REGISTERED. A gateway with no credentials is skipped
- * rather than chosen and failed at, so a half-finished PayFast setup cannot
- * break checkout for customers Stripe was already serving.
+ * THREE PROVIDERS COEXIST, and the set is an operator switch rather than a
+ * deploy. Safepay settles PKR and takes Easypaisa; Paddle is Merchant of Record
+ * everywhere else and carries the tax; Stripe is registered and waiting for a
+ * foreign entity. When Stripe becomes available, turning the other two off in
+ * Ops → Payments is the whole migration — no code changes, and nothing was
+ * deleted to get there.
+ *
+ * A GATEWAY MUST BE BOTH ENABLED AND CONFIGURED. Enabled is permission and
+ * configured is capability; a provider missing either is skipped rather than
+ * chosen and failed at, so a half-finished Paddle setup cannot break checkout
+ * for customers Safepay was already serving.
  */
 class GatewayRegistry
 {
-    /**
-     * Countries served by PayFast. ISO-3166 alpha-2.
-     *
-     * A list rather than a single value because a Pakistani gateway is the
-     * right answer for a Pakistani customer regardless of where the business
-     * itself is registered, and because this is the line most likely to need
-     * editing when a second local provider is added.
-     */
-    private const LOCAL_COUNTRIES = ['PK'];
-
-    /** Local providers, in preference order. First one with credentials wins. */
-    private const LOCAL_GATEWAYS = ['safepay', 'payfast'];
-
     /** @var array<int, PaymentGateway> */
     private array $gateways;
 
-    public function __construct(SafepayGateway $safepay, PayFastGateway $payfast, StripeGateway $stripe)
-    {
-        // Order is preference among the local options. Safepay first — it is
-        // the one with credentials — and PayFast stays registered so switching
-        // is a matter of which has keys, not a code change. The country test
-        // below decides who is eligible at all; this only breaks ties.
-        $this->gateways = [$safepay, $payfast, $stripe];
+    public function __construct(
+        SafepayGateway $safepay,
+        PayFastGateway $payfast,
+        PaddleGateway $paddle,
+        StripeGateway $stripe,
+    ) {
+        $this->gateways = [$safepay, $payfast, $paddle, $stripe];
     }
 
     /**
      * The gateway that should take this customer's money.
      *
-     * Falls back to any configured gateway rather than failing, because a
-     * customer with an unrecognised country is still a customer — better a
-     * checkout in the wrong currency they can decline than no checkout at all.
+     * Falls back to any usable gateway rather than failing, because a customer
+     * with an unrecognised country is still a customer — better a checkout in
+     * the wrong currency they can decline than no checkout at all.
      */
     public function forClient(Client $client): ?PaymentGateway
     {
-        $country = strtoupper((string) $client->billing_country);
+        return $this->forCountry($client->billing_country);
+    }
 
-        if (in_array($country, self::LOCAL_COUNTRIES, true)) {
-            // First local gateway that actually has credentials. Listing them
-            // rather than naming one means adding or swapping a Pakistani
-            // provider is a line here, and a half-configured one is skipped
-            // instead of chosen and failed at.
-            foreach (self::LOCAL_GATEWAYS as $key) {
-                $local = $this->get($key);
+    /**
+     * The gateway for a country, independent of any workspace.
+     *
+     * Separate from forClient() because the pricing page has to answer "what
+     * would I pay from Germany" for a visitor with no workspace at all — and
+     * because the country picker changes the answer before anything is saved.
+     */
+    public function forCountry(?string $country): ?PaymentGateway
+    {
+        return $this->availableFor($country)[0] ?? null;
+    }
 
-                if ($local?->isConfigured()) {
-                    return $local;
-                }
+    /**
+     * EVERY gateway a customer in this country may choose between.
+     *
+     * A country is not served by one provider. A Pakistani customer might want
+     * Easypaisa and rupees, or might have an international card and prefer to
+     * pay in dollars — and which of those suits them is not something an IP
+     * address knows. So both are offered and the customer decides; the ORDER is
+     * the recommendation, not the rule.
+     *
+     * Local providers come first where they exist, because they carry the
+     * methods most people in that country actually hold. International ones
+     * follow, and are the whole list everywhere else.
+     *
+     * @return array<int, PaymentGateway> usable only, in preference order
+     */
+    public function availableFor(?string $country): array
+    {
+        $country = strtoupper(trim((string) $country));
+
+        $out = [];
+
+        // EVERY usable local provider for this country. They are genuinely
+        // different from one another — Safepay carries Easypaisa, PayFast
+        // carries a different set — so a customer benefits from the choice.
+        foreach (Payments::LOCAL_COUNTRIES[$country] ?? [] as $key) {
+            $gateway = $this->get($key);
+
+            if ($gateway && $this->isUsable($gateway)) {
+                $out[$key] = $gateway;
             }
         }
 
-        $stripe = $this->get('stripe');
+        // But only ONE international provider. Paddle and Stripe are the same
+        // experience to a customer — a card, in dollars — so offering both asks
+        // them to pick between two things they cannot tell apart. Which one is
+        // an operator's decision, made in Ops → Payments, not theirs.
+        foreach (Payments::INTERNATIONAL as $key) {
+            $gateway = $this->get($key);
 
-        if ($stripe?->isConfigured()) {
-            return $stripe;
+            if ($gateway && $this->isUsable($gateway)) {
+                $out[$key] = $gateway;
+                break;
+            }
         }
 
-        // Nothing preferred is usable — take whatever is.
-        return $this->configured()[0] ?? null;
+        if ($out !== []) {
+            return array_values($out);
+        }
+
+        // Nothing preferred is usable. A country we do not normally serve still
+        // gets SOMETHING, because a checkout with no way to pay is worse than
+        // one in a currency they can decline.
+        return $this->usable();
+    }
+
+    /** Is this specific gateway one the customer is allowed to choose? */
+    public function isAvailableFor(?string $country, string $key): bool
+    {
+        foreach ($this->availableFor($country) as $gateway) {
+            if ($gateway->key() === $key) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** Enabled by an operator AND holding credentials. Both, or it is skipped. */
+    public function isUsable(PaymentGateway $gateway): bool
+    {
+        return Payments::gatewayEnabled($gateway->key()) && $gateway->isConfigured();
     }
 
     /** Currency the customer should be quoted in, given their gateway. */
     public function currencyFor(Client $client): string
     {
-        $gateway = $this->forClient($client);
-        $supported = $gateway?->currencies() ?? [];
+        return $this->currencyForCountry($client->billing_country);
+    }
+
+    public function currencyForCountry(?string $country): string
+    {
+        $supported = $this->forCountry($country)?->currencies() ?? [];
 
         return $supported[0] ?? strtoupper((string) config('billing.currency', 'usd'));
     }
@@ -111,19 +173,25 @@ class GatewayRegistry
         return $this->gateways;
     }
 
-    /** @return array<int, PaymentGateway> */
+    /** Everything holding credentials, whether or not an operator enabled it. */
     public function configured(): array
     {
         return array_values(array_filter($this->gateways, fn (PaymentGateway $g) => $g->isConfigured()));
+    }
+
+    /** Everything that could actually take a payment right now. */
+    public function usable(): array
+    {
+        return array_values(array_filter($this->gateways, fn (PaymentGateway $g) => $this->isUsable($g)));
     }
 
     /**
      * Does this customer's gateway bill them on its own, or must we?
      *
      * The question every part of the subscription lifecycle has to ask before
-     * assuming a renewal will simply happen. On Stripe it will; on PayFast a
-     * period ending means WE have to raise a fresh charge and ask the customer
-     * to complete it.
+     * assuming a renewal will simply happen. On Paddle and Stripe it will; on
+     * Safepay a period ending means WE have to raise a fresh charge and ask the
+     * customer to complete it, which is what the renewal notices exist for.
      */
     public function billsRecurringItself(Client $client): bool
     {

@@ -97,8 +97,8 @@ class OnSiteCheckoutTest extends BillingTestCase
 
         $response->assertOk();
         $response->assertSee('Growth', false);
-        $response->assertSee('$590', false);
-        $response->assertSee('$49.17/mo', false);       // effective monthly
+        $response->assertSee('$750', false);
+        $response->assertSee('$62.50/mo', false);       // effective monthly
         $response->assertSee('You save', false);
         $response->assertSee('4242', false);            // saved card, pre-selected
         $response->assertSee('Order summary', false);
@@ -509,6 +509,8 @@ class OnSiteCheckoutTest extends BillingTestCase
              ->assertOk()
              ->assertSee('SRV-0001', false)
              ->assertSee('Growth (monthly)', false)
+             // The fixture invoice above is 5900 — a Stripe amount, independent
+             // of what the plan is priced at today.
              ->assertSee('$59.00', false)
              ->assertSee('Paid', false);
     }

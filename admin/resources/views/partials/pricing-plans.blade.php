@@ -275,12 +275,12 @@
                 @foreach ($plan['prices'] as $key => $price)
                     <div class="pp-priceblock" data-pp-interval="{{ $key }}" @if($key !== $selected) hidden @endif>
                         <div class="pp-price">
-                            <span class="pp-amount">{{ $price['usd'] }}</span>
+                            <span class="pp-amount">{{ $price['amount'] }}</span>
                             <span class="pp-suffix">{{ $price['suffix'] }}</span>
                         </div>
 
                         @if ($price['local'])
-                            <p class="pp-local">≈ {{ $price['local'] }} {{ $price['suffix'] }}</p>
+                            <p class="pp-local">{{ $price['local_is_exact'] ? '' : '≈ ' }}{{ $price['local'] }} {{ $price['suffix'] }}</p>
                         @endif
 
                         @if ($price['months'] > 1)
