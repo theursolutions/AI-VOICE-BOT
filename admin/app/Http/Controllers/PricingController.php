@@ -59,4 +59,26 @@ class PricingController extends Controller
 
         return $response;
     }
+    /**
+     * Paddle's default payment link target.
+     *
+     * A deliberately bare page: it loads Paddle.js, reads the `_ptxn` Paddle
+     * appended, and opens their overlay for it. No lookup of our own, no
+     * session, no data — because the visitor may be a customer following a
+     * "your card failed" email with no login, and because the transaction is
+     * Paddle's to describe, not ours.
+     *
+     * ONLY THE PUBLIC TOKEN is rendered. The API key must never reach this page;
+     * it is served to anyone who asks.
+     */
+    public function pay(Request $request): View
+    {
+        return view('billing.pay', [
+            'brandName'   => tva_setting('content.brand_name', config('app.name', 'Serve AI')),
+            'clientToken' => (string) config('billing.paddle.client_token'),
+            'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production',
+            'jsUrl'       => (string) config('billing.paddle.js_url'),
+        ]);
+    }
+
 }
