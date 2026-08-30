@@ -52,7 +52,28 @@ class UsageRecorder
                 return;
             }
 
+            // EVERY reply is one metered message.
+            //
+            // This is the unit our cost is actually incurred in. A reply costs
+            // four LLM calls whether it is the first of a session or the two
+            // hundredth, so a session-based allowance put no bound on spend at
+            // all: a plan sold as "1,000 conversations" is 20,000 messages at
+            // twenty turns and 100,000 at a hundred, and the same price had to
+            // cover both. Every tier was underwater past a certain chattiness
+            // and nothing in the product could tell you which customers those
+            // were.
+            $this->usage->record($client, 'messages', 1, (int) $session->project_id);
+
             // First AI reply in this session → one conversation.
+            //
+            // Kept, but as a STATISTIC rather than a limit: plans are still sold
+            // in conversations because that is what a customer can picture, and
+            // the count is what makes "1,000 conversations" checkable against
+            // "20,000 messages". Whether it caps anything is decided entirely by
+            // whether a feature row claims `metric_key = conversations` — see
+            // UsageLimitService::allowanceFor(), which resolves the cap from the
+            // data, so moving the ceiling from one unit to the other is a
+            // migration and not a deploy.
             //
             // Counted after the insert and tested for exactly 1, so the same
             // session can't be counted twice however many turns follow. A

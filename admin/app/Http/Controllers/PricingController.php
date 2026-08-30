@@ -34,6 +34,10 @@ class PricingController extends Controller
         $response = view('pages.pricing', [
             'title'   => 'Pricing',
             'pricing' => $pricing,
+            // A visitor here has no workspace, so their choice lives in a
+            // cookie only — but they should still see their own currency, and
+            // be able to correct a guess we got wrong.
+            'country' => $this->presenter->countryContext($request),
         ]);
 
         // Remember an explicit country choice so the visitor doesn't have to

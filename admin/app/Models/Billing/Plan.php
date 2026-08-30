@@ -143,6 +143,34 @@ class Plan extends Model
         return $this->is_active && in_array($this->type, ['standard', 'custom'], true);
     }
 
+    /**
+     * May this workspace buy this plan?
+     *
+     * Only custom plans are restricted, and they are restricted absolutely: a
+     * custom plan is priced for one workspace's configuration and nobody else's.
+     *
+     * This is a REVENUE control, not a data one. Plan slugs are guessable
+     * (`custom-1-1`), findBySlug() does not filter on is_public, and
+     * isPurchasable() has always allowed `custom` — so without this check any
+     * workspace could subscribe to another's negotiated plan and inherit both
+     * its price and, through the inherited template, its entitlements. A
+     * hand-agreed rate is exactly the kind of plan someone would go looking for.
+     *
+     * Refuses when the plan claims no owner at all rather than treating that as
+     * public: a custom plan with no client_id is a bug, and the safe reading of
+     * a bug in a pricing record is "nobody".
+     */
+    public function isAvailableTo(?\App\Models\Client $client): bool
+    {
+        if ($this->type !== 'custom') {
+            return true;
+        }
+
+        $owner = (int) data_get($this->metadata, 'client_id');
+
+        return $owner > 0 && $client !== null && $owner === (int) $client->id;
+    }
+
     public function hasTrial(): bool
     {
         return (int) $this->trial_days > 0;
@@ -170,11 +198,41 @@ class Plan extends Model
      * way to resolve what a new customer pays — never trust an amount or a
      * price reference supplied by the client.
      */
-    public function priceFor(string $interval): ?PlanPrice
+    /**
+     * The active price for an interval, in a given currency.
+     *
+     * A plan can carry more than one currency: a dollar price everyone pays
+     * through Stripe, and a rupee price minted for the local gateway, which
+     * settles nothing else. So an interval alone no longer identifies a price.
+     *
+     * $currency null means "the platform's own", and falls back to any active
+     * row for the interval when no row matches — without that fallback, a plan
+     * priced only in a local currency would look unpriced, and every existing
+     * single-argument caller would change behaviour on the day a second
+     * currency appeared.
+     *
+     * A currency asked for EXPLICITLY does not fall back: a caller that needs
+     * rupees cannot be handed dollars, because the number would be charged as
+     * though it were rupees.
+     */
+    public function priceFor(string $interval, ?string $currency = null): ?PlanPrice
     {
-        return $this->relationLoaded('prices')
-            ? $this->prices->first(fn (PlanPrice $p) => $p->interval === $interval && $p->is_active)
-            : $this->prices()->where('interval', $interval)->where('is_active', true)->first();
+        $prices = $this->relationLoaded('prices')
+            ? $this->prices->where('is_active', true)
+            : $this->prices()->where('interval', $interval)->where('is_active', true)->get();
+
+        $prices = $prices->filter(fn (PlanPrice $p) => $p->interval === $interval);
+
+        $explicit = $currency !== null;
+        $wanted   = strtolower($currency ?? (string) config('billing.currency', 'usd'));
+
+        $match = $prices->first(fn (PlanPrice $p) => strtolower((string) $p->currency) === $wanted);
+
+        if ($match || $explicit) {
+            return $match;
+        }
+
+        return $prices->first();
     }
 
     /** Intervals this plan can actually be bought on right now. */

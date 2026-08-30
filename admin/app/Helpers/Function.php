@@ -220,3 +220,40 @@ if (! function_exists('tva_theme_class')) {
         return tva_theme($area) === 'dark' ? 'dark' : '';
     }
 }
+
+if (! function_exists('tva_money')) {
+    /**
+     * Format an amount in ITS OWN currency.
+     *
+     * The bug this replaces: a page picked one currency, then formatted every
+     * figure on it with that symbol — including amounts that were in a
+     * different currency entirely. A workspace holding a rupee subscription
+     * while being quoted in dollars had its Rs 22,500 plan rendered as
+     * "$22,500.00", roughly fifty times the truth.
+     *
+     * So the currency travels WITH the amount, always, and is never inferred
+     * from the page. Two figures in two currencies can legitimately sit beside
+     * each other — a subscription bought in rupees next to an add-on priced in
+     * dollars is a real state — and each must say what it is.
+     *
+     * @param  int      $minor     amount in hundredths, whatever the currency
+     * @param  ?string  $currency  ISO code; the platform default when omitted
+     * @param  ?bool    $trimZeros drop a trailing ".00" — nicer on a price card,
+     *                             wrong on an invoice line
+     */
+    function tva_money(int $minor, ?string $currency = null, ?bool $trimZeros = null): string
+    {
+        $code = strtoupper((string) ($currency ?: config('billing.currency', 'usd')));
+
+        $symbol   = app(\App\Services\Currency\ExchangeRateService::class)->symbolFor($code);
+        $decimals = (int) (config("billing.currencies.{$code}.decimals") ?? 2);
+
+        $amount = $minor / 100;
+
+        if ($trimZeros !== false && $amount == floor($amount)) {
+            $decimals = 0;
+        }
+
+        return $symbol . number_format($amount, $decimals);
+    }
+}

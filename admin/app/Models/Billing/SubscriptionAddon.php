@@ -22,7 +22,7 @@ class SubscriptionAddon extends Model
     protected $fillable = [
         'subscription_id', 'client_id', 'plan_id', 'plan_price_id',
         'quantity', 'stripe_item_ref', 'unit_amount', 'currency', 'interval',
-        'cancelled_at', 'metadata',
+        'gateway', 'paddle_item_price_id', 'period_end', 'cancelled_at', 'metadata',
     ];
 
     protected $casts = [
@@ -33,6 +33,7 @@ class SubscriptionAddon extends Model
         'quantity'        => 'integer',
         'unit_amount'     => 'integer',
         'cancelled_at'    => 'datetime',
+        'period_end'      => 'datetime',
         'metadata'        => 'array',
     ];
 
@@ -56,24 +57,60 @@ class SubscriptionAddon extends Model
         return $this->belongsTo(Client::class, 'client_id');
     }
 
-    /** Live add-ons only — a cancelled one must stop granting its allowance. */
+    /**
+     * Add-ons currently granting their allowance.
+     *
+     * `period_end` is the difference between the two kinds of add-on. One
+     * bought as a subscription line item runs for as long as the subscription
+     * does and carries no end date. One bought as a single prorated payment was
+     * only ever paid for up to a date — and once that passes it must stop
+     * granting, or a customer would keep seats they last paid for in March.
+     *
+     * NULL means "no end", not "ended". Written as an explicit OR rather than a
+     * comparison against a null column, which in SQL is never true and would
+     * silently drop every Stripe add-on from the allowance.
+     */
     public function scopeActive($q)
+    {
+        return $q->whereNull('cancelled_at')
+                 ->where('quantity', '>', 0)
+                 ->where(fn ($q) => $q->whereNull('period_end')->orWhere('period_end', '>', now()));
+    }
+
+    /**
+     * Add-ons the customer still holds, expired or not.
+     *
+     * What a RENEWAL must re-charge. `active()` is the wrong question there:
+     * a renewal is raised at or after the period end, by which point a one-off
+     * add-on has just lapsed — using active() would drop exactly the seats the
+     * renewal exists to preserve.
+     */
+    public function scopeHeld($q)
     {
         return $q->whereNull('cancelled_at')->where('quantity', '>', 0);
     }
 
-    /** What this line costs per interval, in USD cents. */
+    /** What this line costs per interval, in minor units of its own currency. */
     public function lineTotal(): int
     {
         return (int) $this->unit_amount * max(0, (int) $this->quantity);
     }
 
+    /**
+     * The line total as the customer reads it.
+     *
+     * The symbol comes from the ROW'S currency. An add-on bought in rupees
+     * rendered with a dollar sign tells somebody they are paying $3,000 a month
+     * for two seats.
+     */
     public function formattedLineTotal(): string
     {
-        $dollars = $this->lineTotal() / 100;
+        $amount = $this->lineTotal() / 100;
+        $symbol = app(\App\Services\Currency\ExchangeRateService::class)
+            ->symbolFor((string) ($this->currency ?: config('billing.currency', 'usd')));
 
-        return '$' . ($dollars == floor($dollars)
-            ? number_format($dollars, 0)
-            : number_format($dollars, 2));
+        return $symbol . ($amount == floor($amount)
+            ? number_format($amount, 0)
+            : number_format($amount, 2));
     }
 }

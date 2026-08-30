@@ -78,6 +78,7 @@
     .tva-ob__ico svg, .tva-ob__ico i { width:16px; height:16px; }
     .tva-ob__btn--plain .tva-ob__ico { background:var(--tva-surface-3,#f1f5f9); color:var(--tva-text-3,#94a3b8); }
 
+    .tva-ch-tile--email { border-top-color:#f59e0b; }
     .tva-ch-tile--instagram { border-top-color:#dc2743; }
     .tva-ch-tile--instagram .tva-ch-tile__icon { background:linear-gradient(45deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%); }
     .tva-ch-tile--facebook_page, .tva-ch-tile--messenger { border-top-color:#1877f2; }
@@ -371,6 +372,117 @@
             @endforelse
         </div>
     </div>
+
+    {{-- ── Email channel — multiple mailboxes per project ──────────────── --}}
+    @if ($project)
+    <div class="tva-ch-card mt-4">
+        <div class="tva-ch-card__head">
+            <div style="width:36px; height:36px; border-radius:10px; background:#fef3c7; color:#92400e; display:flex; align-items:center; justify-content:center;">
+                <i data-lucide="mail" class="w-4 h-4"></i>
+            </div>
+            <div class="flex-1">
+                <div class="tva-ch-card__title">Email mailboxes</div>
+                <div class="text-xs text-slate-500">SMTP + IMAP — connect as many of the project's own mailboxes as you like.</div>
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" data-tva-modal-open="email-account-create">
+                <i data-lucide="plus" class="w-3.5 h-3.5 mr-1 inline"></i> Add mailbox
+            </button>
+        </div>
+
+        <div class="tva-ch-grid">
+            @forelse ($emailAccounts as $acct)
+                <div class="tva-ch-tile tva-ch-tile--email {{ $acct->isEnabled() ? '' : 'is-off' }}">
+                    <div class="flex items-center gap-3">
+                        <div class="tva-ch-tile__icon" style="background:#f59e0b;">
+                            <i data-lucide="mail" class="w-5 h-5"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <div class="tva-ch-tile__name truncate">{{ $acct->displayName() }}</div>
+                            <div class="text-xs text-slate-500 truncate">{{ $acct->from_email }}</div>
+                        </div>
+                        <span class="tva-ch-chip {{ $acct->isEnabled() ? 'is-on' : 'is-off' }}">{{ $acct->isEnabled() ? 'ACTIVE' : 'INACTIVE' }}</span>
+                    </div>
+
+                    @if ($acct->last_error)
+                        <div class="text-[11px]" style="color:#b91c1c;" title="{{ $acct->last_error }}">
+                            ⚠ Last poll failed — {{ \Illuminate\Support\Str::limit($acct->last_error, 70) }}
+                        </div>
+                    @elseif ($acct->last_polled_at)
+                        <div class="text-[11px] text-slate-400">Last checked {{ $acct->last_polled_at->diffForHumans() }}</div>
+                    @else
+                        <div class="text-[11px] text-slate-400">Not polled yet</div>
+                    @endif
+
+                    <div class="tva-ch-tile__foot">
+                        <form method="POST" action="{{ route('channels.email.toggle', ['client' => $client->slug, 'id' => $acct->id]) }}" class="flex-1">
+                            @csrf
+                            <input type="hidden" name="project_id" value="{{ $projectId }}">
+                            <label class="tva-switch" title="{{ $acct->isEnabled() ? 'Disable this mailbox' : 'Enable this mailbox' }}">
+                                <input type="checkbox" onchange="this.form.submit()" @checked($acct->isEnabled())>
+                                <span class="tva-switch__tr"></span>
+                                <span>{{ $acct->isEnabled() ? 'Active' : 'Inactive' }}</span>
+                            </label>
+                        </form>
+                        <button type="button" class="tva-ch-del" style="color:#475569;" data-tva-modal-open="email-account-edit-{{ $acct->id }}" title="Edit mailbox">
+                            <i data-lucide="pencil" class="w-4 h-4"></i>
+                        </button>
+                        <button type="button" class="tva-ch-del" data-tva-modal-open="email-account-delete-{{ $acct->id }}" title="Remove mailbox">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                {{-- Delete modal --}}
+                <div id="email-account-delete-{{ $acct->id }}" class="tva-modal" hidden>
+                    <div class="tva-modal__backdrop" data-tva-modal-close></div>
+                    <div class="tva-modal__panel" style="max-width:420px;">
+                        <div class="tva-modal__head">
+                            <i data-lucide="trash-2" class="w-4 h-4 mr-2 inline" style="color:#b91c1c;"></i>
+                            Remove mailbox
+                            <button type="button" data-tva-modal-close class="ml-auto"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        </div>
+                        <div class="tva-modal__body">
+                            <p>Remove <b>{{ $acct->from_email }}</b>? Inbound email to this mailbox will stop being handled and no further replies will send from it.</p>
+                        </div>
+                        <form method="POST" action="{{ route('channels.email.destroy', ['client' => $client->slug, 'id' => $acct->id]) }}" class="tva-modal__foot">
+                            @csrf
+                            @method('DELETE')
+                            <input type="hidden" name="project_id" value="{{ $projectId }}">
+                            <button type="button" class="btn btn-secondary" data-tva-modal-close>Cancel</button>
+                            <button type="submit" class="btn btn-danger">Remove</button>
+                        </form>
+                    </div>
+                </div>
+
+                {{-- Edit modal — prefilled, passwords blank (kept on file unless replaced) --}}
+                @include('channels._email-account-form', [
+                    'modalId'  => 'email-account-edit-' . $acct->id,
+                    'title'    => 'Edit mailbox',
+                    'action'   => route('channels.email.update', ['client' => $client->slug, 'id' => $acct->id]),
+                    'testUrl'  => route('channels.email.test-existing', ['client' => $client->slug, 'id' => $acct->id]),
+                    'acct'     => $acct,
+                    'submit'   => 'Save changes',
+                ])
+            @empty
+                <div class="text-center py-10 text-slate-400" style="grid-column:1/-1;">
+                    <i data-lucide="mail" class="w-10 h-10 inline mb-2"></i>
+                    <div class="font-medium">No mailbox connected yet.</div>
+                    <div class="text-xs mt-1">Click "Add mailbox" to connect a professional email address (SMTP + IMAP).</div>
+                </div>
+            @endforelse
+        </div>
+    </div>
+
+    {{-- Create modal — same form, blank, passwords required --}}
+    @include('channels._email-account-form', [
+        'modalId'  => 'email-account-create',
+        'title'    => 'Connect a mailbox',
+        'action'   => route('channels.email.store', ['client' => $client->slug]),
+        'testUrl'  => route('channels.email.test', ['client' => $client->slug]),
+        'acct'     => null,
+        'submit'   => 'Connect mailbox',
+    ])
+    @endif
 
     {{-- Onboarding activity: summary card + one tabbed modal. --}}
     @if ($project)
@@ -729,6 +841,48 @@
         if (e.target.closest('#channel-handoff [data-tva-modal-close]')) closeHandoff();
     });
     @endif
+</script>
+
+<script>
+    // "Test connection" on the email-account form(s) — opens IMAP + SMTP
+    // with whatever is currently typed (or, on Edit, falls back to the
+    // stored password server-side when the field is left blank) and reports
+    // back before the form is ever saved.
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.email-account-form__test');
+        if (!btn) return;
+
+        var form = btn.closest('form');
+        var result = form.querySelector('.email-account-form__test-result');
+        var csrf = document.getElementById('csrf-token').content;
+
+        btn.disabled = true;
+        result.style.color = '#64748b';
+        result.textContent = 'Testing…';
+
+        fetch(btn.getAttribute('data-test-url'), {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': csrf, 'Accept': 'application/json' },
+            body: new FormData(form),
+        })
+        .then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+        .then(function (res) {
+            btn.disabled = false;
+            if (res.ok && res.data.ok) {
+                result.style.color = '#15803d';
+                result.textContent = '✓ ' + res.data.message;
+            } else {
+                var errs = res.data.errors || {};
+                result.style.color = '#b91c1c';
+                result.textContent = '✗ ' + (errs.imap ? 'IMAP: ' + errs.imap + ' ' : '') + (errs.smtp ? 'SMTP: ' + errs.smtp : '');
+            }
+        })
+        .catch(function () {
+            btn.disabled = false;
+            result.style.color = '#b91c1c';
+            result.textContent = '✗ Could not reach the server.';
+        });
+    });
 </script>
 
 @if ($project && config('meta.app.wa_config_id') && config('meta.app.id'))

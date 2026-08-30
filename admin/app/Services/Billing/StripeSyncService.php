@@ -95,6 +95,14 @@ class StripeSyncService
             return $price;
         }
 
+        // Rows minted for a local gateway are not Stripe's to hold. They exist
+        // because Safepay settles rupees and nothing else; minting a Stripe
+        // Price for one would create an object no checkout can reach and make
+        // the Plans page show a sync state that means nothing.
+        if (strtolower((string) $price->currency) !== strtolower((string) config('billing.currency', 'usd'))) {
+            return $price;
+        }
+
         $plan = $price->plan ?: $price->plan()->first();
 
         if (! $plan) {

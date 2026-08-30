@@ -5,6 +5,7 @@ namespace App\Services\Billing;
 use App\Models\Billing\Feature;
 use App\Models\Billing\Plan;
 use App\Models\Billing\PlanFeature;
+use App\Models\Billing\PlanGrant;
 use App\Models\Client;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -149,18 +150,35 @@ class PlanFeatureService
         // No plan resolved (pre-billing workspace) — don't gate. The billing
         // backfill gives everyone a plan explicitly; failing open here stops
         // a deploy from locking out existing customers.
-        return $plan === null ? true : $this->planHas($plan, $featureKey);
+        if ($plan === null) {
+            return true;
+        }
+
+        // A grant can switch on something the plan does not include, which is
+        // what makes "give them white-label for the pilot" possible without
+        // moving them to a tier they are not paying for. Checked first so a
+        // grant is never masked by the plan's own answer.
+        if ($this->grantFor($client, $featureKey) !== 0) {
+            return true;
+        }
+
+        return $this->planHas($plan, $featureKey);
     }
 
     /**
-     * The workspace's EFFECTIVE limit: the plan's allowance plus anything
-     * bought as an add-on.
+     * The workspace's EFFECTIVE limit: the plan's allowance, plus anything
+     * bought as an add-on, plus anything a super admin has granted.
      *
-     * This is the integration point that makes add-ons real. Buying five extra
-     * seats has to raise the ceiling from 10 to 15 everywhere the ceiling is
-     * consulted — the sidebar, the member form, the usage meters — not just on
-     * the invoice. Every caller already went through here, so they all inherit
-     * it.
+     * This is the integration point that makes add-ons and grants real. Buying
+     * five extra seats has to raise the ceiling from 10 to 15 everywhere the
+     * ceiling is consulted — the sidebar, the member form, the usage meters —
+     * not just on the invoice. Every caller already went through here, so they
+     * all inherit it, including the ones written after this.
+     *
+     * A GRANT IS DELIBERATELY A THIRD TERM IN THE SAME SUM rather than a
+     * separate notion of entitlement. Anything else means two answers to "what
+     * is this workspace allowed", and the one the product enforces would not be
+     * the one the operator granted.
      *
      * NULL (unlimited) stays unlimited: you cannot top up infinity.
      */
@@ -174,11 +192,61 @@ class PlanFeatureService
 
         $base = $this->planLimit($plan, $featureKey);
 
+        // A grant can make something unlimited that the plan bounded — the
+        // reason it is checked BEFORE the null short-circuit below, which would
+        // otherwise return the plan's own infinity and never look.
+        $grant = $this->grantFor($client, $featureKey);
+
+        if ($grant === PlanGrant::UNLIMITED) {
+            return null;
+        }
+
         if ($base === null) {
             return null;
         }
 
+        // Floored at zero: a negative grant is allowed (it can pull an allowance
+        // down) but the result must never go below "none", or a negative
+        // allowance would compare as smaller than any usage and read as
+        // permanently exhausted rather than as zero.
+        $base = max(0, $base + $grant);
+
         return $base + $this->addonContribution($client, $featureKey);
+    }
+
+    /**
+     * What a super admin has granted this workspace for one feature.
+     *
+     * Returns 0 when there is no grant, and PlanGrant::UNLIMITED when the grant
+     * removes the ceiling entirely.
+     *
+     * Read on every limit check, so the whole client's grants are fetched and
+     * cached together rather than queried per feature — a page rendering a usage
+     * panel asks about six or seven features and would otherwise make a query
+     * for each. Expired grants are excluded by the scope, not here, so a lapsed
+     * grant cannot go on applying at some call site that forgot to check.
+     */
+    public function grantFor(Client $client, string $featureKey): int
+    {
+        $grants = Cache::remember(
+            self::CACHE_PREFIX . 'grants:' . $client->getKey(),
+            self::CACHE_TTL,
+            fn () => PlanGrant::query()
+                ->where('client_id', $client->getKey())
+                ->inForce()
+                ->pluck('value', 'feature_key')
+                ->all()
+        );
+
+        return (int) ($grants[$featureKey] ?? 0);
+    }
+
+    /** After granting, editing or revoking. */
+    public function flushGrants(Client|int $client): void
+    {
+        $id = $client instanceof Client ? $client->getKey() : $client;
+
+        Cache::forget(self::CACHE_PREFIX . 'grants:' . $id);
     }
 
     /**
@@ -247,7 +315,10 @@ class PlanFeatureService
         }
 
         foreach ($gated as $featureKey) {
-            if ($this->planHas($plan, $featureKey)) {
+            // clientHas(), not planHas(): a granted feature has to unlock its
+            // module too, or the entitlement would be visible in the usage panel
+            // and still 402 at the door.
+            if ($this->clientHas($client, $featureKey)) {
                 return true;
             }
         }

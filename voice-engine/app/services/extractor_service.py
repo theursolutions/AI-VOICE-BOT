@@ -244,9 +244,32 @@ class ExtractorService:
             conversation=_format_history(req),
         )
 
-        raw = await self.llm.extract(prompt, LEAD_RESPONSE_SCHEMA)
+        # Per-request brain, when the caller resolved one. Absent for any caller
+        # that has not been updated, which falls back to this service's own env
+        # exactly as before.
+        result = await self.llm.extract(
+            prompt,
+            LEAD_RESPONSE_SCHEMA,
+            provider=req.provider,
+            model=req.model,
+            api_key=req.api_key,
+            base_url=req.base_url,
+        )
+
+        raw = result.data
+
+        # Usage is reported even when nothing was extracted: the call was made
+        # and the tokens were spent, so the caller must still be able to bill it.
+        # Returning zeros here would make a brain that answers "no fields found"
+        # look like a brain that was never called.
+        usage = {
+            "tokens_in": result.tokens_in,
+            "tokens_out": result.tokens_out,
+            "model": result.model,
+        }
+
         if not raw:
-            return ExtractResult(fields=LeadFields(), confidence=0.0)
+            return ExtractResult(fields=LeadFields(), confidence=0.0, **usage)
 
         fields_data = raw.get("fields") or {}
         model_confidence = float(raw.get("confidence", 0.0) or 0.0)
@@ -260,4 +283,4 @@ class ExtractorService:
             logger.warning("LLM returned malformed fields: %r", cleaned)
             fields = LeadFields()
 
-        return ExtractResult(fields=fields, confidence=confidence)
+        return ExtractResult(fields=fields, confidence=confidence, **usage)

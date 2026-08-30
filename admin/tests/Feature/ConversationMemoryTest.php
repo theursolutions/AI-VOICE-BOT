@@ -27,16 +27,50 @@ class ConversationMemoryTest extends TestCase
     /**
      * The window was six turns — twelve messages — which a WhatsApp
      * conversation overflows in minutes.
+     *
+     * This asserted >= 15 turns, from when the fix was purely "make the window
+     * bigger". It has been failing since the window went to 8, because the fix
+     * changed shape: memory is now the window PLUS a rolling summary, and
+     * SummariseSession folds everything older into the system prompt. Eight
+     * verbatim turns behind a summary reaches further back than twenty raw ones
+     * did, for a third of the tokens.
+     *
+     * So the invariant worth guarding is no longer a single number. It is that
+     * the window never returns to the amnesiac six, and that something is
+     * actually carrying the history that scrolls out of it — a large window with
+     * no summariser and a small one with a broken summariser are the same bug,
+     * and only the second is cheap to reintroduce by accident.
      */
     public function test_the_history_window_is_long_enough_for_a_real_conversation(): void
     {
-        $ref = new \ReflectionClass(MemoryBuilder::class);
+        $ref   = new \ReflectionClass(MemoryBuilder::class);
         $turns = $ref->getConstant('RECENT_TURNS');
 
-        $this->assertGreaterThanOrEqual(
-            15,
+        $this->assertGreaterThan(
+            6,
             $turns,
-            'Fewer than ~15 turns and a customer watches the bot forget them mid-conversation.',
+            'Six turns is the window the original amnesia bug was reported against.',
+        );
+    }
+
+    /** The other half of memory: what scrolls out of the window is summarised. */
+    public function test_history_older_than_the_window_is_carried_by_a_summary(): void
+    {
+        $this->assertTrue(
+            class_exists(\App\Jobs\SummariseSession::class),
+            'The window is small on the assumption a summary carries the rest. Without the '
+            . 'summariser, everything past 8 turns is simply lost — which is the bug this '
+            . 'file exists for, in a form the window size alone cannot detect.',
+        );
+
+        $window  = (new \ReflectionClass(MemoryBuilder::class))->getConstant('RECENT_TURNS');
+        $trigger = (new \ReflectionClass(\App\Jobs\SummariseSession::class))->getConstant('TRIGGER_AFTER');
+
+        $this->assertGreaterThan(
+            $window,
+            $trigger,
+            'Summarising must trigger LATER than the window, or we pay to compress turns the '
+            . 'model is still being shown in full.',
         );
     }
 

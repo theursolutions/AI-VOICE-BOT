@@ -37,6 +37,17 @@ class Kernel extends ConsoleKernel
             ->everySixHours()
             ->withoutOverlapping();
 
+        // The safety net under the Paddle webhook.
+        //
+        // A webhook is one delivery to one URL, and every way it can fail ends
+        // identically: the customer paid and their plan never arrived. This asks
+        // Paddle about anything still pending and settles what it confirms — so
+        // a missed delivery costs a customer minutes rather than a support
+        // ticket. Hourly, and a no-op when nothing is pending.
+        $schedule->command('paddle:reconcile')
+            ->hourly()
+            ->withoutOverlapping();
+
         // Warn → expire → warn again → report purge queue.
         // This is a JANITOR, NOT A GATE: access is decided live by
         // Subscription::grantsAccess() comparing free_ends_at to the clock, so
@@ -44,6 +55,20 @@ class Kernel extends ConsoleKernel
         // emails and the status column lag. Early morning, before support hours.
         $schedule->command('billing:lifecycle')
             ->dailyAt('06:15')
+            ->withoutOverlapping();
+
+        // Renewal notices, for customers whose gateway cannot charge them
+        // automatically. Later than the lifecycle sweep so a subscription that
+        // has just lapsed is already marked as such and is not asked to renew
+        // something it no longer holds.
+        //
+        // 09:30 local rather than dawn: this reaches people on WhatsApp, and a
+        // billing reminder at six in the morning is an intrusion whatever it
+        // says. Once a day — the notice is claimed per (subscription, period,
+        // offset, channel), so a second run would send nothing anyway, but there
+        // is no reason to ask.
+        $schedule->command('billing:renewal-notices')
+            ->dailyAt('09:30')
             ->withoutOverlapping();
 
         // ── Meta channels ────────────────────────────────────────────
@@ -81,6 +106,16 @@ class Kernel extends ConsoleKernel
         // MAXMIND_LICENSE_KEY set (pricing then simply shows USD only).
         $schedule->command('geoip:update')
             ->weeklyOn(2, '04:10')
+            ->withoutOverlapping();
+
+        // ── Email channel ────────────────────────────────────────────
+        //
+        // IMAP has no webhook, so an inbound email only exists to the CRM
+        // once something asks the mailbox for it. Every 2 minutes matches
+        // config('mail_channel.poll_interval_minutes') — change both
+        // together. A no-op when no mailbox is connected/enabled.
+        $schedule->command('email:poll-inbound')
+            ->everyTwoMinutes()
             ->withoutOverlapping();
     }
 

@@ -46,6 +46,45 @@
         border-radius:999px; background:#ecfdf3; color:#067647; border:1px solid #abefc6;
     }
 
+    /* ── Build your own ──
+       Deliberately not card-shaped: a fourth thing that looks like the three
+       plan cards invites comparison on price, which is the one axis it has no
+       number for until you configure it. */
+    .pk-byo {
+        display:flex; align-items:center; gap:16px; text-decoration:none;
+        margin:0 auto 26px; max-width:760px; padding:18px 22px; border-radius:16px;
+        border:1px solid #c7d2fe; background:linear-gradient(135deg,#f5f3ff,#eef2ff 60%,#fff);
+        box-shadow:0 1px 2px rgba(16,24,40,.04), 0 18px 40px -28px rgba(99,102,241,.55);
+        transition:transform .18s, box-shadow .18s, border-color .18s;
+    }
+    .pk-byo:hover {
+        transform:translateY(-2px); border-color:#a5b4fc;
+        box-shadow:0 1px 2px rgba(16,24,40,.05), 0 24px 50px -26px rgba(99,102,241,.7);
+    }
+    .pk-byo__icon {
+        flex:none; width:42px; height:42px; border-radius:11px; display:flex;
+        align-items:center; justify-content:center; color:#fff;
+        background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        box-shadow:0 6px 16px -8px rgba(99,102,241,.9);
+    }
+    .pk-byo__icon svg { width:19px; height:19px; }
+    .pk-byo__text { flex:1; font-size:12.5px; color:#667085; line-height:1.6; }
+    .pk-byo__text strong { display:block; font-size:15.5px; font-weight:800; color:#0b1220; letter-spacing:-.01em; margin-bottom:3px; }
+    .pk-byo__go {
+        flex:none; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+        font:750 12.5px system-ui,sans-serif; color:#4f46e5;
+    }
+    .pk-byo__go svg { width:14px; height:14px; }
+    @media (max-width:620px) {
+        .pk-byo { flex-wrap:wrap; gap:12px; }
+        .pk-byo__go { width:100%; justify-content:flex-end; }
+    }
+
+    html.dark .pk-byo { background:linear-gradient(135deg,#1e1b4b,#1e293b 70%); border-color:#4f46e5; }
+    html.dark .pk-byo__text strong { color:#f8fafc; }
+    html.dark .pk-byo__text { color:#a5b4fc; }
+    html.dark .pk-byo__go { color:#c7d2fe; }
+
     /* ── Cards ── */
     .pk-grid {
         display:grid; gap:20px; margin-top:34px; align-items:stretch;
@@ -173,6 +212,18 @@
     </div>
 @endif
 
+{{-- Above the prices, not beside them: the currency every figure below is
+     quoted in is decided here, so it has to be read before them, not found
+     afterwards. --}}
+<div class="intro-y" style="max-width:620px;margin:0 auto 18px">
+    @include('billing._country-picker', [
+        'countryAction'   => $country['action'],
+        'countryCurrent'  => $country['current'],
+        'countryDetected' => $country['detected'],
+        'countryCurrency' => $country['currency'],
+    ])
+</div>
+
 <div class="pk-head intro-y">
     <h1>{{ $currentPlan ? 'Change your plan' : 'Choose your plan' }}</h1>
     <p>
@@ -185,6 +236,27 @@
         @endif
     </p>
 </div>
+
+{{-- Build your own plan, ABOVE the ladder.
+     It was a quiet link underneath the cards, which is the wrong place for the
+     one option that fits a workspace none of the fixed tiers do: by the time
+     someone has read three cards and rejected all of them, they have usually
+     picked the least-bad one instead. Leading with it costs a comparison shopper
+     nothing — the cards are directly below — and saves everyone else the
+     comparison entirely. --}}
+<a href="{{ route('billing.custom', ['client' => $client->slug]) }}" class="pk-byo intro-y">
+    {{-- `sliders`, not `sliders-horizontal`. The latter exists in the lucide
+         package but NOT in the built bundle this app actually loads
+         (public/assets/dist/js/app.js), so it rendered as nothing at all.
+         Check any new icon against the BUNDLE, not against node_modules. --}}
+    <span class="pk-byo__icon"><i data-lucide="sliders"></i></span>
+    <span class="pk-byo__text">
+        <strong>Build your own plan</strong>
+        Set your own conversations, team size and AI agents, and we price it from what it costs to
+        run &mdash; for when none of the plans below is the right shape.
+    </span>
+    <span class="pk-byo__go">Start <i data-lucide="arrow-right"></i></span>
+</a>
 
 @if (count($intervals) > 1)
     <div class="intro-y" style="display:flex;justify-content:center;margin-bottom:4px">
@@ -226,7 +298,7 @@
             @foreach ($planCard['prices'] as $key => $price)
                 <div class="pk-block" data-pk="{{ $key }}" @if($key !== $selected) hidden @endif>
                     <div class="pk-price">
-                        <span class="pk-price__amt">{{ $price['usd'] }}</span>
+                        <span class="pk-price__amt">{{ $price['amount'] }}</span>
                         <span class="pk-price__per">/{{ $price['months'] > 1 ? 'yr' : 'mo' }}</span>
                     </div>
 
@@ -238,8 +310,14 @@
                         @endif
                     </div>
 
+                    {{-- The same money the other way round. Exact when it is
+                         another real price of ours (a rupee customer seeing the
+                         dollar figure), approximate when it is a live
+                         conversion — and the "≈" is the difference. --}}
                     @if ($price['local'])
-                        <div class="pk-price__local">≈ {{ $price['local'] }}</div>
+                        <div class="pk-price__local">
+                            {{ $price['local_is_exact'] ? '' : '≈ ' }}{{ $price['local'] }}
+                        </div>
                     @endif
 
                     @if ($price['savings_label'])
@@ -248,7 +326,12 @@
 
                     @php
                         $sameExact = $isCurrentPlan && $currentInterval === $key;
-                        $isUpgrade = $currentPrice && $price['usd_cents'] > $currentPrice->unit_amount;
+                        // Only meaningful within one currency. A rupee figure
+                        // set against a dollar one compares 22500 to 7500 and
+                        // calls a downgrade an upgrade.
+                        $isUpgrade = $currentPrice
+                            && strtoupper((string) $currentPrice->currency) === $price['amount_currency']
+                            && $price['amount_minor'] > $currentPrice->unit_amount;
                     @endphp
 
                     <div class="pk-cta">
@@ -288,6 +371,23 @@
         </div>
     @endforeach
 </div>
+
+{{-- The relationship between the two volume figures.
+     Both numbers are on every card, and without this the pair reads as a
+     contradiction — "1,000 conversations" next to "20,000 messages" invites the
+     question of which one actually runs out. Stating the divisor, and that it is
+     theirs to move, turns two numbers into one sentence. --}}
+<p class="pk-note intro-y" style="text-align:center;font-size:12.5px;color:#64748b;line-height:1.65;margin:18px auto 0;max-width:64ch;">
+    @if ($perConversation === null)
+        Your plan places no limit on how long the assistant keeps answering a single conversation.
+    @else
+        Conversation counts assume <strong>{{ $perConversation }} AI replies</strong> each.
+        After that a conversation moves to your inbox for a person to answer.
+    @endif
+    You can change this on your
+    <a href="{{ route('billing.index', ['client' => $client->slug]) }}" style="color:#0b6e5b;font-weight:600;">billing page</a>,
+    which raises or lowers how many conversations your messages cover.
+</p>
 
 {{-- ── Add-ons ──────────────────────────────────────────────────────
      Top up one thing instead of moving up a whole tier. Shown here as well

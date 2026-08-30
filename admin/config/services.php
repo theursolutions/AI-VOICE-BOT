@@ -307,6 +307,15 @@ return [
         |                  largest block in the prompt. Passages arrive ranked,
         |                  so the tail is the most expensive and least relevant.
         |
+        | passage_score_ratio
+        |                  how far below the BEST passage a weaker one may score
+        |                  and still be sent, as a fraction of it. max_passages
+        |                  is a flat cap and pays for three chunks even when the
+        |                  retriever found one good match and two near-misses;
+        |                  this drops the near-misses. Relative, not absolute,
+        |                  because BM25 scores mean different things in a small
+        |                  knowledge base and a large one. 0 disables it.
+        |
         | summarise_after  unsummarised turns that accumulate before the
         |                  summariser runs. Keep this ABOVE recent_turns —
         |                  below it and you pay to summarise messages the window
@@ -315,8 +324,27 @@ return [
         | Raise recent_turns if long conversations start losing coherence;
         | lower it if cost matters more than the last few turns of nuance.
         */
-        'recent_turns'    => env('LLM_RECENT_TURNS', 8),
-        'max_passages'    => env('LLM_MAX_PASSAGES', 3),
-        'summarise_after' => env('LLM_SUMMARISE_AFTER', 12),
+        'recent_turns'        => env('LLM_RECENT_TURNS', 8),
+        'max_passages'        => env('LLM_MAX_PASSAGES', 3),
+        'passage_score_ratio' => env('LLM_PASSAGE_SCORE_RATIO', 0.45),
+        'summarise_after'     => env('LLM_SUMMARISE_AFTER', 12),
+
+        /*
+        | Lead extraction runs after EVERY assistant turn and was, before these
+        | two knobs, the second most expensive call in the system — a fixed
+        | ~2.6k-char instruction plus twenty messages of history, re-deriving
+        | fields the previous run had already stored.
+        |
+        | extract_overlap  messages of already-seen history to resend ahead of
+        |                  the new ones, so a short answer still arrives with the
+        |                  question that prompted it. 0 sends only what is new,
+        |                  which loses the context for "December" or "yes".
+        |
+        | extract_gate     skip the call entirely when nothing in the new user
+        |                  turns could carry a lead field. Set to false to
+        |                  extract on every turn regardless.
+        */
+        'extract_overlap' => env('LLM_EXTRACT_OVERLAP', 2),
+        'extract_gate'    => env('LLM_EXTRACT_GATE', true),
     ],
 ];

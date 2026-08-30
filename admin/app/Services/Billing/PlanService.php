@@ -4,6 +4,7 @@ namespace App\Services\Billing;
 
 use App\Models\Billing\Plan;
 use App\Models\Billing\PlanPrice;
+use App\Models\Client;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -97,8 +98,12 @@ class PlanService
      *
      * @throws \RuntimeException when the selection isn't purchasable.
      */
-    public function resolvePrice(string $planSlug, string $interval): PlanPrice
-    {
+    public function resolvePrice(
+        string $planSlug,
+        string $interval,
+        ?Client $for = null,
+        ?string $currency = null,
+    ): PlanPrice {
         $plan = $this->findBySlug($planSlug);
 
         if (! $plan) {
@@ -109,17 +114,49 @@ class PlanService
             throw new \RuntimeException("Plan [{$planSlug}] is not purchasable.");
         }
 
+        // Custom plans belong to one workspace. Enforced HERE rather than in each
+        // controller because this method is the single point every purchase path
+        // funnels through — checkout, subscribe and swap all arrive at it — and a
+        // rule spread across three call sites is a rule that will be missing from
+        // the fourth. See Plan::isAvailableTo().
+        //
+        // $for is nullable so internal callers with no workspace in hand (a
+        // console command, a webhook replay) still work; it only ever tightens
+        // the check when a workspace IS known.
+        if ($for !== null && ! $plan->isAvailableTo($for)) {
+            throw new \RuntimeException("Plan [{$planSlug}] is not available to this workspace.");
+        }
+
         if (! in_array($interval, (array) config('billing.intervals.supported', []), true)) {
             throw new \RuntimeException("Unsupported billing interval [{$interval}].");
         }
 
-        $price = $plan->priceFor($interval);
+        // The currency the settling gateway can actually take. Safepay settles
+        // rupees and nothing else, so a rupee customer must be given the rupee
+        // row — handing it the dollar row would send `7500` to a gateway that
+        // reads it as Rs 7,500 and charge a $75 plan at a fiftieth of its price.
+        //
+        // Passed in when the customer has CHOSEN a provider: a Pakistani buyer
+        // may pick the international card option, and then the rupee row is the
+        // wrong one even though their country would normally select it.
+        $currency ??= $for ? $this->currencyFor($for) : null;
+
+        $price = $plan->priceFor($interval, $currency);
 
         if (! $price) {
-            throw new \RuntimeException("Plan [{$planSlug}] has no active {$interval} price.");
+            throw new \RuntimeException(
+                $currency
+                    ? "Plan [{$planSlug}] has no active {$interval} price in {$currency}. "
+                        . 'Run `php artisan billing:local-prices` to mint one.'
+                    : "Plan [{$planSlug}] has no active {$interval} price."
+            );
         }
 
-        if (! $price->isSyncedToStripe()) {
+        // Only demanded of the customers who will actually pay through Stripe.
+        // A rupee price has no Stripe Price behind it and never will, and
+        // requiring one would make a business with no Stripe account — which is
+        // exactly why the local gateway exists — unable to sell anything at all.
+        if ($currency === null && $this->paysThroughStripe($for) && ! $price->isSyncedToStripe()) {
             throw new \RuntimeException(
                 "Plan [{$planSlug}] {$interval} price is not synced to Stripe. " .
                 'Sync it from Super Admin → Billing → Plans before selling it.'
@@ -127,6 +164,36 @@ class PlanService
         }
 
         return $price;
+    }
+
+    /**
+     * The currency a workspace is billed in, or null when it cannot be decided.
+     *
+     * Null — not a guess — when no gateway is configured at all, so the caller
+     * falls back to the platform currency rather than being told a workspace
+     * pays in a currency nothing can charge.
+     */
+    private function currencyFor(?Client $client): ?string
+    {
+        if (! $client) {
+            return null;
+        }
+
+        return app(\App\Services\Billing\Gateways\GatewayRegistry::class)->forClient($client)?->currencies()[0] ?? null;
+    }
+
+    /** Will this workspace's money arrive through Stripe? */
+    private function paysThroughStripe(?Client $client): bool
+    {
+        if (! $client) {
+            // No workspace in hand — a console command, a webhook replay. Keep
+            // the stricter historical behaviour rather than quietly relaxing a
+            // check for every internal caller.
+            return true;
+        }
+
+        return app(\App\Services\Billing\Gateways\GatewayRegistry::class)
+            ->forClient($client)?->key() === 'stripe';
     }
 
     // ── Mutations (Super Admin) ──────────────────────────────────────
@@ -181,9 +248,14 @@ class PlanService
      */
     public function addPrice(Plan $plan, string $interval, int $unitAmountCents, array $extra = []): PlanPrice
     {
-        if ($plan->priceFor($interval)) {
+        $currency = strtolower((string) ($extra['currency'] ?? config('billing.currency', 'usd')));
+
+        // Per CURRENCY, not per interval: a plan legitimately carries a dollar
+        // monthly price and a rupee one, and the guard would otherwise refuse
+        // the second.
+        if ($plan->priceFor($interval, $currency)) {
             throw new \RuntimeException(
-                "Plan [{$plan->slug}] already has an active {$interval} price. " .
+                "Plan [{$plan->slug}] already has an active {$interval} price in " . strtoupper($currency) . '. ' .
                 'Use changePrice() so existing subscribers are grandfathered.'
             );
         }
@@ -191,7 +263,7 @@ class PlanService
         $price = DB::transaction(fn () => PlanPrice::create(array_merge([
             'plan_id'        => $plan->id,
             'interval'       => $interval,
-            'currency'       => config('billing.currency', 'usd'),
+            'currency'       => $currency,
             'unit_amount'    => $unitAmountCents,
             'is_active'      => true,
             'effective_from' => now(),

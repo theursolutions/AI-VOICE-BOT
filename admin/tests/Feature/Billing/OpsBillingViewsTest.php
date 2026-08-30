@@ -58,7 +58,7 @@ class OpsBillingViewsTest extends BillingTestCase
         app(\App\Services\Billing\SubscriptionService::class)->startFreeWindow($client);
 
         // An ANNUAL subscription must contribute its monthly equivalent
-        // ($590/yr → $49), not its full sticker price.
+        // ($750/yr → $62.50), not its full sticker price.
         $this->postWebhook(
             $this->subscriptionEvent('customer.subscription.created', $client, 'active', 'growth', 'annually')
         )->assertOk();
@@ -67,14 +67,15 @@ class OpsBillingViewsTest extends BillingTestCase
              ->get(route('ops.billing.subscriptions.index'))
              ->assertOk();
 
-        // MRR normalises the annual price to a month: $590/yr → $49/mo. That's
+        // MRR normalises the annual price to a month: $750/yr → $62.50/mo. That's
         // committed monthly revenue, which is the number worth watching.
         $response->assertSee('Est. MRR', false);
-        $response->assertSee('$49', false);
+        // Rendered to whole dollars, so $62.50 shows as $63.
+        $response->assertSee('$63', false);
 
         // The row's Amount column still shows what is actually charged, so the
         // two figures are both present and mean different things.
-        $response->assertSee('$590.00', false);
+        $response->assertSee('$750.00', false);
     }
 
     public function test_the_plans_screen_warns_when_prices_are_not_synced_to_stripe(): void
@@ -106,7 +107,7 @@ class OpsBillingViewsTest extends BillingTestCase
         $this->get(route('billing.index', ['client' => $client->slug]))
              ->assertOk()
              ->assertSee('Growth', false)
-             ->assertSee('$59', false)
+             ->assertSee('$75', false)
              ->assertSee('charged in USD', false);
 
         // 3. Expired free window (the degraded read-only state).

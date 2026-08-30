@@ -21,11 +21,19 @@
     <h2 class="text-lg font-medium mr-auto">Billing &amp; plan</h2>
 
     @if ($isOwner && $canBuy)
-        {{-- The upgrade path the customer is most likely to want, kept at the
-             top of the page where it's found without scrolling. --}}
+        {{-- Two separate intentions, so two buttons.
+             "I need one more seat" and "I need a bigger plan" are different
+             problems, and routing the first through the plan ladder made the
+             customer do the matching themselves — then land on a page that told
+             them to choose a plan they already had. --}}
+        @if ($sub && ! $sub->isFree())
+            <a href="{{ route('billing.addons', ['client' => $client->slug]) }}" class="bl-btn bl-btn--ghost">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Add-ons
+            </a>
+        @endif
+
         <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary">
-            <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
-            {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Upgrade plan' }}
+            <i data-lucide="arrow-up-circle" class="w-4 h-4"></i> Upgrade plan
         </a>
     @endif
 </div>
@@ -43,18 +51,19 @@
     </div>
 @endif
 
-@if ($degraded)
-    <div class="bl-alert bl-alert--warn">
-        <i data-lucide="pause-circle" class="w-5 h-5" style="flex:none"></i>
+{{-- The "your agent is paused" banner was removed at the owner's request: it
+     read as an alarm on a page people open to check a figure, and the state it
+     announced is already legible from the status pill on the plan card.
+
+     The past-due case is the one that still needs a nudge, because it is the
+     only one the customer can fix and the fix is one click away — so it stays,
+     as an ordinary prompt rather than a warning about a paused product. --}}
+@if ($sub?->isPastDue())
+    <div class="bl-alert bl-alert--info">
+        <i data-lucide="credit-card" class="w-5 h-5" style="flex:none"></i>
         <div>
-            <strong>Your agent is paused</strong>
-            @if ($sub->isExpired())
-                Your free access ended{{ $sub->free_ends_at ? ' on ' . $sub->free_ends_at->format('j M Y') : '' }}.
-                Everything is still here — leads, conversations and settings are untouched and exportable.
-                @if ($sub->purge_after) Data is kept until {{ $sub->purge_after->format('j M Y') }}. @endif
-            @elseif ($sub->isPastDue())
-                We couldn’t take your last payment. Update your card to resume service.
-            @endif
+            <strong>Your last payment didn’t go through</strong>
+            Update your card below and everything carries on as normal.
         </div>
     </div>
 @elseif ($sub?->onGracePeriod())
@@ -100,7 +109,7 @@
 
             @if ($price && $priceDisplay)
                 <div class="bl-plan__price">
-                    <div class="bl-plan__amount">{{ $priceDisplay['usd'] }}</div>
+                    <div class="bl-plan__amount">{{ $priceDisplay['amount'] }}</div>
                     <div class="bl-plan__per">
                         per {{ $price->months() > 1 ? strtolower($price->intervalLabel()) : 'month' }} · USD
                     </div>
@@ -160,13 +169,10 @@
 
         @if ($isOwner)
             <div class="bl-plan__cta">
-                @if ($canBuy)
-                    <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary">
-                        <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
-                        {{ $sub?->stripe_subscription_ref ? 'Change plan' : 'Choose a plan' }}
-                    </a>
-                @endif
-
+                {{-- No plan button here. It duplicated the one in the page
+                     header two screens above, so the same action appeared twice
+                     with different wording. Cancel and resume stay, because this
+                     is the only place they belong. --}}
                 @if ($sub?->onGracePeriod() || $sub?->cancel_at_period_end)
                     <form method="POST" action="{{ route('billing.resume', ['client' => $client->slug]) }}">
                         @csrf
@@ -284,6 +290,91 @@
             @endif
         </div>
 
+        {{-- Conversation length.
+             The bridge between the two units. The plan is sold in
+             conversations and metered in messages, so this control is what
+             makes "1,000 conversations" a real number rather than a hope: it
+             is the divisor. Shown next to the meters because that is where
+             someone asks "why is my allowance going so fast". --}}
+        @php
+            $msgAllowance = data_get($usage, 'messages.allowance');
+            $msgUnlimited = (bool) data_get($usage, 'messages.unlimited', false);
+            $convCount    = data_get($usage, 'conversations.used', 0);
+            // Null perConversation is a plan with no automatic handoff, so
+            // there is no divisor and no conversation estimate to show.
+            $estConvs     = ($msgAllowance && $perConversation)
+                ? intdiv((int) $msgAllowance, (int) $perConversation)
+                : null;
+        @endphp
+        <div class="bl-card intro-y">
+            <div class="bl-card__head">
+                <i data-lucide="message-square" class="w-4 h-4" style="color:#6366f1"></i>
+                <div class="bl-card__title">Conversation length</div>
+            </div>
+
+            <div style="padding:4px 0 2px;">
+                <p style="font-size:13px;color:#475569;line-height:1.65;margin:0 0 14px;">
+                    @if ($perConversation === null)
+                        Your plan places <strong>no limit</strong> on how long the assistant keeps
+                        answering, so conversations are only handed over when the AI decides to or
+                        someone on your team steps in.
+                    @else
+                        Each conversation gets
+                        <strong>{{ $perConversation }} AI replies</strong>.
+                        After that the assistant stops and the conversation moves to your inbox
+                        for a person to answer — it is never left unanswered.
+                    @endif
+                    @if ($estConvs)
+                        At this setting your plan covers about
+                        <strong>{{ number_format($estConvs) }} conversations</strong>
+                        ({{ number_format((int) $msgAllowance) }} messages) a month.
+                    @elseif ($msgUnlimited)
+                        Your plan has no message limit, so this only controls when a person steps in.
+                    @endif
+                </p>
+
+                @if (! empty($isOwner))
+                    <form method="POST" action="{{ route('billing.conversation-budget', ['client' => $client->slug]) }}"
+                          style="display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;">
+                        @csrf
+                        <div style="display:flex;flex-direction:column;gap:5px;">
+                            <label for="mpc" style="font:600 11.5px system-ui,sans-serif;color:#334155;">
+                                AI replies per conversation
+                            </label>
+                            <input type="number" name="messages_per_conversation" id="mpc"
+                                   value="{{ old('messages_per_conversation', $perConversation ?? \App\Services\Conversation\ConversationBudget::DEFAULT_LIMIT) }}"
+                                   min="{{ $budgetBounds['min'] }}" max="{{ $budgetBounds['max'] }}" required
+                                   style="width:120px;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;
+                                          font:13px ui-monospace,Menlo,monospace;color:#0f172a;">
+                        </div>
+                        <button type="submit"
+                                style="background:#0b6e5b;color:#fff;border:none;border-radius:8px;padding:9px 16px;
+                                       font:650 12.5px system-ui,sans-serif;cursor:pointer;">
+                            Save
+                        </button>
+                        <span style="font-size:11.5px;color:#94a3b8;">
+                            {{ $budgetBounds['min'] }}&ndash;{{ $budgetBounds['max'] }};
+                            default {{ $budgetBounds['default'] }}
+                        </span>
+                    </form>
+
+                    @error('messages_per_conversation')
+                        <p style="margin:10px 0 0;font-size:12px;color:#b91c1c;line-height:1.5;">{{ $message }}</p>
+                    @enderror
+                @else
+                    <p style="font-size:11.5px;color:#94a3b8;margin:0;">
+                        Only the workspace owner can change this.
+                    </p>
+                @endif
+
+                @if ($convCount)
+                    <p style="font-size:11.5px;color:#94a3b8;margin:12px 0 0;">
+                        {{ number_format($convCount) }} conversations so far this period.
+                    </p>
+                @endif
+            </div>
+        </div>
+
         {{-- What the active plan includes --}}
         @if (! empty($included))
             <div class="bl-card intro-y">
@@ -344,7 +435,11 @@
                                             {{ $inv['status'] }}
                                         </span>
                                     </td>
-                                    <td class="bl-amt">${{ number_format($inv['total'] / 100, 2) }}</td>
+                                    {{-- Invoices come from Stripe and carry their
+                                         own currency; falling back to the
+                                         platform's is right for a historical
+                                         row that predates the field. --}}
+                                    <td class="bl-amt">{{ tva_money((int) $inv['total'], $inv['currency'] ?? null, false) }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -369,7 +464,7 @@
                 $blAddonBlocked = match (true) {
                     ! $subscription                          => 'Choose a plan first — add-ons sit on top of a paid subscription.',
                     $subscription->isFree()                  => 'Add-ons are available on paid plans. Upgrade to add extra seats or agents.',
-                    ! $subscription->stripe_subscription_ref => 'Your subscription isn\'t set up with our payment provider yet.',
+                    ! $subscription->stripe_subscription_ref => 'Your subscription is still being set up with our payment provider — add-ons unlock shortly.',
                     $subscription->isPastDue()               => 'Your last payment failed. Update your card and add-ons will be available again.',
                     default                                  => 'Available once your subscription is active — ' . lcfirst($subscription->statusLabel()) . '.',
                 };
@@ -394,7 +489,7 @@
                                 <span style="font-size:12.5px;color:#334155;flex:1;">{{ $ap->name }}</span>
                                 @if (! empty($item['price']))
                                     <span style="font-size:12px;color:#64748b;">
-                                        ${{ number_format($item['price']->unit_amount / 100, 2) }}/{{ $item['price']->interval === 'annually' ? 'yr' : 'mo' }}
+                                        {{ tva_money((int) $item['price']->unit_amount, $item['price']->currency, false) }}/{{ $item['price']->interval === 'annually' ? 'yr' : 'mo' }}
                                     </span>
                                 @endif
                             </div>
@@ -402,9 +497,17 @@
                     </div>
                     @if ($subscription?->isPastDue())
                         <a href="#payment-methods" class="btn btn-primary btn-sm w-full">Update payment method</a>
+                    @elseif ($subscription && ! $subscription->isFree())
+                        {{-- Already on a paid plan: the add-ons page itself, not
+                             the plan ladder. It renders for them and explains
+                             what is still pending — sending someone to "choose a
+                             plan" when they have one is the bug this replaces. --}}
+                        <a href="{{ route('billing.addons', ['client' => $client->slug]) }}" class="btn btn-primary btn-sm w-full">
+                            See add-ons
+                        </a>
                     @else
                         <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="btn btn-primary btn-sm w-full">
-                            {{ $subscription && ! $subscription->isFree() ? 'Complete your subscription' : 'Choose a plan' }}
+                            Choose a plan
                         </a>
                     @endif
                 </div>
@@ -418,7 +521,10 @@
                     <div class="bl-card__title">Add-ons</div>
                     @if ($addonTotal > 0)
                         <div class="bl-card__action" style="font-size:12px;color:#64748b">
-                            +${{ number_format($addonTotal / 100, 2) }}/{{ $subscription->interval === 'annually' ? 'yr' : 'mo' }}
+                            {{-- The add-ons' own currency, which is the
+                                 subscription's — not the page's, and not a
+                                 hard-coded dollar. --}}
+                            +{{ tva_money((int) $addonTotal, $subscription->currency, false) }}/{{ $subscription->interval === 'annually' ? 'yr' : 'mo' }}
                         </div>
                     @endif
                 </div>
@@ -527,20 +633,54 @@
             </div>
         @endif
 
-        {{-- Stripe portal, for tax ids / billing address / raw invoices --}}
-        @if ($isOwner && $client->hasStripeCustomer())
+        {{-- Billing details.
+             What replaced the hosted Stripe portal. Everything the portal
+             offered now lives on this page: cards above, invoices below, and
+             the name, country and tax number that appear on an invoice here.
+             Saved locally first and pushed to Stripe second, so the paperwork is
+             right the moment it is saved — including for a workspace that has
+             never paid and so has no Stripe customer yet. --}}
+        @if ($isOwner)
             <div class="bl-card intro-y">
                 <div class="bl-card__head">
-                    <i data-lucide="external-link" class="w-4 h-4" style="color:#6366f1"></i>
-                    <div class="bl-card__title">Billing portal</div>
+                    <i data-lucide="file-text" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="bl-card__title">Billing details</div>
                 </div>
                 <p style="font-size:13px;color:#64748b;line-height:1.6;margin:0 0 14px">
-                    Billing address, tax ID and original Stripe receipts.
+                    What appears on your invoices.
                 </p>
-                <form method="POST" action="{{ route('billing.portal', ['client' => $client->slug]) }}">
-                    @csrf
-                    <button type="submit" class="bl-btn bl-btn--ghost" style="width:100%">
-                        Open Stripe portal <i data-lucide="arrow-up-right" class="w-4 h-4"></i>
+
+                <form method="POST" action="{{ route('billing.details', ['client' => $client->slug]) }}">
+                    @csrf @method('PATCH')
+
+                    @php
+                        $detailFields = [
+                            ['billing_name',    'Billed to',      'text',  $client->name, 'Company or person'],
+                            ['billing_email',   'Invoice email',  'email', '',            'accounts@example.com'],
+                            ['billing_country', 'Country code',   'text',  '',            'PK'],
+                            ['billing_tax_id',  'Tax number',     'text',  '',            'NTN / GST / VAT'],
+                        ];
+                    @endphp
+
+                    @foreach ($detailFields as [$name, $label, $type, $fallback, $placeholder])
+                        <div style="display:flex;flex-direction:column;gap:5px;margin-bottom:11px;">
+                            <label for="{{ $name }}" style="font:650 11.5px system-ui,sans-serif;color:#334155;">
+                                {{ $label }}
+                            </label>
+                            <input type="{{ $type }}" name="{{ $name }}" id="{{ $name }}"
+                                   value="{{ old($name, $client->{$name}) }}"
+                                   placeholder="{{ $placeholder ?: $fallback }}"
+                                   @if ($name === 'billing_country') maxlength="2" style="text-transform:uppercase" @endif
+                                   style="padding:9px 11px;border:1px solid #e2e8f0;border-radius:8px;
+                                          font:13px system-ui,sans-serif;color:#0f172a;background:#fff;">
+                            @error($name)
+                                <span style="font-size:11.5px;color:#b91c1c;line-height:1.45">{{ $message }}</span>
+                            @enderror
+                        </div>
+                    @endforeach
+
+                    <button type="submit" class="bl-btn bl-btn--ghost" style="width:100%;margin-top:4px">
+                        Save details
                     </button>
                 </form>
             </div>
@@ -561,4 +701,10 @@
 @if ($isOwner && $canBuy && $stripeReady)
     @include('billing._card-modal', ['client' => $client, 'stripeKey' => config('billing.stripe.key')])
 @endif
+
+{{-- Shown once, when this page was reached from a payment that has settled. --}}
+@if (! empty($paidCharge))
+    @include('billing._paid-modal', ['paidCharge' => $paidCharge])
+@endif
+
 @endsection

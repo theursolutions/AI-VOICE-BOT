@@ -49,9 +49,9 @@ class SubscriptionLifecycleTest extends BillingTestCase
         $this->fakeStripe(['prices' => $prices, 'products' => $products]);
 
         $plans = app(\App\Services\Billing\PlanService::class);
-        $plans->addPrice($this->plan('growth'), 'quarterly', 15900);
+        $plans->addPrice($this->plan('growth'), 'quarterly', 20250);
 
-        foreach ([['monthly', 5900], ['quarterly', 15900], ['annually', 59000]] as [$interval, $cents]) {
+        foreach ([['monthly', 7500], ['quarterly', 20250], ['annually', 75000]] as [$interval, $cents]) {
             $price = $plans->resolvePrice('growth', $interval);
 
             $this->assertSame($cents, $price->unit_amount, "{$interval} amount");
@@ -71,8 +71,11 @@ class SubscriptionLifecycleTest extends BillingTestCase
         // The approved discount: 10 × monthly.
         $this->assertSame($monthly->unit_amount * 10, $annual->unit_amount);
         $this->assertSame(17, $annual->savingsPercentAgainst($monthly));
-        $this->assertSame('$49.17', $annual->formattedEffectiveMonthly());
-        $this->assertSame(11800, $annual->savingsCentsAgainst($monthly));
+        $this->assertSame('$62.50', $annual->formattedEffectiveMonthly());
+        // "Two months free" is not a slogan here — the saving IS two monthly
+        // payments. Derived rather than hard-coded so a reprice cannot make
+        // this assertion quietly wrong while still passing.
+        $this->assertSame($monthly->unit_amount * 2, $annual->savingsCentsAgainst($monthly));
     }
 
     // ── Upgrade / downgrade ──────────────────────────────────────────

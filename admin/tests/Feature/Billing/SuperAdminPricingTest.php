@@ -76,7 +76,7 @@ class SuperAdminPricingTest extends BillingTestCase
         $this->postWebhook($this->subscriptionEvent('customer.subscription.created', $client))->assertOk();
 
         $original = $this->price('growth', 'monthly');
-        $this->assertSame(5900, $original->unit_amount);
+        $this->assertSame(7500, $original->unit_amount);
 
         $subscription = $client->fresh()->currentSubscription();
         $this->assertSame($original->id, $subscription->plan_price_id);
@@ -101,12 +101,12 @@ class SuperAdminPricingTest extends BillingTestCase
         // The old row is retired but preserved.
         $this->assertFalse($original->is_active);
         $this->assertNotNull($original->archived_at);
-        $this->assertSame(5900, $original->unit_amount, 'The historical amount must be untouched.');
+        $this->assertSame(7500, $original->unit_amount, 'The historical amount must be untouched.');
 
         // And the existing subscriber still points at it.
         $subscription->refresh();
         $this->assertSame($original->id, $subscription->plan_price_id);
-        $this->assertSame(5900, $subscription->unit_amount);
+        $this->assertSame(7500, $subscription->unit_amount);
 
         // New buyers get the new price.
         $this->assertSame(

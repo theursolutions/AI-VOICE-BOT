@@ -275,12 +275,12 @@
                 @foreach ($plan['prices'] as $key => $price)
                     <div class="pp-priceblock" data-pp-interval="{{ $key }}" @if($key !== $selected) hidden @endif>
                         <div class="pp-price">
-                            <span class="pp-amount">{{ $price['usd'] }}</span>
+                            <span class="pp-amount">{{ $price['amount'] }}</span>
                             <span class="pp-suffix">{{ $price['suffix'] }}</span>
                         </div>
 
                         @if ($price['local'])
-                            <p class="pp-local">≈ {{ $price['local'] }} {{ $price['suffix'] }}</p>
+                            <p class="pp-local">{{ $price['local_is_exact'] ? '' : '≈ ' }}{{ $price['local'] }} {{ $price['suffix'] }}</p>
                         @endif
 
                         @if ($price['months'] > 1)
@@ -360,6 +360,23 @@
         </div>
     @endforeach
 </div>
+
+{{-- How the two volume figures relate.
+     Every card carries a conversation count AND a message count, which reads as
+     a contradiction unless the divisor is stated — "1,000 conversations" beside
+     "20,000 messages" invites the question of which one runs out first. Saying
+     it here, once, beats repeating it on every card, and saying it is adjustable
+     turns a hard limit into a setting. Uses the shipped default rather than any
+     one workspace's value: this partial also serves the public page, where
+     there is no workspace yet. --}}
+<p class="pp-note reveal"
+   style="text-align:center;font-size:13px;color:#64748b;line-height:1.7;margin:22px auto 0;max-width:66ch;">
+    Conversation counts assume
+    <strong>{{ \App\Services\Conversation\ConversationBudget::DEFAULT_LIMIT }} AI replies</strong>
+    per conversation — after that it moves to your inbox for a person to answer, so nothing
+    goes unanswered. You can raise or lower that on your billing page at any time, which
+    changes how many conversations your messages cover.
+</p>
 
 {{-- ── Enterprise: a CTA band, not a price card ─────────────────────── --}}
 @if ($ent)

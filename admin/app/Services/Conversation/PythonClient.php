@@ -101,10 +101,62 @@ class PythonClient
         return $body;
     }
 
+    /**
+     * Lead extraction.
+     *
+     * Metered and brain-routed the same way llm() is, and for the same reason:
+     * accounting that lives at the transport rather than the call site cannot be
+     * forgotten by a new caller.
+     *
+     * This call used to go straight to the engine with no brain and no
+     * accounting, which was wrong twice. A client on their own key had their
+     * conversation transcript processed on OUR provider account every turn — the
+     * exact leak bring-your-own-key exists to prevent — and its tokens, roughly
+     * an eighth of the input spend, never reached ai_brain_usage, so any pricing
+     * derived from that table was short by that much.
+     */
     public function extract(array $payload): array
     {
-        $res = $this->http->post('extract', ['json' => $payload]);
-        return json_decode((string) $res->getBody(), true);
+        $brainId  = $payload['brain_id'] ?? null;
+        $callType = $payload['call_type'] ?? BrainResolver::CALL_CAPTURE;
+
+        // max_tokens is dropped rather than forwarded. It arrives because
+        // optionsFor() returns the brain's generation ceiling, but /extract has
+        // no such field and the extractor must not inherit one: a brain
+        // configured with a small ceiling would truncate the JSON mid-object and
+        // the turn's extraction would fail to parse, silently, for that client
+        // only. The engine's own bound is the right one here.
+        //
+        // Pydantic would ignore the unknown key today, so this is not fixing a
+        // break — it is refusing to depend on a default that a single
+        // `extra="forbid"` in the engine would turn into a 422.
+        unset($payload['brain_id'], $payload['call_type'], $payload['max_tokens']);
+
+        $projectId = $payload['project_id'] ?? null;
+
+        try {
+            $res  = $this->http->post('extract', ['json' => $payload]);
+            $body = json_decode((string) $res->getBody(), true) ?: [];
+        } catch (\Throwable $e) {
+            if ($brainId) {
+                app(BrainResolver::class)
+                    ->record((int) $brainId, $projectId ? (int) $projectId : null, $callType, 0, 0);
+            }
+
+            throw $e;
+        }
+
+        if ($brainId) {
+            app(BrainResolver::class)->record(
+                (int) $brainId,
+                $projectId ? (int) $projectId : null,
+                $callType,
+                $body['tokens_in']  ?? null,
+                $body['tokens_out'] ?? null,
+            );
+        }
+
+        return $body;
     }
 
     public function ragIngest(int $projectId, int $sourceId, string $type, array $config): array

@@ -151,23 +151,34 @@ class ExchangeRateService
         $currency = strtoupper($currency);
         $meta     = (array) config("billing.currencies.{$currency}", []);
 
-        $symbol   = trim((string) ($meta['symbol'] ?? $currency));
         $decimals = (int) ($meta['decimals'] ?? 0);
-        $position = $meta['position'] ?? 'before';
+        $number   = number_format($amount, $decimals);
 
-        $number = number_format($amount, $decimals);
-
-        if ($position === 'after') {
-            return $number . ' ' . $symbol;
+        if (($meta['position'] ?? 'before') === 'after') {
+            return $number . ' ' . trim((string) ($meta['symbol'] ?? $currency));
         }
 
-        // A LETTER-based symbol needs a separating space ("Rs 5,400", "AED 70",
-        // "KSh 2,400"); a glyph must hug the number ("£14", "₹1,600", "$19").
-        // Deriving this beats relying on whoever edits the config to remember
-        // a trailing space — the bug it replaces rendered "Rs5,400".
-        $separator = preg_match('/\p{L}$/u', $symbol) === 1 ? ' ' : '';
+        return $this->symbolFor($currency) . $number;
+    }
 
-        return $symbol . $separator . $number;
+    /**
+     * The prefix a number in this currency is written with, separator included.
+     *
+     * A LETTER-based symbol needs a separating space ("Rs 5,400", "AED 70",
+     * "KSh 2,400"); a glyph must hug the number ("£14", "₹1,600", "$19").
+     * Deriving this beats relying on whoever edits the config to remember a
+     * trailing space — the bug it replaces rendered "Rs5,400".
+     *
+     * Public and shared, because prices are now formatted in three places —
+     * here, on PlanPrice, and in the presenter — and a rule that lives in one
+     * of them is a rule the other two will get wrong.
+     */
+    public function symbolFor(string $currency): string
+    {
+        $currency = strtoupper($currency);
+        $symbol   = trim((string) config("billing.currencies.{$currency}.symbol", $currency));
+
+        return $symbol . (preg_match('/\p{L}$/u', $symbol) === 1 ? ' ' : '');
     }
 
     /** Convert + format in one step. Null when unavailable. */

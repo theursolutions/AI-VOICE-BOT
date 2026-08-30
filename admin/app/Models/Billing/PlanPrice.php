@@ -6,7 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
- * A plan's price for one billing interval, in integer USD cents.
+ * A plan's price for one billing interval, in integer minor units.
+ *
+ * ALWAYS HUNDREDTHS, whatever the currency. The rupee has no circulating minor
+ * unit, but every reader here divides `unit_amount` by 100, so a rupee price is
+ * stored in paisa rather than special-cased. See LocalPriceService.
  *
  * IMMUTABILITY CONTRACT — the reason this is a separate table:
  * Stripe Prices cannot be edited. Raising $19 -> $29 must create a NEW row
@@ -24,6 +28,7 @@ class PlanPrice extends Model
     protected $fillable = [
         'plan_id', 'interval', 'currency', 'unit_amount', 'compare_at_amount',
         'stripe_price_ref', 'stripe_product_ref', 'stripe_livemode', 'stripe_synced_at',
+        'paddle_price_id', 'paddle_synced_at',
         'is_active', 'effective_from', 'effective_to', 'archived_at', 'metadata',
     ];
 
@@ -34,6 +39,7 @@ class PlanPrice extends Model
         'is_active'         => 'boolean',
         'stripe_livemode'   => 'boolean',
         'stripe_synced_at'  => 'datetime',
+        'paddle_synced_at'  => 'datetime',
         'effective_from'    => 'datetime',
         'effective_to'      => 'datetime',
         'archived_at'       => 'datetime',
@@ -52,18 +58,42 @@ class PlanPrice extends Model
 
     // ── Money ────────────────────────────────────────────────────────
 
-    /** Whole-dollar float. For DISPLAY and conversion only — never for maths. */
+    /** Whole-unit float. For DISPLAY and conversion only — never for maths. */
     public function amount(): float
     {
         return $this->unit_amount / 100;
     }
 
-    /** "$19" or "$19.50" — trailing ".00" dropped, which reads better on a card. */
+    /**
+     * "$19", "$19.50", "Rs 22,500" — trailing ".00" dropped, which reads better
+     * on a card.
+     *
+     * The symbol comes from the ROW'S currency, not from a hard-coded '$'. A
+     * plan now carries a rupee price alongside its dollar one for the local
+     * gateway, and a rupee amount rendered with a dollar sign is not a cosmetic
+     * slip: it tells the customer they are about to be charged $22,500.
+     */
     public function formatted(): string
     {
-        $amount = $this->amount();
+        return $this->format($this->amount());
+    }
 
-        return '$' . ($amount == floor($amount)
+    /**
+     * Currency prefix for this row, e.g. "$" or "Rs " — separator included.
+     *
+     * Delegated rather than re-derived: the letter-vs-glyph spacing rule has
+     * been got wrong here once already, and one implementation is the only way
+     * it stays right in all three places prices are rendered.
+     */
+    public function currencySymbol(): string
+    {
+        return app(\App\Services\Currency\ExchangeRateService::class)
+            ->symbolFor((string) ($this->currency ?: config('billing.currency', 'usd')));
+    }
+
+    private function format(float $amount): string
+    {
+        return $this->currencySymbol() . ($amount == floor($amount)
             ? number_format($amount, 0)
             : number_format($amount, 2));
     }
@@ -81,11 +111,7 @@ class PlanPrice extends Model
 
     public function formattedEffectiveMonthly(): string
     {
-        $amount = $this->effectiveMonthlyCents() / 100;
-
-        return '$' . ($amount == floor($amount)
-            ? number_format($amount, 0)
-            : number_format($amount, 2));
+        return $this->format($this->effectiveMonthlyCents() / 100);
     }
 
     /**
@@ -122,6 +148,12 @@ class PlanPrice extends Model
     public function isSyncedToStripe(): bool
     {
         return ! empty($this->stripe_price_ref);
+    }
+
+    /** Does a Paddle price exist for this row? Paddle cannot sell it otherwise. */
+    public function isSyncedToPaddle(): bool
+    {
+        return ! empty($this->paddle_price_id);
     }
 
     /**

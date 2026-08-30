@@ -37,7 +37,8 @@ class Subscription extends Model
     protected $fillable = [
         'client_id', 'plan_id', 'plan_price_id', 'type', 'status',
         'stripe_subscription_ref', 'stripe_customer_ref', 'stripe_price_ref',
-        'stripe_status', 'quantity', 'interval', 'unit_amount', 'currency',
+        'stripe_status', 'paddle_subscription_id', 'paddle_customer_id',
+        'quantity', 'interval', 'unit_amount', 'currency',
         'free_started_at', 'free_ends_at', 'trial_ends_at',
         'current_period_start', 'current_period_end',
         'cancel_at_period_end', 'canceled_at', 'ends_at',
@@ -259,5 +260,35 @@ class Subscription extends Model
     public function scopeDueForPurge($q)
     {
         return $q->whereNotNull('purge_after')->where('purge_after', '<=', now());
+    }    /**
+     * Which provider actually holds this subscription.
+     *
+     * NOT the same question as "which gateway serves this customer's country",
+     * and confusing the two is a live hazard. Routing follows the country and
+     * changes whenever an operator flips a switch — but a subscription that was
+     * created in Stripe still lives in Stripe, and must be amended, cancelled
+     * and read there for the rest of its life. On the day everyone is moved to
+     * Stripe, every existing Paddle subscriber would otherwise have their
+     * add-on changes sent to a provider that has never heard of them.
+     *
+     * Derived from the subscription's OWN references, which is the only thing
+     * that cannot drift.
+     *
+     * Null means nobody holds it as a provider subscription — a Safepay
+     * customer, or a complimentary plan. Those are billed a payment at a time.
+     */
+    public function provider(): ?string
+    {
+        if ($this->paddle_subscription_id) {
+            return 'paddle';
+        }
+
+        if ($this->stripe_subscription_ref) {
+            return 'stripe';
+        }
+
+        return null;
     }
+
+
 }

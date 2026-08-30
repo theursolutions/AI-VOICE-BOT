@@ -63,7 +63,7 @@ class WebhookTest extends BillingTestCase
         $this->assertSame('active', $sub->stripe_status);
         $this->assertSame('growth', $sub->plan->slug);
         $this->assertSame('monthly', $sub->interval);
-        $this->assertSame(5900, $sub->unit_amount);
+        $this->assertSame(7500, $sub->unit_amount);
         $this->assertSame('sub_test_1', $sub->stripe_subscription_ref);
 
         // The free window must be replaced, not stacked on top of.
@@ -314,7 +314,7 @@ class WebhookTest extends BillingTestCase
 
         $this->assertSame($this->plan('growth')->id, $subscription->plan_id);
         $this->assertSame($growth->stripe_price_ref, $subscription->stripe_price_ref);
-        $this->assertSame(5900, $subscription->unit_amount);
+        $this->assertSame(7500, $subscription->unit_amount);
         $this->assertSame(1, $subscription->quantity, 'Quantity must come from the plan line, not the add-on.');
     }
 
