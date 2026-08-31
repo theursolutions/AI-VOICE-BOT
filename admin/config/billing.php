@@ -533,9 +533,24 @@ return [
         'http' => [
             // {ip} is substituted. Response is JSON; `country_path` is a dot
             // path to the ISO-3166 alpha-2 code within it.
-            'endpoint'     => env('GEOIP_HTTP_ENDPOINT', 'https://ipapi.co/{ip}/json/'),
-            'country_path' => env('GEOIP_HTTP_COUNTRY_PATH', 'country_code'),
-            'timeout'      => (int) env('GEOIP_HTTP_TIMEOUT', 3),
+            //
+            // api.country.is: free, no signup, no key, HTTPS, and it answers
+            // with `{"ip":"…","country":"PK"}` and nothing else. Chosen over
+            // ipapi.co — which this used to default to — because ipapi.co rate
+            // limits almost immediately on the free tier, and a geo lookup that
+            // returns "RateLimited" leaves every visitor seeing the wrong
+            // currency with no indication why.
+            //
+            // ipwho.is is an equally free alternative if this one ever stops:
+            //   GEOIP_HTTP_ENDPOINT=https://ipwho.is/{ip}
+            //   GEOIP_HTTP_COUNTRY_PATH=country_code
+            'endpoint'     => env('GEOIP_HTTP_ENDPOINT', 'https://api.country.is/{ip}'),
+            'country_path' => env('GEOIP_HTTP_COUNTRY_PATH', 'country'),
+
+            // Short on purpose. This sits in front of a page a buyer is looking
+            // at, and a slow provider must cost them a moment, not a page load.
+            // Failing means USD, which is always a correct page.
+            'timeout'      => (int) env('GEOIP_HTTP_TIMEOUT', 2),
         ],
 
         // Per-IP cache. Country-by-IP is extremely stable.
