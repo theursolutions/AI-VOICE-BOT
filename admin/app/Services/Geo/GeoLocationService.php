@@ -182,17 +182,23 @@ class GeoLocationService
 
     private function makeDriver(string $name): GeoLocationDriver
     {
+        // Built here rather than inline below, because the local-file driver
+        // takes it as a fallback for installs with no .mmdb.
+        $http = fn () => new HttpDriver(
+            (string) config('billing.geo.http.endpoint'),
+            (string) config('billing.geo.http.country_path', 'country'),
+            (int) config('billing.geo.http.timeout', 2),
+        );
+
         return match ($name) {
-            // Reuses the app's existing IpLocator (shared .mmdb, shared cache)
-            // with a guard that stops a pricing-page render blocking on its
-            // HTTP fallback. See IpLocatorDriver.
-            'iplocator', 'maxmind' => new IpLocatorDriver(app(\App\Support\IpLocator::class)),
-            'http' => new HttpDriver(
-                (string) config('billing.geo.http.endpoint'),
-                (string) config('billing.geo.http.country_path', 'country_code'),
-                (int) config('billing.geo.http.timeout', 3),
-            ),
-            default => new NullDriver(),
+            // Reuses the app's existing IpLocator (shared .mmdb, shared cache),
+            // falling back to a free keyless HTTP lookup when no database has
+            // been downloaded — which is every install until somebody runs
+            // `geoip:update`. See IpLocatorDriver for why that beats returning
+            // nothing.
+            'iplocator', 'maxmind' => new IpLocatorDriver(app(\App\Support\IpLocator::class), $http()),
+            'http'                 => $http(),
+            default                => new NullDriver(),
         };
     }
 
