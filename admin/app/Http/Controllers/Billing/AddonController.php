@@ -249,6 +249,14 @@ class AddonController extends Controller
             return back()->with('info', 'Add-ons aren’t available to buy just yet.');
         }
 
+        // A top-up is a payment, so the same country restriction applies. Left
+        // out, an operator who stopped selling to a country would still take
+        // money from it — just for seats rather than plans.
+        if (! \App\Support\Payments::countryAllowed($client->billing_country)) {
+            return back()->with('error',
+                'We can’t take payments from your billing country just yet. Get in touch and we’ll help.');
+        }
+
         $data = $request->validate([
             'addon'    => ['required', 'string', 'max:100'],
             'quantity' => ['required', 'integer', 'min:0', 'max:999'],

@@ -169,6 +169,89 @@ class PaymentRoutingTest extends BillingTestCase
         $this->assertTrue(Payments::countryAllowed(''));
     }
 
+    /**
+     * The Ops page states that an unselected country cannot reach checkout.
+     * Until this was enforced that was simply untrue — the restriction filtered
+     * the dropdown and nothing else, so a workspace whose country was set
+     * before the restriction walked straight past it.
+     */
+    public function test_a_restricted_country_cannot_reach_checkout(): void
+    {
+        [$client, $owner] = $this->makeWorkspace('Excluded Ltd', 'excluded@example.test');
+
+        $client->forceFill(['billing_country' => 'DE'])->save();
+
+        // Selling to Pakistan only, as an operator would set for Safepay-only.
+        Payments::setAllowedCountries(['PK']);
+
+        $this->actingAs($owner)
+            ->get(route('billing.checkout', [
+                'client' => $client->slug, 'plan' => 'growth', 'interval' => 'monthly',
+            ]))
+            ->assertRedirect(route('billing.plans', ['client' => $client->slug]))
+            ->assertSessionHas('error');
+    }
+
+    /** A guard the form can be posted around is not a guard. */
+    public function test_a_restricted_country_cannot_post_a_payment_either(): void
+    {
+        [$client, $owner] = $this->makeWorkspace('Sneaky Ltd', 'sneaky@example.test');
+
+        $client->forceFill(['billing_country' => 'DE'])->save();
+
+        Payments::setAllowedCountries(['PK']);
+
+        $this->actingAs($owner)
+            ->from(route('billing.plans', ['client' => $client->slug]))
+            ->post(route('billing.checkout.pay', ['client' => $client->slug]), [
+                'plan' => 'growth', 'interval' => 'monthly',
+            ])
+            ->assertSessionHas('error');
+
+        $this->assertSame(
+            0,
+            \Illuminate\Support\Facades\DB::table('gateway_charges')->where('client_id', $client->id)->count(),
+            'A charge was raised for a country we have stopped selling to',
+        );
+    }
+
+    /** An allowed country is unaffected — the restriction is not a blanket stop. */
+    public function test_an_allowed_country_still_reaches_checkout(): void
+    {
+        [$client, $owner] = $this->makeWorkspace('Karachi Ltd', 'karachi-ok@example.test');
+
+        $client->forceFill(['billing_country' => 'PK'])->save();
+
+        app(\App\Services\Billing\LocalPriceService::class)->mirrorAll('PKR');
+
+        Payments::setAllowedCountries(['PK']);
+
+        $this->actingAs($owner)
+            ->get(route('billing.checkout', [
+                'client' => $client->slug, 'plan' => 'growth', 'interval' => 'monthly',
+            ]))
+            ->assertOk();
+    }
+
+    /**
+     * Failing to detect somebody is our problem, not a reason to refuse their
+     * money — so a workspace with no country set is let through.
+     */
+    public function test_a_workspace_with_no_country_is_not_refused(): void
+    {
+        [$client, $owner] = $this->makeWorkspace('Unknown Ltd', 'unknown@example.test');
+
+        Payments::setAllowedCountries(['PK']);
+
+        $this->assertNull($client->fresh()->billing_country);
+
+        $this->actingAs($owner)
+            ->get(route('billing.checkout', [
+                'client' => $client->slug, 'plan' => 'growth', 'interval' => 'monthly',
+            ]))
+            ->assertOk();
+    }
+
     // ── Capabilities ────────────────────────────────────────────────
 
     /**

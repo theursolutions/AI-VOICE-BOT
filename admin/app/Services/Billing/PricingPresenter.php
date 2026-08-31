@@ -58,13 +58,27 @@ class PricingPresenter
             ? $selectedInterval
             : ($intervals[0] ?? 'monthly');
 
-        $billing = $billFor ? $this->billingCurrency($billFor) : null;
+        // THE COUNTRY DECIDES THE CURRENCY, whether or not a workspace exists.
+        //
+        // This used to read the currency off the CLIENT, so a visitor to the
+        // public pricing page — who has no client — was always quoted the
+        // platform currency. For a Pakistani visitor that is not a cosmetic
+        // difference: they were shown $26 for a plan Safepay would charge them
+        // Rs 8,000 for, and changing the country picker appeared to do nothing
+        // because the only thing it moved was the approximate line underneath.
+        //
+        // A stored workspace country still wins — it is a decision, where a
+        // visitor's is a guess — but a guess is far better than assuming
+        // everyone is billed in dollars.
+        $geo = $this->resolveGeo($request);
 
-        // Geo drives the approximate line, and only for customers charged in
-        // the platform currency. Someone billed in rupees already has both
-        // figures — the rupee price they pay and the dollar price beside it —
-        // and neither is a conversion, so there is nothing to estimate.
-        $geo = $billing ? null : $this->resolveGeo($request);
+        $country = $billFor?->billing_country ?: $geo?->countryCode;
+        $billing = $this->billingCurrencyForCountry($country);
+
+        // The approximate line is for people charged in the platform currency.
+        // Someone billed in rupees already has both real figures beside each
+        // other, and neither is an estimate.
+        $geo = $billing ? null : $geo;
 
         $plans = $this->plans->publicPlans();
 
@@ -142,16 +156,22 @@ class PricingPresenter
     }
 
     /**
-     * The currency a workspace's gateway settles, or null when it is the
-     * platform's own and the ordinary dollar path applies.
+     * The currency this country's gateway settles, or null when it is the
+     * platform's own and the ordinary path applies.
+     *
+     * Keyed on COUNTRY, not on a workspace, so the public pricing page — where
+     * there is no workspace at all — can still quote what a visitor would
+     * actually be charged.
      */
-    private function billingCurrency(Client $client): ?string
+    private function billingCurrencyForCountry(?string $country): ?string
     {
         $currency = app(\App\Services\Billing\Gateways\GatewayRegistry::class)
-            ->forClient($client)?->currencies()[0] ?? null;
+            ->forCountry($country)?->currencies()[0] ?? null;
 
         $base = strtoupper((string) config('billing.currency', 'usd'));
 
+        // Null when it IS the platform currency, so callers can treat null as
+        // "nothing special about this one" rather than comparing every time.
         return ($currency && strtoupper($currency) !== $base) ? $currency : null;
     }
 

@@ -23,17 +23,23 @@ use App\Support\IpLocator;
  * page a buyer is waiting on, and free endpoints are rate-limited, so a burst
  * of traffic would stall the very page we most want to be fast.
  *
- * So this driver asks first — canResolveOffline() — and returns null rather
- * than reaching for the network. The caller then shows USD only, which is
- * always a correct page. Local currency is a nicety; page speed on the pricing
- * page is not.
+ * So this driver asks first — canResolveOffline() — and only reaches for the
+ * network when there is no local database to read. With one installed, no
+ * visitor IP ever leaves this server and no page waits on anyone else's API.
  *
- * To use the HTTP path deliberately on a dev box, set GEOIP_DRIVER=http.
+ * Without one, it falls back to a free keyless HTTP lookup rather than
+ * returning nothing: an install with no .mmdb is the common case, and silently
+ * quoting every visitor the platform currency is a worse failure than a cached
+ * two-second call. See countryFor().
+ *
+ * To force the HTTP path on a dev box, set GEOIP_DRIVER=http.
  */
 class IpLocatorDriver implements GeoLocationDriver
 {
-    public function __construct(private readonly IpLocator $locator)
-    {
+    public function __construct(
+        private readonly IpLocator $locator,
+        private readonly ?GeoLocationDriver $fallback = null,
+    ) {
     }
 
     public function name(): string
@@ -43,9 +49,25 @@ class IpLocatorDriver implements GeoLocationDriver
 
     public function countryFor(string $ip): ?string
     {
-        // Never block a page render on someone else's API.
+        // NO LOCAL DATABASE: ask over HTTP rather than give up.
+        //
+        // This used to return null, on the reasoning that a synchronous
+        // third-party call has no place in front of a page a buyer is waiting
+        // on. That reasoning was right about the cost and wrong about the
+        // alternative — the alternative is not "a fast page", it is "a
+        // Pakistani visitor quoted dollars they will never be charged". A
+        // wrong price is worse than a slow one.
+        //
+        // The cost is bounded rather than accepted: the lookup is cached per IP
+        // for a day by GeoLocationService, the HTTP driver's timeout is two
+        // seconds, and a failure returns null so the page renders in the
+        // platform currency — which is always correct, just less useful.
+        //
+        // Install the GeoLite2 file (`php artisan geoip:update`) and this path
+        // is never taken: the local read is faster, free, and sends no visitor
+        // IP anywhere.
         if (! $this->locator->canResolveOffline($ip)) {
-            return null;
+            return $this->fallback?->countryFor($ip);
         }
 
         try {
