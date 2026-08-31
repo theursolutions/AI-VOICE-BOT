@@ -196,6 +196,12 @@ class CheckoutController extends Controller
 
         abort_unless(config('billing.checkout.enabled', false), 404);
 
+        if ($refusal = $this->refusedCountry($client)) {
+            return redirect()
+                ->route('billing.plans', ['client' => $client->slug])
+                ->with('error', $refusal);
+        }
+
         $planSlug = (string) $request->query('plan', '');
         $interval = (string) $request->query('interval', 'monthly');
 
@@ -465,6 +471,14 @@ class CheckoutController extends Controller
 
         abort_unless(config('billing.checkout.enabled', false), 404);
 
+        // Checked again, not only on the page: a guard the form can be posted
+        // around is not a guard.
+        if ($refusal = $this->refusedCountry($client)) {
+            return $request->expectsJson()
+                ? response()->json(['ok' => false, 'message' => $refusal], 422)
+                : redirect()->route('billing.plans', ['client' => $client->slug])->with('error', $refusal);
+        }
+
         // Same two opaque identifiers the Stripe path takes, for the same
         // reason: no request field in this flow carries money. See the class
         // docblock — `plan` and `interval`, never `*_id`.
@@ -700,6 +714,40 @@ class CheckoutController extends Controller
         }
 
         return count($out) > 1 ? $out : [];
+    }
+
+    /**
+     * Refuse a country we have said we do not sell to.
+     *
+     * ENFORCED HERE, not only in the picker. The Ops → Payments page states that
+     * an unselected country "can't reach checkout", and until this existed that
+     * was simply untrue: the restriction filtered the dropdown and nothing else,
+     * so a workspace whose country was set before the restriction — or by IP —
+     * walked straight past it and paid through a provider the operator had
+     * deliberately stopped selling with.
+     *
+     * On BOTH the page and the pay action. A guard on the page alone is a guard
+     * anyone can skip by posting the form directly.
+     *
+     * A workspace with NO country is allowed through: countryAllowed() treats
+     * an unknown country as permitted, because failing to detect somebody is our
+     * problem and not a reason to refuse their money.
+     *
+     * @return ?string the message to refuse with, or null to allow
+     */
+    private function refusedCountry(Client $client): ?string
+    {
+        if (\App\Support\Payments::countryAllowed($client->billing_country)) {
+            return null;
+        }
+
+        $name = app(\App\Services\Geo\GeoLocationService::class)
+            ->countryName((string) $client->billing_country) ?: $client->billing_country;
+
+        return sprintf(
+            'We can’t take payments from %s just yet. Get in touch and we’ll sort something out.',
+            $name,
+        );
     }
 
     /** Only a workspace owner may change what the workspace pays. */
