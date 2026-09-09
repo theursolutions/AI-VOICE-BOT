@@ -9,7 +9,10 @@ use App\Models\Visitor;
 use App\Support\IpLocator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
 
 /**
@@ -163,30 +166,94 @@ class VisitorsController extends Controller
         ];
     }
 
+    /**
+     * How long a computed panel stays warm. These are traffic summaries on an
+     * ops screen, not a live readout — a few minutes stale is invisible, and it
+     * turns a refresh-happy operator into one query instead of one per load.
+     */
+    private const PANEL_TTL = 300;
+
+    /** Server-side cap for a panel query, in milliseconds. See panel(). */
+    private const PANEL_TIMEOUT_MS = 10000;
+
+    /**
+     * Run one aggregate panel behind a cache and a hard server-side time limit.
+     *
+     * Both guards exist because of the 2026-09-09 outage. topPages() groups
+     * visitor_page_views by `path`; the table had accumulated 2.5M rows of
+     * health-check traffic (see App\Http\Middleware\TrackVisitor, which no
+     * longer records probes), so each run took hours. Nothing stopped it:
+     * PHP's max_execution_time does not tick while a worker is blocked in
+     * MySQL. Twenty concurrent loads of this page pinned all twenty PHP-FPM
+     * workers, both app replicas failed their healthcheck, and HAProxy served
+     * 503 with no backends left.
+     *
+     * MAX_EXECUTION_TIME makes the database the thing that gives up, at 10s,
+     * whatever PHP does or does not notice. A panel that trips it degrades to
+     * empty rather than taking the request — and then the site — down with it,
+     * and the failure is deliberately NOT cached so the next load retries.
+     *
+     * @param  \Closure():\Illuminate\Support\Collection<int,object>  $query
+     * @return \Illuminate\Support\Collection<int,object>
+     */
+    private function panel(string $key, \Closure $query): Collection
+    {
+        $cached = Cache::get($key);
+        if ($cached instanceof Collection) {
+            return $cached;
+        }
+
+        try {
+            $rows = $query();
+        } catch (\Throwable $e) {
+            // 3024 is ER_QUERY_TIMEOUT — the cap above did its job.
+            Log::warning('Visitors panel timed out or failed', [
+                'panel' => $key, 'err' => $e->getMessage(),
+            ]);
+
+            return new Collection();
+        }
+
+        Cache::put($key, $rows, self::PANEL_TTL);
+
+        return $rows;
+    }
+
+    /**
+     * The MySQL optimizer hint must sit immediately after SELECT, so it rides
+     * on the first selected column. Aliased explicitly so the comment can never
+     * end up as part of the result column's name.
+     */
+    private function timeLimited(string $firstColumn, string $alias): \Illuminate\Database\Query\Expression
+    {
+        return DB::raw('/*+ MAX_EXECUTION_TIME(' . self::PANEL_TIMEOUT_MS . ') */ ' . $firstColumn . ' as ' . $alias);
+    }
+
     /** @return \Illuminate\Support\Collection<int,object> */
     private function topPages(int $days)
     {
-        return DB::connection('mysql')->table('visitor_page_views as pv')
+        return $this->panel("ops:visitors:top-pages:{$days}", fn () => DB::connection('mysql')
+            ->table('visitor_page_views as pv')
             ->join('visitors as v', 'v.id', '=', 'pv.visitor_id')
             ->where('v.is_bot', false)
             ->when($days > 0, fn ($q) => $q->where('pv.created_at', '>=', now()->subDays($days)))
-            ->select('pv.path', DB::raw('COUNT(*) as opens'), DB::raw('COUNT(DISTINCT pv.visitor_id) as visitors'))
+            ->select($this->timeLimited('pv.path', 'path'), DB::raw('COUNT(*) as opens'), DB::raw('COUNT(DISTINCT pv.visitor_id) as visitors'))
             ->groupBy('pv.path')
             ->orderByDesc('opens')
             ->limit(10)
-            ->get();
+            ->get());
     }
 
     /** @return \Illuminate\Support\Collection<int,object> */
     private function topCountries(int $days)
     {
-        return Visitor::humans()
+        return $this->panel("ops:visitors:top-countries:{$days}", fn () => Visitor::humans()
             ->whereNotNull('country')
             ->when($days > 0, fn ($q) => $q->where('last_seen_at', '>=', now()->subDays($days)))
-            ->select('country', 'country_code', DB::raw('COUNT(*) as visitors'))
+            ->select($this->timeLimited('country', 'country'), 'country_code', DB::raw('COUNT(*) as visitors'))
             ->groupBy('country', 'country_code')
             ->orderByDesc('visitors')
             ->limit(10)
-            ->get();
+            ->get());
     }
 }

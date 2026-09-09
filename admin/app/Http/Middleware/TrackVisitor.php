@@ -67,7 +67,64 @@ class TrackVisitor
             return false;
         }
 
+        if ($this->isInternalProbe($request)) {
+            return false;
+        }
+
         return ! $this->isIgnoredPath($request->path());
+    }
+
+    /**
+     * Is this our own infrastructure checking we are alive, rather than a
+     * visitor?
+     *
+     * This matters far more than it looks. Health checks are the highest-volume
+     * GET / on the box by orders of magnitude: HAProxy probes each replica every
+     * 2s, Docker every 30s, Blackbox Exporter on its own schedule. Left
+     * unfiltered they are indistinguishable from a very enthusiastic homepage
+     * visitor, and `isIgnoredPath()` cannot help because it deliberately never
+     * ignores '' — the homepage is the page we most want to record.
+     *
+     * On 2026-09-09 that was 2,498,952 of the 2,498,955 rows in
+     * visitor_page_views. The super-admin "top pages" panel groups that table by
+     * `path`, so every load became a multi-hour scan; twenty concurrent copies
+     * pinned all twenty PHP-FPM workers, both app replicas failed their
+     * healthcheck, and HAProxy served 503 with no backends left. The probes
+     * DoS'd the app by being counted.
+     *
+     * Two independent tests, because each one alone has a blind spot: the
+     * header check catches an unknown prober with a browser-shaped User-Agent,
+     * and the User-Agent list still catches a known prober if it is ever
+     * pointed at the public URL (prometheus.yml has a `blackbox-public` job
+     * that does exactly that).
+     */
+    private function isInternalProbe(Request $request): bool
+    {
+        // Public traffic reaches this container only through Caddy -> HAProxy,
+        // and both set X-Forwarded-For. A request without one was addressed
+        // straight to app:8080 over the private network, which no visitor can
+        // do.
+        if (config('visitors.require_forwarded', true)
+            && ! $request->headers->has('X-Forwarded-For')) {
+            return true;
+        }
+
+        $ua = strtolower((string) $request->userAgent());
+
+        // No User-Agent at all is a script, not a browser. HAProxy's health
+        // check sends none.
+        if ($ua === '') {
+            return true;
+        }
+
+        foreach ((array) config('visitors.ignore_user_agents', []) as $needle) {
+            $needle = strtolower(trim((string) $needle));
+            if ($needle !== '' && str_contains($ua, $needle)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function isIgnoredPath(string $path): bool
