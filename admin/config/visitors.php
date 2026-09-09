@@ -35,6 +35,28 @@ return [
     // Only acts when `php artisan visitors:prune` runs. 0 = keep forever.
     'retention_days' => (int) env('VISITOR_RETENTION_DAYS', 365),
 
+    // Only record requests that arrived through the public edge.
+    //
+    // Caddy and HAProxy both set X-Forwarded-For, so every real visitor has
+    // one. Health checks and monitoring probes talk to the app container
+    // straight over the private network and never do — which is how, before
+    // this existed, 2.5M probe hits ended up in visitor_page_views (the
+    // HAProxy check alone contributed 2.17M) and the "top pages" panel became
+    // a table scan slow enough to pin every PHP-FPM worker and 503 the site.
+    //
+    // Turn this OFF only if you serve the app with no reverse proxy in front,
+    // otherwise nothing will ever be recorded.
+    'require_forwarded' => (bool) env('VISITOR_REQUIRE_FORWARDED', true),
+
+    // Second line of defence, independent of the header check above: a
+    // User-Agent containing any of these is a machine checking we are alive,
+    // not a visitor. Matched case-insensitively as a substring.
+    'ignore_user_agents' => [
+        'blackbox exporter', 'prometheus', 'kube-probe', 'healthcheck',
+        'curl/', 'wget/', 'python-requests', 'go-http-client',
+        'uptime-kuma', 'pingdom', 'statuscake',
+    ],
+
     // Path prefixes never recorded. The public marketing pages are the point;
     // the admin console, APIs, widget assets and health checks are noise.
     'ignore_paths' => [
