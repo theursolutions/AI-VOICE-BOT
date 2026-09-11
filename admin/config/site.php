@@ -333,6 +333,22 @@ return [
         'contact_region'      => 'Punjab',
         'contact_postal_code' => '54000',
         'contact_country'     => 'PK',
+
+        // ── Registered business identity (legal) ─────────────────────
+        // `brand_name` above is the trading name; this is the legal entity
+        // that actually contracts with customers and receives the money.
+        // Payment gateways check it: Safepay requires the registered name
+        // on the Terms & Conditions page to match their merchant record
+        // character-for-character, so edit this only to match the
+        // certificate of incorporation / registration.
+        'legal_entity'       => 'The UR Solutions',
+        // Both default to `contact_address` when left blank, so the common
+        // case — one office that is both — stays a single edit. Fill them in
+        // only when the registered office differs from where you trade.
+        'legal_office'       => '',
+        'legal_place'        => '',
+        // Named in the governing-law clause: "the courts of ___".
+        'legal_jurisdiction' => 'Lahore',
         'social_twitter'    => '',   // full URL, e.g. https://x.com/serveai
         'social_linkedin'   => '',
         'social_facebook'   => '',

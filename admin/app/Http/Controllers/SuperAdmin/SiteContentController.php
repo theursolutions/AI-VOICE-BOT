@@ -160,6 +160,12 @@ class SiteContentController extends Controller
                 $a('cta_subtitle', 'Sub-text'),
                 $t('cta_button', 'Button label'),
             ]],
+            'Legal & Business Identity' => ['icon' => '⚖️', 'fields' => [
+                $t('legal_entity', 'Registered business name (shown on /terms)'),
+                $a('legal_office', 'Registered office address (blank = contact address)'),
+                $a('legal_place', 'Principal place of business (blank = contact address)'),
+                $t('legal_jurisdiction', 'Courts named in the governing-law clause'),
+            ]],
             'Footer & Contact' => ['icon' => '🦶', 'fields' => [
                 $a('footer_tagline', 'Footer tagline (under brand)'),
                 $t('contact_phone', 'Contact phone (shown in footer + Contact page)'),
