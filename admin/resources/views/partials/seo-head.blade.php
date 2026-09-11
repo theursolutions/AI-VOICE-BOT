@@ -154,10 +154,16 @@
     $orgId  = Seo::origin() . '/#organization';
     $siteId = Seo::origin() . '/#website';
 
+    // Registered entity behind the trading name — disclosed in the footer and
+    // in full on /terms, so it qualifies under the "nothing invented" rule
+    // above. Dropped by array_filter when it's blank or the same name.
+    $orgLegal = trim((string) tva_setting('content.legal_entity', ''));
+
     $org = array_filter([
         '@type'  => 'Organization',
         '@id'    => $orgId,
         'name'   => $seo['org_name'] ?? null,
+        'legalName' => $orgLegal !== $seo['org_name'] ? $orgLegal : null,
         'url'    => Seo::origin() . '/',
         'logo'   => Seo::absolute($seo['org_logo'] ?: serveai_icon()),
         'image'  => $ogImage,
