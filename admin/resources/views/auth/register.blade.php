@@ -89,7 +89,7 @@
                                @checked(old('terms'))>
                         <label class="cursor-pointer select-none" for="terms">
                             I agree to the {{ $brand }}
-                            <a class="text-primary dark:text-slate-200" href="{{ url('/terms') }}" target="_blank" rel="noopener">Terms of Service</a>
+                            <a class="text-primary dark:text-slate-200" href="{{ url('/terms') }}" target="_blank" rel="noopener">Terms &amp; Conditions</a>
                             and
                             <a class="text-primary dark:text-slate-200" href="{{ url('/privacy') }}" target="_blank" rel="noopener">Privacy Policy</a>.
                         </label>

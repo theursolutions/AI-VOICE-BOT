@@ -41,7 +41,7 @@
 
             <h2 id="exceptions">7. Exceptions</h2>
             <ul>
-                <li>Accounts suspended or terminated for breaching our <a href="{{ url('/terms') }}">Terms of Service</a> are not eligible for refunds.</li>
+                <li>Accounts suspended or terminated for breaching our <a href="{{ url('/terms') }}">Terms &amp; Conditions</a> are not eligible for refunds.</li>
                 <li>Custom, enterprise, or annual prepaid plans may have their own terms set out in a separate agreement.</li>
                 <li>Nothing here limits rights you may have under mandatory consumer-protection laws in your country.</li>
             </ul>

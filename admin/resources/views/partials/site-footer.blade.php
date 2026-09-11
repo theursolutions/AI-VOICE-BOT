@@ -20,6 +20,12 @@
         'instagram' => tva_setting('content.social_instagram', ''),
     ]);
     $bottom   = tva_setting('content.footer_text', '');
+    // Registered entity behind the trading name. Shown next to the copyright
+    // so the company that actually takes the payment is visible from every
+    // page, which is what card schemes and our gateway expect. Suppressed
+    // when the two names are the same, so there's nothing to say.
+    $legal    = trim((string) tva_setting('content.legal_entity', ''));
+    $legalRow = ($legal !== '' && $legal !== $brand) ? $legal : '';
     $telHref  = $phone ? 'tel:' . preg_replace('/[^\d+]/', '', $phone) : '';
 @endphp
 
@@ -97,7 +103,7 @@
                 <div class="site-footer__col">
                     <h3>Legal</h3>
                     <a href="{{ url('/privacy') }}">Privacy Policy</a>
-                    <a href="{{ url('/terms') }}">Terms of Service</a>
+                    <a href="{{ url('/terms') }}">Terms &amp; Conditions</a>
                     <a href="{{ url('/refund-policy') }}">Refund Policy</a>
                     <a href="{{ url('/cookies') }}">Cookie Policy</a>
                     {{-- Meta requires the deletion instructions to be reachable
@@ -134,6 +140,9 @@
                     {{ $bottom }}
                 @else
                     &copy; {{ date('Y') }} {{ $brand }}. All rights reserved.
+                @endif
+                @if ($legalRow !== '')
+                    <span class="site-footer__entity">{{ $brand }} is a trading name of {{ $legalRow }}.</span>
                 @endif
             </div>
             <div class="site-footer__legal-mini">
@@ -205,6 +214,9 @@
         display: flex; align-items: center; justify-content: space-between;
         flex-wrap: wrap; gap: 14px; padding-top: 26px; font-size: 13px;
     }
+    /* Its own line under the copyright, a notch quieter — it's a disclosure,
+       not a claim anyone needs to read twice. */
+    .site-footer__entity { display: block; margin-top: 4px; font-size: 12px; opacity: .8; }
     .site-footer__legal-mini { display: flex; gap: 18px; flex-wrap: wrap; }
     .site-footer__legal-mini a { color: var(--text-dim, #8b96a8); }
     .site-footer__legal-mini a:hover { color: var(--neon, #3b82f6); }
