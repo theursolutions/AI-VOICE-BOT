@@ -57,7 +57,7 @@ abstract class BillingTestCase extends TestCase
             // A suite that wants another gateway configures it itself; see
             // PaymentRoutingTest and GatewayCheckoutTest.
             'billing.safepay.api_key'       => '',
-            'billing.safepay.v1_secret'     => '',
+            'billing.safepay.secret_key'     => '',
             'billing.safepay.webhook_secret'=> '',
             'billing.paddle.api_key'        => '',
             'billing.paddle.client_token'   => '',

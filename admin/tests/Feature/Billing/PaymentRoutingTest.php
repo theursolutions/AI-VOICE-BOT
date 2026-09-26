@@ -25,7 +25,7 @@ class PaymentRoutingTest extends BillingTestCase
 
         config([
             'billing.safepay.api_key'    => 'sec_test',
-            'billing.safepay.v1_secret'  => 'v1_test',
+            'billing.safepay.secret_key'  => 'v1_test',
             'billing.paddle.api_key'     => 'apikey_test',
             'billing.paddle.client_token'=> 'test_token',
             'billing.paddle.webhook_secret' => 'pdl_ntfset_test',

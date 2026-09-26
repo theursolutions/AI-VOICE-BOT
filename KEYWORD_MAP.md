@@ -1,5 +1,55 @@
 # Keyword & Content Map — serveai.com.pk
 
+## September 2026 update — keyword-to-page map
+
+The site is now positioned as **AI customer support & AI agents** (it was "AI receptionist"). Each search intent has exactly one target page. Near-synonyms share a page on purpose: separate pages that differ only by the keyword would be doorway pages, and they would compete with each other.
+
+No search volumes here either. Validate with Search Console → Performance → Queries once the pages have been indexed for 3–4 weeks.
+
+| Page | Primary intent | Also targets (same intent) | Does NOT target |
+|---|---|---|---|
+| `/` | serveAI brand + "AI customer support & AI agents" | serveAI, Serve AI, ServeAI, serveAI Pakistan, AI automation platform, AI customer support platform | Any single channel |
+| `/ai-customer-support` | AI customer support software | AI customer service (software), AI support agent(s), AI customer service agent, customer support automation, customer service automation, AI helpdesk, AI support automation, AI customer support for small business | Voice specifics, WhatsApp specifics |
+| `/ai-agents` | AI agents for business | AI agent platform, AI support agents that take actions, AI business assistant, AI virtual assistant for business, AI agent for customer service | "What are AI agents" (informational: blog) |
+| `/ai-voice-agent` | AI voice agent | AI phone agent, AI call agent, AI voice customer support, AI voice assistant for business, AI voice support | Outbound / cold calling (not supported) |
+| `/ai-chatbot` | AI chatbot for (your) website / business | AI chatbot for customer support, AI support chatbot, AI customer service chatbot, AI webchat, AI chat agent, AI chatbot for online businesses | WhatsApp chatbot |
+| `/whatsapp-ai-chatbot` | WhatsApp AI chatbot | AI WhatsApp customer support, WhatsApp Business API chatbot | Unofficial WhatsApp automation |
+| `/omnichannel-customer-support` | Omnichannel customer support | Omnichannel AI support, AI social media customer support, Facebook AI chatbot, Instagram AI chatbot, unified inbox | Instagram/Facebook comment moderation (not supported) |
+| `/pricing` | serveAI pricing | AI customer support pricing / cost | — |
+| `/blog/what-is-ai-customer-support` *(draft)* | What is AI customer support (informational) | How AI customer support works, AI vs traditional support, what to automate | Commercial "software" queries (→ `/ai-customer-support`) |
+| `/blog/whatsapp-business-api-chatbot-guide` *(draft)* | WhatsApp chatbot rules (informational) | WhatsApp 24-hour window, templates, WhatsApp API vs app | — |
+| `/blog/ai-agents-vs-chatbots-vs-assistants` | AI agents vs chatbots | What is an AI agent | — |
+| `/blog/ai-voice-agents-how-they-work-cost` | How AI voice agents work / cost | Voice AI latency, cost per minute | — |
+| `/blog/ai-lead-qualification-workflow` | AI lead qualification | Lead scoring, lead routing | — |
+| `/blog/why-ai-support-projects-fail` | AI support implementation | AI customer service implementation checklist | — |
+
+### Deliberately not built
+
+| Requested page | Why not |
+|---|---|
+| `/ai-customer-service`, `/ai-support-agent`, `/ai-customer-support-chatbot`, `/ai-support-automation` | Same search intent as `/ai-customer-support` or `/ai-chatbot`. Separate pages would be near-duplicates |
+| `/ai-business-assistant` | Covered by `/ai-agents`. There isn't enough distinct substance for a standalone page |
+| E-commerce landing page ("AI chatbot for ecommerce customer support") | No native Shopify/WooCommerce integration. Order lookups work through a generic webhook skill. Worth building once there is a native integration or a real customer case study |
+
+### Content cluster roadmap (write in this order)
+
+Pillar: **AI customer support** (`/ai-customer-support` ↔ `/blog/what-is-ai-customer-support`).
+
+1. How to automate customer support with AI (step-by-step, links to `/ai-customer-support`)
+2. AI customer support for small businesses: what to automate first
+3. Human handoff: designing the escalation path (links to `/omnichannel-customer-support`)
+4. Omnichannel vs multichannel customer support (links to `/omnichannel-customer-support`)
+5. How AI voice agents handle customer calls, and when they should not (links to `/ai-voice-agent`)
+6. AI customer support for e-commerce: order status, returns, stock (only with real examples)
+7. Can one AI agent handle Urdu and English? (only once Urdu voice output is production quality)
+
+Every article: one primary topic, sources for every statistic, a link to its one closest product page, and links to 1–2 siblings. Articles are seeded as drafts (`php artisan blog:seed-articles`) and published by a person from `/admin/blog`.
+
+---
+
+## August 2026 baseline (original map)
+
+
 **Prepared:** 8 August 2026
 
 ## How to read this

@@ -53,6 +53,15 @@ class PaymentsController extends Controller
                 'recurring'    => $gateway->supports(PaymentGateway::CAP_RECURRING),
                 'countries'    => $this->countriesServedBy($gateway->key()),
                 'env_keys'     => $this->envKeysFor($gateway->key()),
+                // null = no sandbox/live switch for this one (Stripe: its keys decide).
+                'mode'         => in_array($gateway->key(), Payments::MODE_GATEWAYS, true)
+                    ? Payments::gatewayMode($gateway->key())
+                    : null,
+                'mode_keys'    => [
+                    'sandbox' => Payments::hasModeCredentials($gateway->key(), 'sandbox'),
+                    'live'    => Payments::hasModeCredentials($gateway->key(), 'live'),
+                ],
+                'live_env_keys' => $this->liveEnvKeysFor($gateway->key()),
             ];
         }
 
@@ -61,6 +70,7 @@ class PaymentsController extends Controller
         return view('ops.payments.index', [
             'title'      => 'Payments',
             'gateways'   => $gateways,
+            'checkoutEnabled' => Payments::checkoutEnabled(),
             // Every country we have a currency for, not merely the sellable
             // ones — this page is where the restriction is edited, so it has to
             // show what is currently excluded as well as what is not.
@@ -89,6 +99,9 @@ class PaymentsController extends Controller
             'tax_mode'     => ['nullable', 'in:' . implode(',', Payments::TAX_MODES)],
             'tax_rates'    => ['array'],
             'tax_rates.*'  => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'checkout_enabled' => ['nullable', 'in:0,1'],
+            'modes'        => ['array'],
+            'modes.*'      => ['string', 'in:' . implode(',', Payments::MODES)],
         ]);
 
         $enabled = array_values(array_intersect(
@@ -108,9 +121,17 @@ class PaymentsController extends Controller
             'countries' => Payments::allowedCountries(),
             'tax_mode'  => Payments::taxMode(),
             'tax_rates' => Payments::taxRates(),
+            'checkout'  => Payments::checkoutEnabled(),
+            'modes'     => $this->modes(),
         ];
 
         Payments::setEnabledGateways($enabled);
+
+        if ($request->has('checkout_enabled')) {
+            Payments::setCheckoutEnabled((string) $request->input('checkout_enabled') === '1');
+        }
+
+        Payments::setGatewayModes((array) $request->input('modes', []));
 
         if ((string) $request->input('restrict') === '1') {
             $countries = (array) $request->input('countries', []);
@@ -141,6 +162,8 @@ class PaymentsController extends Controller
                     'countries' => Payments::allowedCountries(),
                     'tax_mode'  => Payments::taxMode(),
                     'tax_rates' => Payments::taxRates(),
+                    'checkout'  => Payments::checkoutEnabled(),
+                    'modes'     => $this->modes(),
                 ],
             ],
         ]);
@@ -152,9 +175,19 @@ class PaymentsController extends Controller
 
         $warning = $this->unusable();
 
+        // Only providers that can actually charge — "live" on one with no
+        // credentials would claim real money is being taken when it cannot be.
+        $live = array_keys(array_filter(
+            $this->modes(),
+            fn ($m, $k) => $m === 'live' && Payments::gatewayEnabled($k) && $this->registry->get($k)?->isConfigured(),
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
         return back()->with(
             $warning ? 'warning' : 'success',
-            'Taking payments through ' . $names . '.'
+            (Payments::checkoutEnabled() ? 'Buy buttons are ON. ' : 'Buy buttons are OFF — plans are information only. ')
+            . 'Taking payments through ' . $names . '.'
+            . ($live ? ' Live (real money): ' . implode(', ', array_map(fn ($k) => $this->nameFor($k), $live)) . '.' : ' All providers are in sandbox.')
             . ($warning ? ' ' . $warning : '')
         );
     }
@@ -275,11 +308,34 @@ class PaymentsController extends Controller
         };
     }
 
+    /** @return array<string, string> gateway key => sandbox|live */
+    private function modes(): array
+    {
+        $out = [];
+
+        foreach (Payments::MODE_GATEWAYS as $key) {
+            $out[$key] = Payments::gatewayMode($key);
+        }
+
+        return $out;
+    }
+
+    /** The dedicated live-key env vars, named on the page when they are missing. */
+    private function liveEnvKeysFor(string $key): array
+    {
+        return match ($key) {
+            'safepay' => ['SAFEPAY_LIVE_API_KEY', 'SAFEPAY_LIVE_SECRET_KEY', 'SAFEPAY_LIVE_WEBHOOK_SECRET'],
+            'payfast' => ['PAYFAST_LIVE_MERCHANT_ID', 'PAYFAST_LIVE_SECURED_KEY'],
+            'paddle'  => ['PADDLE_LIVE_API_KEY', 'PADDLE_LIVE_CLIENT_TOKEN', 'PADDLE_LIVE_WEBHOOK_SECRET'],
+            default   => [],
+        };
+    }
+
     /** The env vars this gateway reads, so a missing one can be found. */
     private function envKeysFor(string $key): array
     {
         return match ($key) {
-            'safepay' => ['SAFEPAY_API_KEY', 'SAFEPAY_V1_SECRET', 'SAFEPAY_WEBHOOK_SECRET'],
+            'safepay' => ['SAFEPAY_API_KEY', 'SAFEPAY_SECRET_KEY', 'SAFEPAY_WEBHOOK_SECRET'],
             'payfast' => ['PAYFAST_MERCHANT_ID', 'PAYFAST_SECURED_KEY'],
             'paddle'  => ['PADDLE_API_KEY', 'PADDLE_CLIENT_TOKEN', 'PADDLE_WEBHOOK_SECRET'],
             'stripe'  => ['STRIPE_KEY', 'STRIPE_SECRET', 'STRIPE_WEBHOOK_SECRET'],

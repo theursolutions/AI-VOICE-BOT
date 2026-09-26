@@ -31,7 +31,7 @@ Route::middleware('project.apikey')->prefix('v1')->group(function () {
         // from one super-admin setting. Deliberately AFTER the project's own
         // config so a client cannot override our branding by writing these
         // keys into their widget settings.
-        $config['powered_by_label'] = (string) tva_setting('content.powered_by_label', 'Serve AI');
+        $config['powered_by_label'] = (string) tva_setting('content.powered_by_label', 'serveAI');
         $config['powered_by_url']   = (string) tva_setting('content.powered_by_url', '');
 
         return response()->json([

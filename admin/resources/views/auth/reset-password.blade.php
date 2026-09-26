@@ -1,7 +1,7 @@
 {{-- Step 2 of the reset flow, reached from the emailed link. Matches
      auth/forgot-password.blade.php (layouts.auth + the Midone theme) rather
      than Breeze's <x-guest-layout>, which is plain Tailwind with different
-     branding — landing on it from a Serve AI email looked like a different
+     branding — landing on it from a serveAI email looked like a different
      product mid-flow. --}}
 @extends('layouts.auth', ['authTitle' => 'Choose a new password'])
 @section('content')
@@ -10,11 +10,11 @@
         <!-- BEGIN: Info panel -->
         <div class="hidden xl:flex flex-col min-h-screen">
             <a href="{{ url('/') }}" class="-intro-x flex items-center pt-5">
-                <img alt="Serve AI" class="w-8" src="{{ serveai_icon() }}">
-                <span class="text-white text-xl font-semibold ml-3">Serve AI</span>
+                <img alt="serveAI" class="w-8" src="{{ serveai_icon() }}">
+                <span class="text-white text-xl font-semibold ml-3">serveAI</span>
             </a>
             <div class="my-auto">
-                <img alt="Serve AI" class="-intro-x w-1/2 -mt-16" src="{{ url('/assets/dist/images/illustration.svg') }}">
+                <img alt="serveAI" class="-intro-x w-1/2 -mt-16" src="{{ url('/assets/dist/images/illustration.svg') }}">
                 <div class="-intro-x text-white font-medium text-4xl leading-tight mt-10">
                     Choose a new
                     <br>

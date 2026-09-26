@@ -40,7 +40,7 @@ class AddonPurchaseTest extends BillingTestCase
 
         config([
             'billing.safepay.api_key'    => 'sec_test',
-            'billing.safepay.v1_secret'  => 'v1_test',
+            'billing.safepay.secret_key'  => 'v1_test',
             'billing.safepay.sandbox'    => true,
             'billing.local_pricing.PKR'  => ['rate' => 300, 'step' => 500],
             // Paddle off: these tests are about the gateway that CANNOT amend.
@@ -213,6 +213,7 @@ class AddonPurchaseTest extends BillingTestCase
         $this->assertSame('addon', $charge->purpose, 'An add-on charge must not look like a plan charge');
         $this->assertSame('pending', $charge->status);
         $this->assertSame('PKR', $charge->currency);
+        $this->assertStringStartsWith('track_fake_', (string) $charge->gateway_ref, 'The add-on payment has no session to be confirmed against');
         $this->assertLessThan(
             2 * $this->seatPrice()->unit_amount,
             (int) $charge->amount_cents,
@@ -475,9 +476,12 @@ class FakeSafepayForAddons extends \App\Services\Billing\Gateways\SafepayGateway
         \App\Models\Billing\PlanPrice $price,
         array $context = [],
     ): \App\Services\Billing\Gateways\CheckoutHandoff {
+        $tracker = 'track_fake_' . uniqid();
+
         return \App\Services\Billing\Gateways\CheckoutHandoff::redirect(
-            'https://fake-checkout.test/pay?beacon=trk_' . uniqid(),
+            'https://fake-checkout.test/embedded?tracker=' . $tracker,
             (string) ($context['basket_id'] ?? 'none'),
+            $tracker,
         );
     }
 }

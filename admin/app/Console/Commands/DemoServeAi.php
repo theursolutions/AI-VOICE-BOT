@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
- * Builds the "Serve AI" demo workspace that powers the web chat on our own
+ * Builds the "serveAI" demo workspace that powers the web chat on our own
  * marketing site — the shop window. One command, safe to re-run.
  *
  *   php artisan demo:serve-ai
@@ -51,15 +51,15 @@ class DemoServeAi extends Command
                             {--fresh : Rebuild agents, skills, flows and voices from scratch}
                             {--skip-provision : Skip tenant DB provisioning (it already exists)}';
 
-    protected $description = 'Create/refresh the "Serve AI" demo project used by the web chat on our own website.';
+    protected $description = 'Create/refresh the "serveAI" demo project used by the web chat on our own website.';
 
-    private const CLIENT_NAME  = 'Serve AI';
-    private const PROJECT_NAME = 'Serve AI';
+    private const CLIENT_NAME  = 'serveAI';
+    private const PROJECT_NAME = 'serveAI';
 
     public function handle(TenantManager $tenants, TenantProvisioner $prov): int
     {
         $this->line('');
-        $this->info('━━ Serve AI demo workspace ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+        $this->info('━━ serveAI demo workspace ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
         $owner = $this->resolveOwner();
         if (! $owner) {
@@ -313,7 +313,7 @@ class DemoServeAi extends Command
     private function skills(Project $project): array
     {
         $defs = [
-            ['Sales & pricing',      'What Serve AI does, plans, trials, and getting started.',            120, true],
+            ['Sales & pricing',      'What serveAI does, plans, trials, and getting started.',            120, true],
             ['Product & features',   'Channels, voice cloning, flows, CRM, integrations, limits.',         120, false],
             ['Setup & onboarding',   'Connecting data, channels and phone numbers; going live.',           180, false],
             ['Security & data',      'Where data lives, who can see it, retention and export.',            180, false],
@@ -503,12 +503,12 @@ class DemoServeAi extends Command
         $defs = [
             [
                 'type'   => DataSource::TYPE_WEBSITE,
-                'name'   => 'Serve AI website',
+                'name'   => 'serveAI website',
                 'config' => ['url' => $siteUrl],
             ],
             [
                 'type'   => DataSource::TYPE_WEBSITE,
-                'name'   => 'Serve AI blog',
+                'name'   => 'serveAI blog',
                 'config' => ['url' => $siteUrl . '/blog'],
             ],
         ];
@@ -695,7 +695,7 @@ class DemoServeAi extends Command
 
     private function brandName(): string
     {
-        return (string) tva_setting('content.brand_name', 'Serve AI');
+        return (string) tva_setting('content.brand_name', 'serveAI');
     }
 
     private function brandTagline(): string

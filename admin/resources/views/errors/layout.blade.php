@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>@yield('title', 'Something went wrong') · Serve AI</title>
+    <title>@yield('title', 'Something went wrong') · serveAI</title>
     <link rel="shortcut icon" href="{{ serveai_icon() }}">
     {{-- Self-contained: every style is inline so the page renders even if the
          asset pipeline, database, or app config is unavailable (500s). --}}
@@ -69,7 +69,7 @@
     <div class="err">
         <div class="err__brand">
             <img src="{{ serveai_icon() }}" alt="">
-            <span>Serve AI</span>
+            <span>serveAI</span>
         </div>
 
         <div class="err__code">@yield('code', 'Oops')</div>

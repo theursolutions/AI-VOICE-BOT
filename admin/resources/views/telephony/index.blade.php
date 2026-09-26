@@ -379,7 +379,7 @@
             </div>
 
             {{-- Twilio account for THIS project. Each customer brings their
-                 own — the credentials in .env belong to the Serve AI demo. --}}
+                 own — the credentials in .env belong to the serveAI demo. --}}
             @php $tw = $twilio[$project->id] ?? null; @endphp
             <div class="tva-creds {{ $tw ? 'is-connected' : '' }}">
                 @if ($tw)

@@ -3,7 +3,7 @@
 @section('content')
 @php
     $isChange  = (bool) $subscription?->plan_id;
-    $brandName = tva_setting('content.brand_name', 'Serve AI');
+    $brandName = tva_setting('content.brand_name', 'serveAI');
     $currency  = strtoupper((string) ($price->currency ?: 'usd'));
     $each      = config("billing.intervals.labels.{$price->interval}", ucfirst($price->interval));
     $key       = $gateway?->key();

@@ -68,7 +68,7 @@ class SeoOgImage extends Command
         $white = imagecolorallocate($img, 235, 241, 247);
         $dim   = imagecolorallocate($img, 139, 150, 168);
 
-        $brand   = (string) tva_setting('content.brand_name', 'Serve AI');
+        $brand   = (string) tva_setting('content.brand_name', 'serveAI');
         $tagline = (string) tva_setting('content.hero_title', 'Your AI receptionist that')
                  . ' ' . (string) tva_setting('content.hero_title_accent', 'never sleeps.');
         $sub     = (string) tva_setting('seo.meta_description', '');

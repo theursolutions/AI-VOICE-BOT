@@ -450,7 +450,7 @@ class BillingController extends Controller
         return view('billing.receipt', [
             'charge'       => $charge,
             'client'       => $client,
-            'brandName'    => tva_setting('content.brand_name', 'Serve AI'),
+            'brandName'    => tva_setting('content.brand_name', 'serveAI'),
             'brandAddress' => tva_setting('content.company_address', ''),
             'taxId'        => $client->billing_tax_id ?: null,
             'countryName'  => app(\App\Services\Geo\GeoLocationService::class)

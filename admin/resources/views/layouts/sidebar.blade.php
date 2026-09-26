@@ -104,8 +104,8 @@
 
 <nav class="side-nav">
     <a href="{{ $clientSlug ? route('dashboard', ['client' => $clientSlug]) : url('/') }}" class="intro-x flex items-center pl-5 pt-4">
-        <img alt="Serve AI" class="w-6" src="{{ serveai_icon() }}">
-        <span class="hidden xl:block text-white text-lg ml-3">Serve AI</span>
+        <img alt="serveAI" class="w-6" src="{{ serveai_icon() }}">
+        <span class="hidden xl:block text-white text-lg ml-3">serveAI</span>
     </a>
     <div class="side-nav__devider my-6"></div>
 

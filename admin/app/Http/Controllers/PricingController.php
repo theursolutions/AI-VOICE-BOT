@@ -74,7 +74,7 @@ class PricingController extends Controller
     public function pay(Request $request): View
     {
         return view('billing.pay', [
-            'brandName'   => tva_setting('content.brand_name', config('app.name', 'Serve AI')),
+            'brandName'   => tva_setting('content.brand_name', config('app.name', 'serveAI')),
             'clientToken' => (string) config('billing.paddle.client_token'),
             'environment' => config('billing.paddle.sandbox') ? 'sandbox' : 'production',
             'jsUrl'       => (string) config('billing.paddle.js_url'),

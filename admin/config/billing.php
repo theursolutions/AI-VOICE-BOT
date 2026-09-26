@@ -40,35 +40,36 @@ return [
     */
     /*
     |--------------------------------------------------------------------------
-    | Safepay (Pakistan)
+    | Safepay (Pakistan) — Payments 2.0
     |--------------------------------------------------------------------------
     |
     | Regulated by the State Bank of Pakistan. Hosted checkout: the customer is
-    | handed to Safepay's page and pays by card, bank account, JazzCash or
-    | Easypaisa there, so every method they support works without a form per
-    | method and no card number reaches this server.
+    | handed to Safepay's page and pays there, so no card number reaches this
+    | server. Follows the official SDK, getsafepay/sfpy-php — see the class
+    | note on SafepayGateway for why it is mirrored rather than installed.
     |
-    | THREE SECRETS, three jobs, and mixing them up fails in ways that look like
-    | something else:
+    | THREE CREDENTIALS, three jobs, and mixing them up fails in ways that look
+    | like something else. All three are per environment: the sandbox and live
+    | dashboards issue different ones.
     |
-    |   api_key         public, `sec_…`. Identifies the merchant on a session.
-    |   v1_secret       server-side. Signs the redirect back from checkout.
-    |   webhook_secret  server-side. Signs the X-SFPY-SIGNATURE webhook header.
+    |   api_key         public, `sec_…`. Names the merchant on each session.
+    |   secret_key      private. Authenticates every server-side call, sent as
+    |                   X-SFPY-MERCHANT-SECRET. Dashboard → Developers → API.
+    |                   (The v1 integration called it SAFEPAY_V1_SECRET, which
+    |                   is still read, so an existing .env keeps working.)
+    |   webhook_secret  private. Verifies X-SFPY-SIGNATURE on webhooks.
+    |                   Dashboard → Developers → Endpoints → View shared secret.
     |
-    | AMOUNTS ARE SENT IN RUPEES, not paisa. Confirmed empirically: a session
-    | created with amount = 7500 renders as "Rs 7,500" on Safepay's own checkout
-    | page, so the field is whole rupees. Our prices are stored in minor units,
-    | so a Rs 75 plan is 7500 and must be divided by 100 on the way out.
+    | AMOUNTS ARE SENT IN PAISA. 2.0 takes minor units, and our prices are
+    | stored in minor units, so they go out unchanged: 7500 is Rs 75. Proven on
+    | the sandbox — a session for 7500 renders "Rs.75.00" on Safepay's page.
     |
-    | This was the single most dangerous line in the file, and it was wrong until
-    | a sandbox page was actually read. Sending minor units would have charged
-    | every Pakistani customer a hundred times the price — Rs 7,500 for a Rs 75
-    | plan — and nothing in the code, the tests or the API response would have
-    | said so: Safepay echoes back whatever number it is given.
-    |
-    | Safepay's docs describe amounts as "in the lowest denomination", which is
-    | what made paisa look right. It is not true of this endpoint. Re-check with
-    | safepay:doctor after any API change rather than trusting the prose.
+    | This is the reverse of v1, which took whole rupees, and it is the most
+    | expensive line in the integration to get wrong: keeping v1's divide-by-100
+    | charges a hundredth of the price, and sending paisa to v1 charged a
+    | hundred times it. Nothing in an API response says which — Safepay echoes
+    | back whatever number it is given — so re-check the rendered page with
+    | `php artisan safepay:doctor` after any change to the API version.
     */
     /*
     |--------------------------------------------------------------------------
@@ -100,6 +101,20 @@ return [
         // Sandbox unless explicitly told otherwise — the opposite default would
         // let a missing env var take real money.
         'sandbox' => (bool) env('PADDLE_SANDBOX', true),
+
+        // Per-environment keys for the Ops → Payments mode switch. See safepay.
+        'credentials' => [
+            'sandbox' => [
+                'api_key'        => env('PADDLE_SANDBOX_API_KEY'),
+                'client_token'   => env('PADDLE_SANDBOX_CLIENT_TOKEN'),
+                'webhook_secret' => env('PADDLE_SANDBOX_WEBHOOK_SECRET'),
+            ],
+            'live' => [
+                'api_key'        => env('PADDLE_LIVE_API_KEY'),
+                'client_token'   => env('PADDLE_LIVE_CLIENT_TOKEN'),
+                'webhook_secret' => env('PADDLE_LIVE_WEBHOOK_SECRET'),
+            ],
+        ],
 
         'base_url' => [
             'sandbox'    => env('PADDLE_SANDBOX_URL', 'https://sandbox-api.paddle.com'),
@@ -140,47 +155,47 @@ return [
 
     'safepay' => [
         'api_key'        => env('SAFEPAY_API_KEY'),
-        'v1_secret'      => env('SAFEPAY_V1_SECRET'),
+        'secret_key'     => env('SAFEPAY_SECRET_KEY', env('SAFEPAY_V1_SECRET')),
         'webhook_secret' => env('SAFEPAY_WEBHOOK_SECRET'),
 
         // Sandbox unless explicitly told otherwise — the opposite default would
         // let a missing env var take real money.
         'sandbox' => (bool) env('SAFEPAY_SANDBOX', true),
 
-        // The API and the CHECKOUT PAGE are on different hosts, which cost an
-        // hour to discover: api.getsafepay.com serves the session endpoint but
-        // 404s the checkout page, and the sandbox serves both. Deriving one from
-        // the other produces a URL that 301s to the marketing site, which looks
-        // like a bad tracker rather than a wrong host.
+        // Optional per-environment keys, so Ops → Payments can flip between
+        // sandbox and live without an .env edit. Whichever set matches the
+        // chosen mode replaces the plain keys above; a blank one leaves them.
+        // See Payments::applyConfig().
+        'credentials' => [
+            'sandbox' => [
+                'api_key'        => env('SAFEPAY_SANDBOX_API_KEY'),
+                'secret_key'     => env('SAFEPAY_SANDBOX_SECRET_KEY'),
+                'webhook_secret' => env('SAFEPAY_SANDBOX_WEBHOOK_SECRET'),
+            ],
+            'live' => [
+                'api_key'        => env('SAFEPAY_LIVE_API_KEY'),
+                'secret_key'     => env('SAFEPAY_LIVE_SECRET_KEY'),
+                'webhook_secret' => env('SAFEPAY_LIVE_WEBHOOK_SECRET'),
+            ],
+        ],
+
+        // Where the API lives. The endpoint PATHS are not here: they are fixed
+        // in SafepayGateway, as the SDK fixes them, so a v1 path left in an old
+        // .env cannot quietly route 2.0 traffic to the wrong place.
         'base_url' => [
             'sandbox'    => env('SAFEPAY_SANDBOX_URL', 'https://sandbox.api.getsafepay.com'),
             'production' => env('SAFEPAY_PRODUCTION_URL', 'https://api.getsafepay.com'),
         ],
 
-        // Where the customer is sent. Taken from Safepay's own PHP SDK
-        // (Base::CHECKOUT_ROUTE with SANDBOX_BASE_URL / PRODUCTION_BASE_URL)
-        // rather than from a blog post — the hosts genuinely differ per
-        // environment, and /embedded/ serves a page that looks right and cannot
-        // complete a payment.
-        'checkout_url' => [
-            'sandbox'    => env('SAFEPAY_SANDBOX_CHECKOUT_URL', 'https://sandbox.api.getsafepay.com/checkout/pay'),
-            'production' => env('SAFEPAY_CHECKOUT_URL', 'https://getsafepay.com/checkout/pay'),
+        // Where the CUSTOMER goes; `/embedded` is appended. Production is a
+        // different host from the API — getsafepay.com, not api.getsafepay.com
+        // — as in the SDK's Checkout::PROD_BASE_URL. Deliberately not read from
+        // .env: v1's SAFEPAY_CHECKOUT_URL pointed at /checkout/pay, and a stale
+        // copy of it would send 2.0 sessions to a page that cannot use them.
+        'checkout_host' => [
+            'sandbox'    => 'https://sandbox.api.getsafepay.com',
+            'production' => 'https://getsafepay.com',
         ],
-
-        // /order/v1/init is what the hosted flow uses — confirmed against
-        // Safepay's own SDK (Base::TRANSACTION_ENDPOINT), which sends exactly
-        // client, amount, currency and environment.
-        //
-        // /order/payments/v3/ also works and returns a richer tracker carrying
-        // intent, mode and a capabilities list, but it belongs to the ADVANCED
-        // (embedded) integration where the merchant drives each next_action.
-        // A tracker from it is not what the hosted checkout page expects.
-        'paths' => [
-            'session' => env('SAFEPAY_SESSION_PATH', '/order/v1/init'),
-        ],
-
-        // rupees | paisa — see the warning above.
-        'amount_unit' => env('SAFEPAY_AMOUNT_UNIT', 'rupees'),
 
         'timeout' => (int) env('SAFEPAY_TIMEOUT', 20),
     ],
@@ -257,6 +272,18 @@ return [
         // a missing env var take real money through a sandbox that silently
         // approves everything.
         'sandbox'       => (bool) env('PAYFAST_SANDBOX', false),
+
+        // Per-environment keys for the Ops → Payments mode switch. See safepay.
+        'credentials' => [
+            'sandbox' => [
+                'merchant_id' => env('PAYFAST_SANDBOX_MERCHANT_ID'),
+                'secured_key' => env('PAYFAST_SANDBOX_SECURED_KEY'),
+            ],
+            'live' => [
+                'merchant_id' => env('PAYFAST_LIVE_MERCHANT_ID'),
+                'secured_key' => env('PAYFAST_LIVE_SECURED_KEY'),
+            ],
+        ],
 
         'endpoints' => [
             'live' => [
@@ -524,7 +551,8 @@ return [
             // env var, so one `php artisan geoip:update` serves both features.
             // City edition by default because it is a superset of Country and
             // the visitor analytics wants city-level data.
-            'database_path' => env('GEOIP_DATABASE_PATH', storage_path('app/geoip/GeoLite2-City.mmdb')),
+            // `?:` so a blank GEOIP_DATABASE_PATH= falls back instead of pointing nowhere.
+            'database_path' => env('GEOIP_DATABASE_PATH') ?: storage_path('app/geoip/GeoLite2-City.mmdb'),
             'license_key'   => env('MAXMIND_LICENSE_KEY'),
             'account_id'    => env('MAXMIND_ACCOUNT_ID'),
             'edition'       => env('MAXMIND_EDITION', 'GeoLite2-City'),
@@ -544,8 +572,8 @@ return [
             // ipwho.is is an equally free alternative if this one ever stops:
             //   GEOIP_HTTP_ENDPOINT=https://ipwho.is/{ip}
             //   GEOIP_HTTP_COUNTRY_PATH=country_code
-            'endpoint'     => env('GEOIP_HTTP_ENDPOINT', 'https://api.country.is/{ip}'),
-            'country_path' => env('GEOIP_HTTP_COUNTRY_PATH', 'country'),
+            'endpoint'     => env('GEOIP_HTTP_ENDPOINT') ?: 'https://api.country.is/{ip}',
+            'country_path' => env('GEOIP_HTTP_COUNTRY_PATH') ?: 'country',
 
             // Short on purpose. This sits in front of a page a buyer is looking
             // at, and a slow provider must cost them a moment, not a page load.

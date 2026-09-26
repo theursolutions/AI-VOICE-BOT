@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Billing;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Services\Billing\Gateways\PaymentResult;
 use App\Services\Billing\Gateways\SafepayGateway;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Safepay's two ways of telling us a payment happened.
+ * Safepay's two ways of telling us a payment happened (Payments 2.0).
  *
  * THE WEBHOOK IS THE SOURCE OF TRUTH. The redirect is the customer's browser
  * coming back, and a customer who closes the tab mid-payment never sends it —
@@ -19,11 +20,18 @@ use Illuminate\Support\Facades\Log;
  * way, so anything that must happen on payment happens there, and the redirect
  * only decides what the customer is shown next.
  *
- * Both are signed, differently and not interchangeably: the webhook carries
- * X-SFPY-SIGNATURE over the raw body under the webhook secret; the redirect
- * carries `sig` over the tracker under the v1 secret. Neither body is believed
- * before its own signature checks out — without that these are an
- * unauthenticated "make me a subscriber" endpoint.
+ * Neither is believed on its own say-so:
+ *
+ *   • the webhook carries X-SFPY-SIGNATURE, HMAC-SHA512 over the whole event
+ *     under the webhook secret, and nothing in the body is read until it
+ *     verifies;
+ *   • the redirect carries no signature at all in 2.0, so it is only a prompt
+ *     to ask Safepay's reporter API about the session stored on the charge
+ *     when checkout began.
+ *
+ * Without those checks these are an unauthenticated "make me a subscriber"
+ * endpoint. With them, the worst a forged request can do is make us look up a
+ * payment.
  */
 class SafepayWebhookController extends Controller
 {
@@ -40,16 +48,22 @@ class SafepayWebhookController extends Controller
      */
     public function webhook(Request $request): JsonResponse
     {
-        // The RAW body, not the parsed array. The MAC is over the bytes that
-        // arrived, and re-encoding a decoded payload changes key order and
-        // whitespace enough to break it.
+        // The RAW body, not the parsed array. Re-encoding a decoded payload
+        // changes key order, escaping and {} vs [], and the MAC is over what
+        // Safepay sent.
         $raw       = $request->getContent();
         $signature = (string) $request->header('X-SFPY-SIGNATURE', '');
+        $scheme    = $this->safepay->webhookScheme($raw, $signature);
+        $event     = json_decode($raw, true) ?: [];
 
-        if (! $this->safepay->webhookValid($raw, $signature)) {
+        if ($scheme === null) {
             Log::warning('safepay.webhook.bad_signature', [
                 'ip'         => $request->ip(),
                 'has_header' => $signature !== '',
+                // Unauthenticated, and logged only so a scheme change on
+                // Safepay's side can be told apart from an attack.
+                'claimed'    => ['type' => $event['type'] ?? null, 'version' => $event['version'] ?? null],
+                'bytes'      => strlen($raw),
             ]);
 
             // 400, not 401: this is a malformed or forged delivery, and Safepay
@@ -57,17 +71,18 @@ class SafepayWebhookController extends Controller
             return response()->json(['error' => 'invalid signature'], 400);
         }
 
-        $payload = json_decode($raw, true) ?: [];
-
-        $tracker = (string) (data_get($payload, 'data.tracker')
-            ?? data_get($payload, 'tracker')
-            ?? '');
-        $orderId = (string) (data_get($payload, 'data.order_id')
-            ?? data_get($payload, 'order_id')
-            ?? '');
+        $data    = (array) ($event['data'] ?? []);
+        $type    = (string) ($event['type'] ?? '');
+        $tracker = (string) ($data['tracker'] ?? '');
+        // 2.0 carries our reference in the metadata attached at checkout; v1
+        // carried it as a top-level order_id.
+        $orderId = SafepayGateway::orderIdFrom($data['metadata'] ?? [])
+            ?? (string) ($data['order_id'] ?? '');
 
         Log::info('safepay.webhook', [
-            'event'   => data_get($payload, 'type') ?? data_get($payload, 'event'),
+            'event'   => $type,
+            'version' => $event['version'] ?? null,
+            'scheme'  => $scheme,
             'tracker' => $tracker,
             'order'   => $orderId,
         ]);
@@ -87,9 +102,33 @@ class SafepayWebhookController extends Controller
             return response()->json(['ok' => true, 'note' => 'already recorded']);
         }
 
-        $this->markPaid($charge, $tracker, $payload);
+        if ($scheme === SafepayGateway::SIGNED_EVENT && $type === 'payment.failed') {
+            $this->noteFailedAttempt($charge, $data);
 
-        return response()->json(['ok' => true]);
+            return response()->json(['ok' => true, 'note' => 'attempt failed']);
+        }
+
+        // A 2.0 event is signed whole, so it is read directly. An event signed
+        // over `data` alone — the v1 format, still sent to an endpoint that is
+        // subscribed to 1.0.0 events — could have had its type rewritten, so
+        // for those Safepay is asked instead.
+        $result = $scheme === SafepayGateway::SIGNED_EVENT
+            ? $this->safepay->resultFromEvent($charge, $event)
+            : $this->confirm($charge);
+
+        if ($result->paid) {
+            $this->markPaid($charge, $event);
+
+            return response()->json(['ok' => true]);
+        }
+
+        if ($result->raw['unreachable'] ?? false) {
+            // Safepay's own API is down. A 503 puts the delivery back in their
+            // retry queue, which is exactly what should happen to it.
+            return response()->json(['error' => 'could not confirm yet'], 503);
+        }
+
+        return response()->json(['ok' => true, 'note' => $result->failureReason]);
     }
 
     /**
@@ -98,33 +137,46 @@ class SafepayWebhookController extends Controller
      * Records the payment too — belt and braces, since whichever of this and
      * the webhook lands first wins and the other becomes a no-op — but its real
      * job is deciding what the person now looking at their browser is told.
+     *
+     * The reference arrives in the path, put there at checkout. A return from
+     * before 2.0 has none and carries order_id instead — it finds its charge,
+     * and then waits for a person, because a v1 session cannot be confirmed.
      */
-    public function returned(Request $request)
+    public function returned(Request $request, ?string $reference = null)
     {
-        $tracker   = (string) $request->input('tracker', '');
-        $signature = (string) $request->input('sig', $request->input('signature', ''));
-        $orderId   = (string) $request->input('order_id', '');
+        $charge = $this->findCharge(
+            ($reference !== null && $reference !== '') ? $reference : (string) $request->input('order_id', ''),
+            '',
+        );
 
-        $charge = $this->findCharge($orderId, $tracker);
-        $client = $charge ? Client::find($charge->client_id) : null;
-
-        $result = $this->safepay->verifyPayment($orderId ?: $tracker, [
-            'tracker' => $tracker,
-            'sig'     => $signature,
+        // What Safepay appended, by name only. 2.0 does not document it, and
+        // this is where anyone debugging a return will look first.
+        Log::info('safepay.return', [
+            'reference' => $reference,
+            'charge'    => $charge?->id,
+            'params'    => array_keys($request->all()),
         ]);
 
-        if ($result->paid && $charge && $charge->status !== 'paid') {
-            $this->markPaid($charge, $tracker, $request->all());
+        $paid = $charge && $charge->status === 'paid';
+
+        if ($charge && ! $paid) {
+            $result = $this->confirm($charge);
+
+            if ($result->paid) {
+                $this->markPaid($charge, $result->raw);
+                $paid = true;
+            }
         }
 
+        $client  = $charge ? Client::find($charge->client_id) : null;
         $billing = $client
             ? route('billing.index', ['client' => $client->slug])
             : url('/');
 
-        if ($result->paid) {
+        if ($paid) {
             // The reference travels so the page can show a receipt for THIS
             // payment — amount, plan and period — rather than a bare "thanks".
-            return redirect($billing . ($charge ? '?paid=' . urlencode($charge->reference) : ''))
+            return redirect($billing . '?paid=' . urlencode($charge->reference))
                 ->with('success', 'Payment received — thank you. Your plan is active.');
         }
 
@@ -139,11 +191,47 @@ class SafepayWebhookController extends Controller
     }
 
     /**
-     * Our charge row, by our own order id first and their tracker second.
+     * Ask Safepay whether this charge's session was paid.
      *
-     * Order id is ours and generated before the payment existed, so it is the
-     * reliable key; the tracker only exists once Safepay has seen it, and is the
-     * fallback for a delivery that omits the order id.
+     * Only ever the session stored when checkout began — never a tracker
+     * named by the caller, which could belong to a cheaper payment.
+     *
+     * A charge with no stored session was opened by the v1 integration, and is
+     * left for a person. The reporter API answers v1 sessions with a 500, and
+     * v1 is not safe to take on trust: its sessions open with the PUBLIC key,
+     * and its order id rode in the browser's URL, so a customer could open a
+     * Rs 1 session labelled with their own pending order and come back with a
+     * perfectly genuine signature. The only charges this affects are those in
+     * flight when 2.0 was deployed.
+     */
+    private function confirm(object $charge): PaymentResult
+    {
+        if (! $charge->gateway_ref) {
+            Log::warning('safepay.v1_charge_unconfirmable', [
+                'charge'    => $charge->id,
+                'reference' => $charge->reference,
+            ]);
+
+            return PaymentResult::pending(
+                $charge->reference,
+                'Opened before Payments 2.0 — confirm it in the Safepay dashboard.',
+            );
+        }
+
+        return $this->safepay->verifyPayment($charge->reference, [
+            'tracker'      => (string) $charge->gateway_ref,
+            'amount_cents' => (int) $charge->amount_cents,
+            'currency'     => $charge->currency ?: 'PKR',
+        ]);
+    }
+
+    /**
+     * Our charge row, by our own reference first and their tracker second.
+     *
+     * The reference is ours and generated before the payment existed, so it is
+     * the reliable key; the tracker is the fallback for a delivery that carries
+     * no order id — stored at checkout since 2.0, so it now matches pending
+     * charges too.
      */
     private function findCharge(string $orderId, string $tracker): ?object
     {
@@ -163,6 +251,30 @@ class SafepayWebhookController extends Controller
     }
 
     /**
+     * A declined attempt, recorded without giving up on the charge.
+     *
+     * The status stays PENDING on purpose. Safepay lets the customer try another
+     * card on the same session, and marking this failed would make the success
+     * that follows unrecordable — markPaid() only claims a pending row. The
+     * reason is kept so support can see why a charge is still waiting.
+     */
+    private function noteFailedAttempt(object $charge, array $data): void
+    {
+        $reason = trim((string) ($data['message'] ?? 'Payment attempt failed'))
+            . (isset($data['category']) ? ' (' . $data['category'] . ')' : '');
+
+        DB::table('gateway_charges')
+            ->where('id', $charge->id)
+            ->where('status', 'pending')
+            ->update([
+                'failure_reason' => mb_substr($reason, 0, 500),
+                'updated_at'     => now(),
+            ]);
+
+        Log::info('safepay.attempt_failed', ['charge' => $charge->id, 'reason' => $reason]);
+    }
+
+    /**
      * Record the payment and extend the subscription.
      *
      * Guarded by a conditional update rather than a read-then-write: the webhook
@@ -170,17 +282,19 @@ class SafepayWebhookController extends Controller
      * pending` means exactly one of them wins at the database. Two winners would
      * extend the period twice for one payment.
      */
-    private function markPaid(object $charge, string $tracker, array $payload): void
+    private function markPaid(object $charge, array $payload): void
     {
         $claimed = DB::table('gateway_charges')
             ->where('id', $charge->id)
             ->where('status', 'pending')
             ->update([
-                'status'      => 'paid',
-                'gateway_ref' => $tracker ?: $charge->gateway_ref,
-                'raw'         => json_encode($payload),
-                'paid_at'     => now(),
-                'updated_at'  => now(),
+                'status'         => 'paid',
+                // A declined attempt before this success is history now, and a
+                // paid charge showing a red "Failure" line would mislead support.
+                'failure_reason' => null,
+                'raw'            => json_encode($payload),
+                'paid_at'        => now(),
+                'updated_at'     => now(),
             ]);
 
         if (! $claimed) {

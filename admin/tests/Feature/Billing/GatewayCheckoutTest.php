@@ -38,7 +38,7 @@ class GatewayCheckoutTest extends BillingTestCase
 
         config([
             'billing.safepay.api_key'   => 'sec_test',
-            'billing.safepay.v1_secret' => 'v1_test',
+            'billing.safepay.secret_key' => 'v1_test',
             'billing.safepay.sandbox'   => true,
             'billing.local_pricing.PKR' => ['rate' => 300, 'step' => 500],
         ]);
@@ -201,6 +201,9 @@ class GatewayCheckoutTest extends BillingTestCase
         $this->assertSame('pending', $charge->status);
         $this->assertSame('PKR', $charge->currency);
         $this->assertSame($this->pkrPrice('growth')->unit_amount, (int) $charge->amount_cents);
+        // The session the payment will be confirmed against, stored while it is
+        // still known to be ours rather than taken from the returning browser.
+        $this->assertStringStartsWith('track_fake_', (string) $charge->gateway_ref);
     }
 
     /** The amount never comes from the request — only a slug and an interval do. */
@@ -482,9 +485,12 @@ class FakeSafepay extends SafepayGateway
 
     public function startCheckout(Client $client, PlanPrice $price, array $context = []): CheckoutHandoff
     {
+        $tracker = 'track_fake_' . uniqid();
+
         return CheckoutHandoff::redirect(
-            'https://fake-checkout.test/pay?beacon=trk_' . uniqid(),
+            'https://fake-checkout.test/embedded?tracker=' . $tracker,
             (string) ($context['basket_id'] ?? 'none'),
+            $tracker,
         );
     }
 

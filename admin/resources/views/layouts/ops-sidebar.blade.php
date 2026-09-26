@@ -43,8 +43,8 @@
 
 <nav class="side-nav">
     <a href="{{ route('ops.overview') }}" class="intro-x flex items-center pl-5 pt-4">
-        <img alt="Serve AI Ops" class="w-6" src="{{ serveai_icon() }}">
-        <span class="hidden xl:block text-white text-lg ml-3">Serve AI</span>
+        <img alt="serveAI Ops" class="w-6" src="{{ serveai_icon() }}">
+        <span class="hidden xl:block text-white text-lg ml-3">serveAI</span>
         <span class="hidden xl:inline-block ops-internal-badge ml-2">Internal</span>
     </a>
     <div class="side-nav__devider my-6"></div>

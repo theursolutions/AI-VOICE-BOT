@@ -132,11 +132,32 @@ class GatewayCheckoutService
             throw $e;
         }
 
+        $this->rememberGatewayRef($chargeId, $handoff);
+
         return [
             'handoff'   => $handoff,
             'reference' => $reference,
             'gateway'   => $gateway->key(),
         ];
+    }
+
+    /**
+     * Keep the provider's id for a payment that has one before it is paid.
+     *
+     * It is what the payment is later confirmed against, so it has to be
+     * written while it is still known to be ours — at the moment the provider
+     * issued it — rather than taken from whatever comes back afterwards.
+     */
+    public static function rememberGatewayRef(int $chargeId, CheckoutHandoff $handoff): void
+    {
+        if ($handoff->gatewayRef === null || $handoff->gatewayRef === '') {
+            return;
+        }
+
+        DB::table('gateway_charges')->where('id', $chargeId)->update([
+            'gateway_ref' => $handoff->gatewayRef,
+            'updated_at'  => now(),
+        ]);
     }
 
     /**

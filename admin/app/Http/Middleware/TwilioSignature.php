@@ -35,7 +35,7 @@ class TwilioSignature
         //
         // Every customer connects their own Twilio account (see
         // App\Models\ProjectTwilioAccount) — the credentials in .env belong to
-        // the Serve AI demo project alone. Twilio signs a webhook with the
+        // the serveAI demo project alone. Twilio signs a webhook with the
         // auth token of the account that owns the number, so validating
         // everything against the platform token would reject every real
         // customer call with a 403 they'd never see an explanation for.

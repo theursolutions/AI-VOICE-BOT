@@ -97,8 +97,8 @@ class OnSiteCheckoutTest extends BillingTestCase
 
         $response->assertOk();
         $response->assertSee('Growth', false);
-        $response->assertSee('$750', false);
-        $response->assertSee('$62.50/mo', false);       // effective monthly
+        $response->assertSee('$390', false);
+        $response->assertSee('$32.50/mo', false);       // effective monthly
         $response->assertSee('You save', false);
         $response->assertSee('4242', false);            // saved card, pre-selected
         $response->assertSee('Order summary', false);

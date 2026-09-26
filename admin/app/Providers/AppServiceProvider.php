@@ -101,6 +101,16 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Ops → Payments overrides (buy buttons on/off, sandbox/live) onto
+        // config('billing.*'), so every existing read follows the switch.
+        // Re-applied per queued job: a worker boots once and would otherwise
+        // keep the mode it started with until it was restarted.
+        \App\Support\Payments::applyConfig();
+        \Illuminate\Support\Facades\Queue::before(function () {
+            \App\Models\SiteSetting::flushCache();
+            \App\Support\Payments::applyConfig();
+        });
+
         // ── Plans section ($pricing) ─────────────────────────────────
         //
         // partials/pricing-plans is included by the HOMEPAGE (#pricing) and by

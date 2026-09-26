@@ -8,7 +8,7 @@
         <link rel="icon" href="{{ serveai_icon() }}">
         <link rel="shortcut icon" href="{{ serveai_icon() }}">
 
-        <title>{{ config('app.name', 'Serve AI') }}</title>
+        <title>{{ config('app.name', 'serveAI') }}</title>
 
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.bunny.net">

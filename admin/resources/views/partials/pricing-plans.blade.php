@@ -245,8 +245,17 @@
     </div>
 @endif
 
+@php
+    // The currency the cards are actually quoted (and charged) in — rupees for
+    // a Pakistani visitor, dollars otherwise. Read off the price rows rather
+    // than assumed, so this note can never contradict the figures under it.
+    $chargedIn = $paid->pluck('prices')->flatten(1)->pluck('amount_currency')->filter()->first()
+        ?: strtoupper((string) config('billing.currency', 'usd'));
+    $zero = app(\App\Services\Currency\ExchangeRateService::class)->symbolFor($chargedIn) . '0';
+@endphp
+
 <p class="pp-usd-note reveal">
-    <strong>All plans are charged in USD.</strong>
+    <strong>All plans are charged in {{ $chargedIn }}.</strong>
     @if ($hasLocal && $geo)
         Amounts shown in {{ $geo['currency'] }} are approximate and for reference only —
         your card is charged the US dollar amount.
@@ -267,7 +276,7 @@
             {{-- Price --}}
             @if ($plan['is_free'])
                 <div class="pp-price">
-                    <span class="pp-amount">$0</span>
+                    <span class="pp-amount">{{ $zero }}</span>
                     <span class="pp-suffix">for {{ $plan['free_days'] ?? 7 }} days</span>
                 </div>
                 <p class="pp-eff">No credit card required</p>
@@ -366,14 +375,30 @@
      a contradiction unless the divisor is stated — "1,000 conversations" beside
      "20,000 messages" invites the question of which one runs out first. Saying
      it here, once, beats repeating it on every card, and saying it is adjustable
-     turns a hard limit into a setting. Uses the shipped default rather than any
-     one workspace's value: this partial also serves the public page, where
+     turns a hard limit into a setting. Uses each plan's own default rather than
+     any one workspace's value: this partial also serves the public page, where
      there is no workspace yet. --}}
+@php
+    // Each tier sets its own conversation length, and a card's conversation
+    // figure is its messages divided by it — so the note states the tiers'
+    // own numbers. One coded default here contradicted every tier but one.
+    $replyCounts = $paid
+        ->map(fn ($p) => app(\App\Services\Billing\PlanFeatureService::class)
+            ->planLimit((int) $p['id'], 'replies_per_conversation'))
+        ->filter(fn ($n) => $n !== null && $n > 0)
+        ->unique()->sort()->values();
+@endphp
 <p class="pp-note reveal"
    style="text-align:center;font-size:13px;color:#64748b;line-height:1.7;margin:22px auto 0;max-width:66ch;">
     Conversation counts assume
-    <strong>{{ \App\Services\Conversation\ConversationBudget::DEFAULT_LIMIT }} AI replies</strong>
-    per conversation — after that it moves to your inbox for a person to answer, so nothing
+    @if ($replyCounts->count() > 1)
+        <strong>{{ $replyCounts->first() }} to {{ $replyCounts->last() }} AI replies</strong>
+        per conversation, depending on the plan
+    @else
+        <strong>{{ $replyCounts->first() ?? \App\Services\Conversation\ConversationBudget::DEFAULT_LIMIT }} AI replies</strong>
+        per conversation
+    @endif
+    — after that it moves to your inbox for a person to answer, so nothing
     goes unanswered. You can raise or lower that on your billing page at any time, which
     changes how many conversations your messages cover.
 </p>

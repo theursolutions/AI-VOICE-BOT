@@ -12,7 +12,7 @@
     Slots: $heading, $slot (body), and optionally $preheader.
 --}}
 @php
-    $brand   = tva_setting('content.brand_name', 'Serve AI');
+    $brand   = tva_setting('content.brand_name', 'serveAI');
     $base    = rtrim(config('app.url'), '/');
     $logo    = $base . '/assets/dist/images/servai-icon-full.png';
     $cEmail  = tva_setting('content.contact_email',   'info@serveai.com.pk');

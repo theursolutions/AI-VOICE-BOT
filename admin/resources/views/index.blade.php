@@ -17,6 +17,9 @@
             ['Is my customer data safe?', 'Yes. Every workspace is isolated in its own database, you choose which tables and columns the AI may read, and every conversation is logged and exportable. You can also bring your own AI keys or run models locally.'],
             ['Can it really sound like me?', 'A 10-second sample is enough to clone your voice, or you can pick from 30+ ready-made voices in 13 languages. Different agents can use different voices for sales, support, or billing.'],
             ['What does it cost, and can I cancel?', 'Start free — no credit card required. Upgrade when you’re ready, cancel anytime, and take your data with you. No long-term contracts, no lock-in.'],
+            // Appended rather than inserted: slots are numbered, and a stored
+            // faq1_q would otherwise override whatever moved into slot one.
+            ['Is serveAI a chatbot or an AI agent?', 'Both, depending on how you set it up. At its simplest it answers questions from your own content like a chatbot. Give it skills and flows and it acts like an agent: it qualifies leads, looks up an order or booking in your system through a webhook, creates a support ticket, and hands the conversation to a person when it should.'],
         ];
         $faqs = [];
         foreach ($faqDefaults as $i => $pair) {
@@ -26,40 +29,13 @@
             ];
         }
 
-        $brandName = tva_setting('content.brand_name', 'Serve AI');
+        $brandName = tva_setting('content.brand_name', 'serveAI');
 
+        // The product and the FAQ below. Both built by App\Support\Schema so
+        // the landing pages describe the same product in the same words.
         $homeJsonLd = [
-            // The product itself. No aggregateRating and no offers: we have
-            // neither published reviews nor a public price list, and inventing
-            // either is a manual-action risk, not a shortcut.
-            [
-                '@type'               => 'SoftwareApplication',
-                '@id'                 => \App\Support\Seo::origin() . '/#software',
-                'name'                => $brandName,
-                'applicationCategory' => 'BusinessApplication',
-                'applicationSubCategory' => 'Customer Relationship Management',
-                'operatingSystem'     => 'Web browser',
-                'url'                 => \App\Support\Seo::origin() . '/',
-                'description'         => tva_setting('content.hero_subtitle', ''),
-                'featureList'         => array_values(array_filter([
-                    tva_setting('content.feat1_title', ''),
-                    tva_setting('content.feat2_title', ''),
-                    tva_setting('content.feat3_title', ''),
-                    tva_setting('content.feat4_title', ''),
-                    tva_setting('content.feat5_title', ''),
-                    tva_setting('content.feat6_title', ''),
-                ])),
-                'publisher'           => ['@id' => \App\Support\Seo::origin() . '/#organization'],
-            ],
-            [
-                '@type'      => 'FAQPage',
-                '@id'        => \App\Support\Seo::canonical('/') . '#faq',
-                'mainEntity' => array_map(fn ($f) => [
-                    '@type'          => 'Question',
-                    'name'           => strip_tags((string) $f[0]),
-                    'acceptedAnswer' => ['@type' => 'Answer', 'text' => strip_tags((string) $f[1])],
-                ], $faqs),
-            ],
+            \App\Support\Schema::software(),
+            \App\Support\Schema::faqPage('/', $faqs),
         ];
     @endphp
 
@@ -1330,10 +1306,10 @@
         <picture>
             @if ($navIconWebp)<source srcset="{{ $navIconWebp }}" type="image/webp">@endif
             <img class="nav__brand-mark" src="{{ serveai_icon_sized(64) }}"
-                 alt="{{ tva_setting('content.brand_name', 'Serve AI') }} logo"
+                 alt="{{ tva_setting('content.brand_name', 'serveAI') }} logo"
                  width="28" height="28" fetchpriority="high" decoding="async">
         </picture>
-        {{ tva_setting('content.brand_name', 'Serve AI') }}
+        {{ tva_setting('content.brand_name', 'serveAI') }}
     </div>
     <button type="button" class="nav__toggle" id="navToggle"
             aria-label="Open menu" aria-expanded="false" aria-controls="navLinks">
@@ -1384,9 +1360,9 @@
     <div class="wrap hero__grid">
         <div class="reveal">
             <div class="hero__eyebrow">{{ tva_setting('content.hero_eyebrow', 'Live · AI Mission Console') }}</div>
-            <h1>{{ tva_setting('content.hero_title', 'Your AI receptionist that') }} <span class="accent">{{ tva_setting('content.hero_title_accent', 'never sleeps.') }}</span></h1>
+            <h1>{{ tva_setting('content.hero_title', 'AI customer support agents that') }} <span class="accent">{{ tva_setting('content.hero_title_accent', 'never sleep.') }}</span></h1>
             <p class="sub">
-                {{ tva_setting('content.hero_subtitle', 'Serve AI answers your calls and chats 24/7 in your own cloned voice, qualifies leads on the spot, and drops them straight into your CRM. Drop your data — watch it work.') }}
+                {{ tva_setting('content.hero_subtitle', 'serveAI answers your customers on phone calls, web chat, WhatsApp, Instagram and Facebook 24/7 — from your own data, in their language — then captures the lead and hands anything tricky to your team.') }}
             </p>
 
             <form id="callForm" class="callbar" autocomplete="off">
@@ -1442,7 +1418,7 @@
         <div class="section__eyebrow reveal">{{ tva_setting('content.how_eyebrow', 'Mission Console') }}</div>
         <h2 class="reveal">{{ tva_setting('content.how_title', 'Every call. Every chat. Every lead — in real time.') }}</h2>
         <p class="lead reveal">
-            {{ tva_setting('content.how_lead', "Watch a call come in, the agent transcribe + respond live, and a fresh lead land in your CRM — three glass panels you'll see every day inside Serve AI.") }}
+            {{ tva_setting('content.how_lead', "Watch a call come in, the agent transcribe + respond live, and a fresh lead land in your CRM — three glass panels you'll see every day inside serveAI.") }}
         </p>
 
         <div class="console-grid">
@@ -1547,12 +1523,12 @@
             // Icon slugs are resolved to inline brand SVGs by BrandIcons;
             // an operator may still type an emoji into the content editor.
             $channels = [
-                ['voice', 'Voice calls', 'Inbound & outbound phone, answered in a human voice.'],
+                ['voice', 'Voice calls', 'Inbound calls answered in a natural, human-sounding voice.'],
                 ['webchat', 'Website chat', 'One script tag. Live in minutes on any site.'],
                 ['whatsapp', 'WhatsApp', 'Official Cloud API. Templates, media, and flows.'],
-                ['instagram', 'Instagram', 'DMs and story replies handled automatically.'],
+                ['instagram', 'Instagram', 'Instagram DMs answered automatically, with your team a click away.'],
                 ['facebook', 'Facebook', 'Messenger conversations, never missed again.'],
-                ['sms', 'SMS & more', 'Text fallback and new channels added over time.'],
+                ['email', 'Email', 'Customer emails land in the same shared inbox as every other conversation.'],
             ];
         @endphp
         <div class="chan-grid">
@@ -1627,6 +1603,33 @@
                     <h3>{{ tva_setting('content.case'.($i+1).'_title', $c[1]) }}</h3>
                     <p>{{ tva_setting('content.case'.($i+1).'_body', $c[2]) }}</p>
                 </div>
+            @endforeach
+        </div>
+    </div>
+</section>
+
+<!-- ── WHAT IS serveAI + product pages ───────────────────────────── -->
+{{-- The plain-language answer to "what is this?" plus a crawlable link to
+     every product page in config('site.landing_pages'). Cards carry no
+     .reveal class on purpose: they must be visible without the GSAP pass,
+     both to crawlers and to anyone with JavaScript off. --}}
+<section class="section" id="solutions">
+    <div class="wrap">
+        <div class="section__eyebrow reveal">What is {{ $brandName }}?</div>
+        <h2 class="reveal">AI customer support software that answers on every channel.</h2>
+        <p class="lead reveal">
+            {{ $brandName }} is an AI customer support and automation platform for businesses. You connect your
+            website, documents, database or CRM; an AI agent then answers customer questions on phone calls, web chat,
+            WhatsApp, Instagram and Facebook around the clock, in the customer’s own language. It captures the lead
+            while it talks, and when a person is needed it hands the conversation to your team in one shared inbox
+            — with the full history attached.
+        </p>
+        <div class="caps">
+            @foreach ((array) config('site.landing_pages', []) as $lpPath => $lp)
+                <a href="{{ url($lpPath) }}" class="cap" style="display:block">
+                    <h3>{{ ucfirst($lp['label']) }}</h3>
+                    <p>{{ $lp['blurb'] }}</p>
+                </a>
             @endforeach
         </div>
     </div>
@@ -1889,7 +1892,7 @@
 @elseif ($tvaLegacyIframe)
     {{-- Legacy manual iframe — only used if LANDING_WIDGET_URL is set
          AND LANDING_DEMO_KEY isn't. --}}
-    <iframe id="tvaIframe" class="tva-iframe-frame" src="{{ $tvaLegacyIframe }}" title="Chat with Serve AI" loading="lazy"></iframe>
+    <iframe id="tvaIframe" class="tva-iframe-frame" src="{{ $tvaLegacyIframe }}" title="Chat with serveAI" loading="lazy"></iframe>
     <button id="tvaLauncher" class="tva-launcher-floating" aria-label="Open chat" data-cursor="chat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     </button>
@@ -2160,7 +2163,7 @@ WEBGL_INITS.push(function () {
     if (!box) return;
     var script = [
         { who: 'caller', text: 'Hi, I saw your post about AI receptionists?' },
-        { who: 'bot',    text: 'Yes! Serve AI handles 24/7 calls + chats. What\'s your use case?' },
+        { who: 'bot',    text: 'Yes! serveAI handles 24/7 calls + chats. What\'s your use case?' },
         { who: 'caller', text: 'I run a dental clinic. 8 staff, miss a lot of after-hours calls.' },
         { who: 'bot',    text: 'Got it. Want me to book a 10-min demo with our team?' },
         { who: 'caller', text: 'Yeah — Tuesday afternoon works.' },

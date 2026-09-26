@@ -147,7 +147,7 @@ class BlogCovers extends Command
             imagedestroy($mark);
             $brandX += 60;
         }
-        imagettftext($img, 22, 0, $brandX, 103, $white, $font, (string) tva_setting('content.brand_name', 'Serve AI'));
+        imagettftext($img, 22, 0, $brandX, 103, $white, $font, (string) tva_setting('content.brand_name', 'serveAI'));
 
         // Category, as an eyebrow above the title.
         if (trim((string) $post->category) !== '') {
