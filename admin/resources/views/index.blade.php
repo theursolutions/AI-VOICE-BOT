@@ -1412,6 +1412,9 @@
     </div>
 </section>
 
+<!-- ── EXPLAINER VIDEO (EN / UR) ─────────────────────────────────── -->
+@include('partials.explainer-video')
+
 <!-- ── MISSION CONSOLE strip ──────────────────────────────────────── -->
 <section class="section" id="how" style="position: relative;">
     <div class="wrap">
@@ -2519,7 +2522,9 @@ WEBGL_INITS.push(function () {
     onScroll();
 
     /* ---- per-section layer metadata + seams ---- */
-    var sections = Array.prototype.slice.call(document.querySelectorAll('section.section'));
+    // [data-no-layer] sections (the explainer video) sit outside the numbered
+    // layer sequence, so adding one never renumbers the layers after it.
+    var sections = Array.prototype.slice.call(document.querySelectorAll('section.section:not([data-no-layer])'));
     var layers = [
         { n: 'MISSION CONSOLE', s: 'SCANNING' },
         { n: 'LAUNCH SEQUENCE', s: 'CALIBRATING' },

@@ -242,6 +242,12 @@
 
     {{-- What actually submits. Visible only without JavaScript. --}}
     <select name="country" class="cp-native js-cp-native">
+        {{-- An explicit empty choice when no sellable country is in force.
+             Without it the browser selects the FIRST country by itself, and
+             the page then looks like it has a country nobody chose. --}}
+        @unless ($current)
+            <option value="" selected>Choose your country</option>
+        @endunless
         @foreach ($countries as $code => $country)
             <option value="{{ $code }}" @selected($code === $countryCurrent)>
                 {{ $country['name'] }} ({{ $country['currency'] }})
@@ -374,8 +380,14 @@
             item.addEventListener('click', function () {
                 var code = item.getAttribute('data-code');
 
-                if (native.value === code) { close(); return; }
-
+                // ALWAYS submitted, even for the country already showing. It
+                // used to skip when the hidden select already held the code,
+                // which was wrong twice over: re-picking a GUESSED country is
+                // how a customer confirms it (the server then marks it theirs
+                // and the IP stops moving it), and with no country in force the
+                // browser pre-selects the first option itself — so clicking
+                // that country, Pakistan when it is the only one on sale, sent
+                // nothing at all and the page never changed.
                 native.value = code;
                 btn.disabled = true;
                 form.querySelector('.js-cp-name').textContent = item.getAttribute('data-name');

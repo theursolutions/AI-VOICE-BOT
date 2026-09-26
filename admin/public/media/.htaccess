@@ -1,0 +1,9 @@
+# Same policy as the /media/ block in docker/nginx.conf, for Apache (Laragon):
+# every file here is linked with a ?v=<mtime> stamp, so it can be cached for a year.
+<IfModule mod_headers.c>
+    Header set Cache-Control "public, max-age=31536000, immutable"
+</IfModule>
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresDefault "access plus 1 year"
+</IfModule>
