@@ -153,11 +153,11 @@ class PlanLimitsTest extends BillingTestCase
         [$client] = $this->makeWorkspace();
         app(SubscriptionService::class)->startFreeWindow($client);
 
-        $this->usage()->record($client, 'conversations', 3);
-        $this->usage()->record($client, 'conversations', 2);
+        $this->usage()->record($client, 'messages', 3);
+        $this->usage()->record($client, 'messages', 2);
 
-        $this->assertSame(5, $this->usage()->usedFor($client, 'conversations'));
-        $this->assertSame(95, $this->usage()->remainingFor($client, 'conversations'));
+        $this->assertSame(5, $this->usage()->usedFor($client, 'messages'));
+        $this->assertSame(495, $this->usage()->remainingFor($client, 'messages'));
     }
 
     public function test_the_free_plan_hard_stops_at_its_allowance(): void
@@ -165,10 +165,10 @@ class PlanLimitsTest extends BillingTestCase
         [$client] = $this->makeWorkspace();
         app(SubscriptionService::class)->startFreeWindow($client);
 
-        $this->usage()->record($client, 'conversations', 100);   // the whole free allowance
+        $this->usage()->record($client, 'messages', 500);   // the whole free allowance
 
         // No paid subscription means nobody to bill overage to, so it stops.
-        $this->assertFalse($this->usage()->allows($client, 'conversations'));
+        $this->assertFalse($this->usage()->allows($client, 'messages'));
     }
 
     public function test_a_zero_allowance_metric_is_always_refused(): void
@@ -191,15 +191,15 @@ class PlanLimitsTest extends BillingTestCase
         $this->postWebhook($this->subscriptionEvent('customer.subscription.created', $client))->assertOk();
         $client->forgetSubscription();
 
-        $allowance = $this->usage()->allowanceFor($client, 'telephony_minutes');   // 300 on Growth
-        $this->assertSame(300, $allowance);
+        $allowance = $this->usage()->allowanceFor($client, 'telephony_minutes');   // 200 on Growth
+        $this->assertSame(200, $allowance);
 
         // A 5-minute call with 2 minutes of allowance left must split 2/3, not
         // record all 5 as overage or none of it.
-        $this->usage()->record($client, 'telephony_minutes', 298);
+        $this->usage()->record($client, 'telephony_minutes', 198);
         $counter = $this->usage()->record($client, 'telephony_minutes', 5);
 
-        $this->assertSame(303, $counter->used);
+        $this->assertSame(203, $counter->used);
         $this->assertSame(3, $counter->overage, 'Only the portion above the allowance is overage.');
 
         // An AI receptionist that stops answering mid-month is worse for the
@@ -216,6 +216,15 @@ class PlanLimitsTest extends BillingTestCase
         )->assertOk();
         $client->forgetSubscription();
 
+        // No published tier leaves a meter unbounded since the 2026-09
+        // repricing, but unlimited is still a real setting — Enterprise, or an
+        // operator's edit — so the test makes one rather than relying on a tier.
+        $this->features()->setFeature(
+            $this->plan('scale'),
+            \App\Models\Billing\Feature::where('key', 'voice_messages')->firstOrFail(),
+            '-1',
+        );
+
         $this->assertNull($this->usage()->allowanceFor($client, 'voice_messages'));
         $this->assertTrue($this->usage()->allows($client, 'voice_messages', 1_000_000));
         $this->assertNull($this->usage()->remainingFor($client, 'voice_messages'));
@@ -230,8 +239,8 @@ class PlanLimitsTest extends BillingTestCase
 
         // Showing "0 / 0 phone minutes" on the free plan is noise, not information.
         $this->assertArrayNotHasKey('telephony_minutes', $summary);
-        $this->assertArrayHasKey('conversations', $summary);
-        $this->assertSame(100, $summary['conversations']['allowance']);
+        $this->assertArrayHasKey('messages', $summary);
+        $this->assertSame(500, $summary['messages']['allowance']);
     }
 
     public function test_editing_a_limit_takes_effect_immediately(): void
@@ -239,16 +248,16 @@ class PlanLimitsTest extends BillingTestCase
         [$client] = $this->makeWorkspace();
         app(SubscriptionService::class)->startFreeWindow($client);
 
-        $this->assertSame(100, $this->usage()->allowanceFor($client, 'conversations'));
+        $this->assertSame(500, $this->usage()->allowanceFor($client, 'messages'));
 
         // A super-admin raises the free allowance. The entitlement cache must
         // be invalidated, not wait out a TTL.
         $free    = $this->plan('free');
-        $feature = \App\Models\Billing\Feature::where('key', 'conversations')->firstOrFail();
-        $this->features()->setFeature($free, $feature, '250');
+        $feature = \App\Models\Billing\Feature::where('key', 'messages')->firstOrFail();
+        $this->features()->setFeature($free, $feature, '1250');
 
         $client->forgetSubscription();
 
-        $this->assertSame(250, $this->usage()->allowanceFor($client, 'conversations'));
+        $this->assertSame(1250, $this->usage()->allowanceFor($client, 'messages'));
     }
 }

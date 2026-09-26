@@ -120,7 +120,7 @@
     <div class="intro-y tva-setup-card">
       <div class="tva-setup-inner">
         <div class="tva-setup-eyebrow">Workspace · Initialize</div>
-        <h2>Boot your <span class="accent">Serve AI</span> mission.</h2>
+        <h2>Boot your <span class="accent">serveAI</span> mission.</h2>
         <p class="tva-setup-lead">
             We're spinning up an isolated database just for you — your data never mixes with
             anyone else's. Roughly five seconds to provision, then you're on the dashboard.

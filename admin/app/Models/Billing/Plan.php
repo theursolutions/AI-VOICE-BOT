@@ -235,6 +235,27 @@ class Plan extends Model
         return $prices->first();
     }
 
+    /**
+     * The cheapest monthly price on the public catalogue — "plans start at".
+     *
+     * For copy that quotes a starting price. Written as a literal it goes stale
+     * at the next repricing, as "$19/month" did for two of them while the plans
+     * actually started at $26. In the currency given, so a Pakistani workspace
+     * is told the rupee price it will pay rather than a dollar figure.
+     */
+    public static function startingPrice(?string $currency = null): ?PlanPrice
+    {
+        return static::query()
+            ->active()->public()
+            ->where('type', 'standard')
+            ->with('prices')
+            ->get()
+            ->map(fn (Plan $plan) => $plan->priceFor('monthly', $currency))
+            ->filter()
+            ->sortBy('unit_amount')
+            ->first();
+    }
+
     /** Intervals this plan can actually be bought on right now. */
     public function availableIntervals(): array
     {

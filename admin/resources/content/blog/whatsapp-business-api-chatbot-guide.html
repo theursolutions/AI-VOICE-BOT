@@ -1,0 +1,106 @@
+<p>A WhatsApp AI chatbot can answer customers in seconds at any hour — but WhatsApp is the most rule-bound channel a business can use. Get the rules wrong and messages fail to send, costs surprise you, or the number is restricted. Get them right and it is the channel customers reply to fastest.</p>
+
+<p>This guide covers what you actually need to know before putting an AI on WhatsApp: the difference between the app and the API, the 24-hour window, templates, opt-in, and what Meta charges for.</p>
+
+<h2>The short answer</h2>
+
+<table>
+<thead><tr><th>Topic</th><th>What to know</th></tr></thead>
+<tbody>
+<tr><td>App or API?</td><td>Automation and AI replies at scale need the WhatsApp Business Platform (API), not the free Business app</td></tr>
+<tr><td>Official vs unofficial</td><td>Use Meta's platform. Tools that automate a WhatsApp Web session break Meta's terms and put the number at risk</td></tr>
+<tr><td>The 24-hour window</td><td>After a customer messages you, you may reply freely for 24 hours. After that, only approved templates</td></tr>
+<tr><td>Templates</td><td>Pre-approved message formats for starting or reopening conversations</td></tr>
+<tr><td>Opt-in</td><td>You may only message people first if they agreed to hear from you</td></tr>
+<tr><td>Costs</td><td>Meta charges for certain messages (mainly templates), separately from any software subscription</td></tr>
+</tbody>
+</table>
+
+<h2>WhatsApp Business app vs the WhatsApp Business Platform</h2>
+
+<p>There are two different products with confusingly similar names.</p>
+
+<ul>
+<li>The <strong>WhatsApp Business app</strong> is the free phone app. It has quick replies, a catalogue and an away message. It is designed for a person holding a phone.</li>
+<li>The <strong>WhatsApp Business Platform</strong> — usually just called the WhatsApp API, and today mostly delivered as Meta's Cloud API — is how software sends and receives messages for a business. It is what an AI chatbot, a shared team inbox or an automated notification system uses.</li>
+</ul>
+
+<p>If you want an AI to reply for you, or several staff to answer from one number, you need the Platform. You connect to it either directly as a developer or, far more commonly, through a software provider using Meta's embedded signup, which walks you through creating the account and registering the number inside Meta's own screens.</p>
+
+<h2>Why "unofficial" WhatsApp bots are a bad idea</h2>
+
+<p>Some tools automate WhatsApp by driving a WhatsApp Web session from a server. They are cheap and quick to set up, and they break WhatsApp's terms of service. Numbers used this way can be banned without warning, and there is no one to appeal to. For a number your customers know, that risk is not worth any saving.</p>
+
+<p>The official platform is the sanctioned route. Numbers on it get restricted for policy breaches — messaging people who did not opt in, sending spam, generating lots of blocks and reports — not for using automation.</p>
+
+<h2>The 24-hour customer service window</h2>
+
+<p>This is the rule that shapes everything else.</p>
+
+<p>When a customer sends you a message, a <strong>24-hour customer service window</strong> opens. Inside it, you can reply with any message — free text, images, documents, buttons. This is where an AI chatbot does its work: the customer asks, the AI answers immediately.</p>
+
+<p>When 24 hours pass without a new message from the customer, the window closes. From then on you can only send a <strong>template message</strong> that Meta has approved. If the customer replies to it, a new window opens.</p>
+
+<p>Two practical consequences:</p>
+
+<ul>
+<li><strong>Fast replies matter more on WhatsApp than anywhere else.</strong> A human team that answers the next morning may find the window closed on customers who wrote the previous evening. An AI that replies in seconds never has that problem.</li>
+<li><strong>You need a small set of templates ready</strong> for the cases where you must pick a conversation back up — an order update, a booking reminder, a reply that took longer than a day.</li>
+</ul>
+
+<h2>Templates: what they are and how to use them</h2>
+
+<p>A template is a message format you submit to Meta for approval before you can use it. It can contain variables — a name, an order number, a date — filled in when you send it. Meta groups templates into categories such as <strong>marketing</strong>, <strong>utility</strong> (updates about an existing order or account) and <strong>authentication</strong> (one-time codes), and the category affects both approval and price.</p>
+
+<p>Good practice:</p>
+
+<ul>
+<li>Keep templates for genuinely useful updates. A template that reads like an advert is likely to be categorised as marketing, priced accordingly, and reported by recipients.</li>
+<li>Write them to invite a reply. A reply reopens the 24-hour window, which is where an AI can help further.</li>
+<li>Expect some to be rejected. Rewording a rejected template is normal.</li>
+</ul>
+
+<h2>Opt-in: who you may message first</h2>
+
+<p>You may start a conversation only with people who have agreed to receive WhatsApp messages from your business. A customer writing to you first is the cleanest case. A checkbox at checkout, a clear statement on a form, or a customer asking for updates on WhatsApp also count — a purchased list does not.</p>
+
+<p>This is also the quickest way to protect the number. Messages people did not ask for get blocked and reported, and blocks and reports are what drive restrictions.</p>
+
+<h2>What Meta charges for</h2>
+
+<p>Meta charges businesses for certain WhatsApp messages under its own pricing, billed separately from whatever software you use. Replies inside the customer service window have been free for some time, while templates are charged by category and by the recipient's country. Meta has changed the model more than once, so check <a href="https://developers.facebook.com/docs/whatsapp/pricing" target="_blank" rel="noopener">Meta's current WhatsApp pricing page</a> rather than relying on any figure quoted in a blog post, including this one.</p>
+
+<p>The practical point stands regardless of the details: <strong>an AI answering customers who wrote to you is the cheap part.</strong> Costs come from business-initiated templates, especially marketing ones.</p>
+
+<h2>What a WhatsApp AI chatbot should do well</h2>
+
+<ol>
+<li><strong>Answer from your own information</strong> — prices, stock, hours, policies — not from general knowledge.</li>
+<li><strong>Handle media</strong>: receive a photo of a product or a document, send a brochure or a location.</li>
+<li><strong>Use WhatsApp's own interface</strong> where it helps: reply buttons for simple choices, WhatsApp Flows for short forms, catalogue product messages.</li>
+<li><strong>Hand over cleanly</strong> to a person in a shared inbox, with the whole conversation visible.</li>
+<li><strong>Respect the window</strong>: know when it has closed and offer the right template rather than failing silently.</li>
+</ol>
+
+<h2>Frequently asked questions</h2>
+
+<h3>Do I need a new phone number for the WhatsApp API?</h3>
+<p>Not necessarily. You register a number during Meta's signup. If the number is already active on WhatsApp, Meta's flow explains the options for moving it before you confirm, so read that screen carefully.</p>
+
+<h3>Can the AI and my staff both reply from the same number?</h3>
+<p>Yes, with a shared inbox built on the API. The AI answers first; a person can take over any conversation and hand it back.</p>
+
+<h3>Can I send promotional broadcasts with a WhatsApp chatbot?</h3>
+<p>Only through approved marketing templates, only to people who opted in, and at Meta's marketing rates. Use it sparingly — heavy broadcasting is the most common route to a restricted number.</p>
+
+<h3>Does WhatsApp allow AI chatbots?</h3>
+<p>Yes, on the WhatsApp Business Platform, within Meta's business and commerce policies. Be clear with customers that they can reach a person.</p>
+
+<h3>How fast can I be live?</h3>
+<p>The technical connection through embedded signup takes minutes. Business verification, display-name approval and template approval can take longer, so start those early.</p>
+
+<h2>The takeaway</h2>
+
+<p>WhatsApp rewards businesses that reply quickly to people who wrote to them first — which is exactly what an AI chatbot is good at. Use the official platform, reply inside the 24-hour window, keep a few useful templates for everything else, and never message people who did not ask. Do that, and WhatsApp becomes the channel where customers get the fastest answers you offer.</p>
+
+<p><strong>Setting up WhatsApp for your business?</strong> <a href="/whatsapp-ai-chatbot">serveAI's WhatsApp AI chatbot</a> runs on Meta's official Cloud API, handles the 24-hour window and templates, and puts every WhatsApp conversation in the same <a href="/omnichannel-customer-support">shared inbox</a> as your other channels.</p>

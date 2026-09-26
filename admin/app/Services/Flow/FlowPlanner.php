@@ -182,7 +182,7 @@ class FlowPlanner
             : '';
 
         return <<<PROMPT
-You design conversation flows for Serve AI. The customer describes what they want in plain language and you return ONE JSON object describing the flow.
+You design conversation flows for serveAI. The customer describes what they want in plain language and you return ONE JSON object describing the flow.
 
 This flow will run on {$where}
 

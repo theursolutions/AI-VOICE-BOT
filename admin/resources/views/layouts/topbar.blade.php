@@ -131,7 +131,7 @@
             $tvaUrlBase = request()->getSchemeAndHttpHost() . rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '')), '/');
             $tvaLogoUrl = $tvaUrlBase . '/storage/' . ltrim($tvaLogoPath, '/');
         }
-        $tvaProjectName = $tvaProject?->name ?? config('app.name', 'Serve AI');
+        $tvaProjectName = $tvaProject?->name ?? config('app.name', 'serveAI');
         $tvaInitials = strtoupper(mb_substr(preg_replace('/[^A-Za-z]/', '', $tvaProjectName) ?: 'P', 0, 2));
         $tvaProfileUrl = (request()->route('client') && $tvaProject)
             ? route('project-profile.index', ['client' => is_object(request()->route('client')) ? request()->route('client')->slug : request()->route('client'), 'project_id' => $tvaProject->id])

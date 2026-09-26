@@ -5,8 +5,8 @@
             <!-- BEGIN: Login Info -->
             <div class="hidden xl:flex flex-col min-h-screen">
                 <a href="{{ url('/') }}" class="-intro-x flex items-center pt-5">
-                    <img alt="Serve AI" class="w-8" src="{{serveai_icon()}}">
-                    <span class="text-white text-xl font-semibold ml-3">Serve AI</span>
+                    <img alt="serveAI" class="w-8" src="{{serveai_icon()}}">
+                    <span class="text-white text-xl font-semibold ml-3">serveAI</span>
                 </a>
                 <div class="my-auto">
                     <img alt="" class="-intro-x w-1/2 -mt-16" src="{{url('/assets/dist/images/illustration.svg')}}">
@@ -25,7 +25,7 @@
                     <h2 class="intro-x font-bold text-2xl xl:text-3xl text-center xl:text-left">
                         Sign In
                     </h2>
-                    <div class="intro-x mt-2 text-slate-400 xl:hidden text-center">Sign in to your Serve AI workspace.</div>
+                    <div class="intro-x mt-2 text-slate-400 xl:hidden text-center">Sign in to your serveAI workspace.</div>
                     <form method="POST" action="{{ route('login') }}">
                     @csrf
                     <div class="intro-x mt-8">

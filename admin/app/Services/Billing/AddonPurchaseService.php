@@ -154,6 +154,8 @@ class AddonPurchaseService
             throw $e;
         }
 
+        GatewayCheckoutService::rememberGatewayRef($chargeId, $handoff);
+
         return ['handoff' => $handoff, 'reference' => $reference, 'quote' => $quote];
     }
 

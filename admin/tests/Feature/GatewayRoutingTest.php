@@ -49,7 +49,7 @@ class GatewayRoutingTest extends TestCase
             'billing.payfast.secured_key' => 'TEST-KEY',
             // Safepay explicitly absent, so these tests keep testing PayFast.
             'billing.safepay.api_key'     => null,
-            'billing.safepay.v1_secret'   => null,
+            'billing.safepay.secret_key'   => null,
             // And Paddle, for the same reason: with it configured, every
             // non-Pakistani customer routes to Paddle rather than Stripe, and
             // these assertions would pass or fail according to which keys are
@@ -67,7 +67,7 @@ class GatewayRoutingTest extends TestCase
     {
         config([
             'billing.safepay.api_key'   => 'sec_test',
-            'billing.safepay.v1_secret' => 'v1-test-secret',
+            'billing.safepay.secret_key' => 'v1-test-secret',
             'billing.payfast.merchant_id' => 'TEST-MERCHANT',
             'billing.payfast.secured_key' => 'TEST-KEY',
             'billing.paddle.api_key'      => null,
@@ -174,7 +174,7 @@ class GatewayRoutingTest extends TestCase
             'billing.payfast.merchant_id' => null,
             'billing.payfast.secured_key' => null,
             'billing.safepay.api_key'     => null,
-            'billing.safepay.v1_secret'   => null,
+            'billing.safepay.secret_key'   => null,
             'billing.paddle.api_key'      => null,
             'billing.paddle.client_token' => null,
         ]);
@@ -223,92 +223,56 @@ class GatewayRoutingTest extends TestCase
     // ── Safepay ─────────────────────────────────────────────────────────
 
     /**
-     * Safepay's signature is a real HMAC under a shared secret, unlike a scheme
-     * whose "signature" carries no secret at all — so verifying the redirect
-     * genuinely proves Safepay produced it, and these are the assertions that
-     * keep it that way.
+     * Payments 2.0 signs the WHOLE webhook event with HMAC-SHA512 under the
+     * webhook secret. v1 signed only `data`, leaving `type` outside the
+     * signature; checking for that alone would reject every genuine 2.0
+     * delivery, and the logs would show only "invalid signature" — which reads
+     * like an attack rather than our own mistake.
      */
-    public function test_safepay_verifies_a_genuine_signature_and_rejects_a_forged_one(): void
-    {
-        config(['billing.safepay.v1_secret' => 'v1-test-secret']);
-
-        $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
-        $tracker = 'trk_' . uniqid();
-        $valid   = hash_hmac('sha256', $tracker, 'v1-test-secret');
-
-        $this->assertTrue($safepay->signatureValid($tracker, $valid));
-        $this->assertFalse($safepay->signatureValid($tracker, $valid . 'x'));
-        $this->assertFalse($safepay->signatureValid($tracker, ''));
-        $this->assertFalse($safepay->signatureValid('', $valid));
-        $this->assertFalse(
-            $safepay->signatureValid($tracker, hash_hmac('sha256', 'a-different-tracker', 'v1-test-secret')),
-            'A signature for another tracker must not validate this one',
-        );
-    }
-
-    /**
-     * Webhooks use a different secret, a different ALGORITHM and a different
-     * input from the redirect: SHA-512 over the `data` object re-encoded, not
-     * SHA-256 over the raw body.
-     *
-     * Pinned against Safepay's own SDK (Verify::webhook) because the first
-     * implementation here used the redirect's scheme for both, and the failure
-     * is silent in the worst way — every genuine delivery is rejected as a
-     * forgery, so payments succeed at Safepay and never post, and the logs show
-     * only "invalid signature".
-     */
-    public function test_safepay_webhooks_use_sha512_over_the_data_object(): void
+    public function test_safepay_webhooks_are_signed_over_the_whole_event(): void
     {
         config([
-            'billing.safepay.v1_secret'      => 'v1-test-secret',
+            'billing.safepay.secret_key'     => 'api-test-secret',
             'billing.safepay.webhook_secret' => 'hook-test-secret',
         ]);
 
         $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
 
-        $data = ['tracker' => 'trk_1', 'order_id' => 'ORDER-1', 'url' => 'https://example.com/a/b'];
-        $body = json_encode(['type' => 'payment.succeeded', 'data' => $data]);
+        $body = json_encode([
+            'version' => '2.0.0',
+            'type'    => 'payment.succeeded',
+            'data'    => ['tracker' => 'track_1', 'metadata' => ['order_id' => 'ORDER-1'], 'url' => 'https://example.com/a/b'],
+        ], JSON_UNESCAPED_SLASHES);
 
-        $correct = hash_hmac('sha512', json_encode($data, JSON_UNESCAPED_SLASHES), 'hook-test-secret');
-
-        $this->assertTrue($safepay->webhookValid($body, $correct));
+        $this->assertTrue($safepay->webhookValid($body, hash_hmac('sha512', $body, 'hook-test-secret')));
 
         $this->assertFalse(
             $safepay->webhookValid($body, hash_hmac('sha256', $body, 'hook-test-secret')),
-            'SHA-256 over the raw body is the REDIRECT scheme and must not validate a webhook',
+            'SHA-256 is not the webhook scheme',
         );
         $this->assertFalse(
-            $safepay->webhookValid($body, hash_hmac('sha512', json_encode($data), 'hook-test-secret')),
-            'Escaped slashes must not validate — Safepay signs with JSON_UNESCAPED_SLASHES',
+            $safepay->webhookValid($body, hash_hmac('sha512', $body, 'api-test-secret')),
+            'The API secret must not validate a webhook — separate credentials',
         );
         $this->assertFalse(
-            $safepay->webhookValid($body, hash_hmac('sha512', json_encode($data, JSON_UNESCAPED_SLASHES), 'v1-test-secret')),
-            'The redirect secret must not validate a webhook — separate credentials',
-        );
-        $this->assertFalse(
-            $safepay->webhookValid('{"type":"x"}', $correct),
-            'A payload with no data object has nothing to verify',
+            $safepay->webhookValid(str_replace('ORDER-1', 'ORDER-2', $body), hash_hmac('sha512', $body, 'hook-test-secret')),
+            'A signature must not survive a change to the order it names',
         );
     }
 
     /**
-     * An unverifiable payment is PENDING, never FAILED. It may be a forgery, but
-     * it may equally be a truncated POST or a refresh, and cancelling someone's
+     * An unverifiable payment is PENDING, never FAILED. With nothing to look
+     * up it may still be a payment in flight, and cancelling someone's
      * subscription on that basis is guessing with their money.
      */
     public function test_an_unverifiable_safepay_payment_is_pending_not_failed(): void
     {
-        config(['billing.safepay.v1_secret' => 'v1-test-secret']);
-
         $safepay = app(\App\Services\Billing\Gateways\SafepayGateway::class);
 
-        $noSig = $safepay->verifyPayment('order-1', ['tracker' => 'trk_1']);
-        $this->assertFalse($noSig->paid);
-        $this->assertTrue($noSig->isPending());
+        $result = $safepay->verifyPayment('order-1', ['sig' => 'nonsense']);
 
-        $badSig = $safepay->verifyPayment('order-1', ['tracker' => 'trk_1', 'sig' => 'nonsense']);
-        $this->assertFalse($badSig->paid);
-        $this->assertTrue($badSig->isPending(), 'A bad signature must be reconcilable, not terminal');
+        $this->assertFalse($result->paid);
+        $this->assertTrue($result->isPending(), 'An unverifiable payment must be reconcilable, not terminal');
     }
 
     public function test_safepay_serves_pakistan_when_it_has_credentials(): void

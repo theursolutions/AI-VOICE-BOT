@@ -491,27 +491,27 @@ class AddonTest extends BillingTestCase
         [$client] = $this->subscribed('growth');
 
         $pack = Plan::create([
-            'name' => 'Extra conversations', 'slug' => 'addon-convos', 'type' => 'addon',
+            'name' => 'Extra messages', 'slug' => 'addon-messages', 'type' => 'addon',
             'is_active' => true, 'is_public' => false, 'sort_order' => 95, 'trial_days' => 0,
         ]);
         $pack->prices()->create([
             'interval' => 'monthly', 'currency' => 'usd', 'unit_amount' => 1000,
-            'is_active' => true, 'stripe_price_ref' => 'price_convos_monthly', 'stripe_livemode' => false,
+            'is_active' => true, 'stripe_price_ref' => 'price_messages_monthly', 'stripe_livemode' => false,
         ]);
         app(PlanFeatureService::class)->setFeature(
             $pack,
-            \App\Models\Billing\Feature::where('key', 'conversations')->firstOrFail(),
+            \App\Models\Billing\Feature::where('key', 'messages')->firstOrFail(),
             '1000'
         );
 
         $usage    = app(\App\Services\Billing\UsageLimitService::class);
-        $included = $usage->summaryFor($client)['conversations']['allowance'];
+        $included = $usage->summaryFor($client)['messages']['allowance'];
 
         $this->fakeItems();
-        app(AddonService::class)->setQuantity($client, 'addon-convos', 2);
+        app(AddonService::class)->setQuantity($client, 'addon-messages', 2);
         $client->forgetSubscription();
 
-        $row = $usage->summaryFor($client->fresh())['conversations'];
+        $row = $usage->summaryFor($client->fresh())['messages'];
 
         $this->assertSame($included + 2000, $row['allowance']);
         $this->assertSame(2000, $row['addon']);

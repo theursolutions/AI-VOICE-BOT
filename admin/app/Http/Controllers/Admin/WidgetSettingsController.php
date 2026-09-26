@@ -42,7 +42,7 @@ class WidgetSettingsController extends Controller
         'show_expand_button' => true,  // expand-to-fullscreen button in header
         'show_visitor_modes' => true,  // "New visitor" / "Returning customer" tiles on home tab
         'show_history_tab'   => true,  // bottom nav tab listing past conversations
-        'show_powered_by'    => true,  // small "Powered by Serve AI" line in footer
+        'show_powered_by'    => true,  // small "Powered by serveAI" line in footer
 
         // Master switch. Off = the loader mounts nothing at all, so the widget
         // disappears from every site it is embedded on without anyone having to

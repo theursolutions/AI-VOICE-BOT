@@ -10,10 +10,19 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Installs the APPROVED pricing structure.
+ * Installs the APPROVED pricing structure — the 2026-09 local-market catalogue.
  *
- * Free (7 days, no card, web chat only) · Starter $19 · Growth $59 ★ ·
- * Scale $149 · Enterprise (contact us). Monthly + annual ("2 months free").
+ * Free (7 days, no card, web chat only) · Starter $15 (Rs 4,500) · Growth $39
+ * (Rs 12,000) ★ · Scale $99 (Rs 30,000) · Enterprise (contact us). Monthly +
+ * annual ("2 months free"). Rupee prices are minted from the dollar ones by
+ * LocalPriceService below. Why these numbers, and the margin each one holds,
+ * is written down in migration 2026_09_27_100000_reprice_for_local_market.
+ *
+ * Kept in step with that migration on purpose. A fresh install runs every
+ * migration against empty plan tables and only then this seeder, so anything
+ * a repricing migration sets that is not also here never reaches a new
+ * server — which is how fresh installs came to have no message allowance at
+ * all while the metric capped on it.
  *
  * These values are a STARTING POINT, not a source of truth. Once seeded, every
  * price, limit, feature, badge and trial length is edited by a super-admin at
@@ -78,10 +87,31 @@ class BillingSeeder extends Seeder
     {
         $definitions = [
             // ── Volume (metered) ─────────────────────────────────────
+            // THE metered unit: one AI reply. It is what cost is incurred in —
+            // a reply is four LLM calls whether it is the first of a session or
+            // the two hundredth — so it is what every plan is capped on.
+            ['key' => 'messages', 'name' => 'AI messages', 'group' => 'Volume',
+             'type' => 'numeric', 'unit' => 'per month', 'metric' => 'messages',
+             'headline' => true, 'sort' => 5,
+             'desc' => 'One reply from the AI, on any channel. This is what your allowance is measured in.'],
+
+            // DERIVED from messages divided by replies per conversation, and
+            // capping nothing — so no metric. Shown because it is the unit a
+            // customer can picture. Claiming a metric here as well would cap a
+            // plan twice, on whichever of the two ran out first.
             ['key' => 'conversations', 'name' => 'AI conversations', 'group' => 'Volume',
-             'type' => 'numeric', 'unit' => 'per month', 'metric' => 'conversations',
+             'type' => 'numeric', 'unit' => 'per month',
              'headline' => true, 'sort' => 10,
-             'desc' => 'A session with at least one AI reply, on any text channel.'],
+             'desc' => 'A session with at least one AI reply. Shown so you can see how your messages '
+                     . 'divide up; your allowance is measured in messages.'],
+
+            // The divisor, per plan. Not a headline: on a card it qualifies the
+            // conversation figure rather than reading as a limit of its own.
+            ['key' => 'replies_per_conversation', 'name' => 'AI replies per conversation', 'group' => 'Volume',
+             'type' => 'numeric', 'unit' => 'per conversation',
+             'headline' => false, 'sort' => 7,
+             'desc' => 'How many times the assistant answers in one conversation before it hands over to '
+                     . 'a person. Adjustable from your billing page.'],
 
             ['key' => 'telephony_minutes', 'name' => 'Phone call minutes', 'group' => 'Volume',
              'type' => 'numeric', 'unit' => 'per month', 'metric' => 'telephony_minutes',
@@ -248,7 +278,8 @@ class BillingSeeder extends Seeder
                 'free_window_days' => 7, 'trial_days' => 0,
                 'prices' => [],
                 'values' => [
-                    'conversations' => '100', 'telephony_minutes' => null, 'voice_messages' => '50',
+                    'messages' => '500', 'conversations' => '25', 'replies_per_conversation' => '20',
+                    'telephony_minutes' => null, 'voice_messages' => '50',
                     'projects' => '1', 'seats' => '2', 'agents' => '1',
                     'phone_numbers' => null, 'data_sources' => '1', 'indexed_pages' => '50',
                     'history_days' => '7',
@@ -268,9 +299,10 @@ class BillingSeeder extends Seeder
                 'sort' => 1, 'cta' => 'Get started',
                 'free_window_days' => null, 'trial_days' => 0,
                 // monthly cents, annual cents ("2 months free")
-                'prices' => ['monthly' => 2600, 'annually' => 26000],
+                'prices' => ['monthly' => 1500, 'annually' => 15000],
                 'values' => [
-                    'conversations' => '1000', 'telephony_minutes' => '60', 'voice_messages' => '500',
+                    'messages' => '10000', 'conversations' => '500', 'replies_per_conversation' => '20',
+                    'telephony_minutes' => '50', 'voice_messages' => '200',
                     'projects' => '1', 'seats' => '3', 'agents' => '2',
                     'phone_numbers' => '1', 'data_sources' => '3', 'indexed_pages' => '500',
                     'history_days' => '30',
@@ -290,11 +322,12 @@ class BillingSeeder extends Seeder
                 'sort' => 2, 'cta' => 'Get started',
                 'featured' => true, 'badge' => 'Most popular',
                 'free_window_days' => null, 'trial_days' => 0,
-                'prices' => ['monthly' => 7500, 'annually' => 75000],
+                'prices' => ['monthly' => 3900, 'annually' => 39000],
                 'values' => [
-                    'conversations' => '5000', 'telephony_minutes' => '300', 'voice_messages' => '3000',
+                    'messages' => '25000', 'conversations' => '1000', 'replies_per_conversation' => '25',
+                    'telephony_minutes' => '200', 'voice_messages' => '1000',
                     'projects' => '3', 'seats' => '10', 'agents' => '10',
-                    'phone_numbers' => '3', 'data_sources' => '-1', 'indexed_pages' => '5000',
+                    'phone_numbers' => '2', 'data_sources' => '-1', 'indexed_pages' => '5000',
                     'history_days' => '-1',
                     'voice_cloning' => '1', 'multi_language' => '1', 'lead_capture' => '1',
                     'web_widget' => '1', 'knowledge_base' => '1', 'transcripts' => '1',
@@ -311,11 +344,12 @@ class BillingSeeder extends Seeder
                 'tagline' => 'Multi-location, agencies, and teams with compliance requirements.',
                 'sort' => 3, 'cta' => 'Get started',
                 'free_window_days' => null, 'trial_days' => 0,
-                'prices' => ['monthly' => 19900, 'annually' => 199000],
+                'prices' => ['monthly' => 9900, 'annually' => 99000],
                 'values' => [
-                    'conversations' => '20000', 'telephony_minutes' => '1200', 'voice_messages' => '-1',
+                    'messages' => '60000', 'conversations' => '2000', 'replies_per_conversation' => '30',
+                    'telephony_minutes' => '500', 'voice_messages' => '5000',
                     'projects' => '10', 'seats' => '25', 'agents' => '-1',
-                    'phone_numbers' => '10', 'data_sources' => '-1', 'indexed_pages' => '25000',
+                    'phone_numbers' => '5', 'data_sources' => '-1', 'indexed_pages' => '25000',
                     'history_days' => '-1',
                     'voice_cloning' => '1', 'multi_language' => '1', 'lead_capture' => '1',
                     'web_widget' => '1', 'knowledge_base' => '1', 'transcripts' => '1',
@@ -334,7 +368,8 @@ class BillingSeeder extends Seeder
                 'free_window_days' => null, 'trial_days' => 0,
                 'prices' => [],
                 'values' => [
-                    'conversations' => '-1', 'telephony_minutes' => '-1', 'voice_messages' => '-1',
+                    'messages' => '-1', 'conversations' => '-1', 'replies_per_conversation' => '-1',
+                    'telephony_minutes' => '-1', 'voice_messages' => '-1',
                     'projects' => '-1', 'seats' => '-1', 'agents' => '-1',
                     'phone_numbers' => '-1', 'data_sources' => '-1', 'indexed_pages' => '-1',
                     'history_days' => '-1',

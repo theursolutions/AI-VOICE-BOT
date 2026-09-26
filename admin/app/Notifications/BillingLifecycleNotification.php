@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Models\Billing\Plan;
 use App\Models\Billing\Subscription;
 use App\Models\Client;
 use Illuminate\Bus\Queueable;
@@ -46,7 +47,7 @@ class BillingLifecycleNotification extends Notification
 
     public function toMail($notifiable): MailMessage
     {
-        $brand   = tva_setting('content.brand_name', 'Serve AI');
+        $brand   = tva_setting('content.brand_name', 'serveAI');
         $name    = trim((string) ($notifiable->name ?? ''));
         $first   = $name !== '' ? explode(' ', $name)[0] : '';
         $billing = route('billing.index', ['client' => $this->client->slug]);
@@ -90,7 +91,7 @@ class BillingLifecycleNotification extends Notification
                     'If you don’t, your workspace switches to read-only: you keep your login, your leads, your transcripts and your export, and your agent stops replying to new customers until you pick a plan.',
                 ],
                 'cta'         => 'Choose a plan',
-                'reassurance' => 'Plans start at $19/month, charged in USD. Cancel any time.',
+                'reassurance' => $this->startingPriceLine(),
             ],
 
             self::FREE_ENDED => [
@@ -154,5 +155,21 @@ class BillingLifecycleNotification extends Notification
                 'cta'       => 'View billing',
             ],
         };
+    }
+
+    /**
+     * "Plans start at Rs 4,500/month" — read from the catalogue, in the
+     * currency this workspace would actually pay. It said "$19, charged in
+     * USD" to everyone, which was wrong twice over for a Pakistani workspace
+     * paying rupees, and wrong for everyone once the plans were repriced.
+     */
+    private function startingPriceLine(): string
+    {
+        $currency = app(\App\Services\Billing\Gateways\GatewayRegistry::class)->currencyFor($this->client);
+        $price    = Plan::startingPrice($currency) ?? Plan::startingPrice();
+
+        return $price
+            ? "Plans start at {$price->formatted()}/month. Cancel any time."
+            : 'Cancel any time.';
     }
 }

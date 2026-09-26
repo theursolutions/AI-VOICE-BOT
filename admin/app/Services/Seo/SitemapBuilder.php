@@ -38,8 +38,18 @@ class SitemapBuilder
      */
     public function urls(): array
     {
-        $configured = tva_setting('seo.sitemap_urls', []);
-        $configured = is_array($configured) ? $configured : [];
+        // The console's saved list comes first so its changefreq/priority win
+        // for any path it names; the config list is appended so every page
+        // shipped in code is always present. Reading the stored list alone
+        // meant one Save in /admin/seo froze the sitemap at that day's pages
+        // — /pricing and /blog shipped later and never appeared in it.
+        // Removing a page from the index is done with `noindex_paths`, which
+        // this method honours below, not by deleting it from a list.
+        $stored     = tva_setting('seo.sitemap_urls', []);
+        $configured = array_merge(
+            is_array($stored) ? $stored : [],
+            (array) config('site.seo.sitemap_urls', [])
+        );
 
         $noindex = $this->noindexPaths();
         $views   = (array) config('site.seo.page_views', []);

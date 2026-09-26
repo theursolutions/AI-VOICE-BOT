@@ -2,7 +2,7 @@
 
 @section('content')
 @php
-    $brand   = tva_setting('content.brand_name', 'Serve AI');
+    $brand   = tva_setting('content.brand_name', 'serveAI');
     $addr    = tva_setting('content.contact_address', '');
     $email   = tva_setting('content.contact_email', '');
     // Our own NTN/VAT number, if the business has registered one. Editable in

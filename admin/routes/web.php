@@ -60,6 +60,16 @@ Route::view('/refund-policy',  'pages.refund')->name('refund-policy');
 Route::view('/cookies',        'pages.cookies')->name('cookies');
 Route::view('/security',       'pages.security')->name('security.page');
 
+// ── Product landing pages ───────────────────────────────────────────────
+// One page per search intent; registry, sitemap and lastmod entries live in
+// config/site.php (`landing_pages`, `seo.sitemap_urls`, `seo.page_views`).
+Route::view('/ai-customer-support',          'landing.ai-customer-support')->name('landing.ai-customer-support');
+Route::view('/ai-agents',                    'landing.ai-agents')->name('landing.ai-agents');
+Route::view('/ai-voice-agent',               'landing.ai-voice-agent')->name('landing.ai-voice-agent');
+Route::view('/ai-chatbot',                   'landing.ai-chatbot')->name('landing.ai-chatbot');
+Route::view('/whatsapp-ai-chatbot',          'landing.whatsapp-ai-chatbot')->name('landing.whatsapp-ai-chatbot');
+Route::view('/omnichannel-customer-support', 'landing.omnichannel-customer-support')->name('landing.omnichannel-customer-support');
+
 // ── Blog (public) ───────────────────────────────────────────────────────
 // The site's compounding SEO layer. Posts are managed at /admin/blog and
 // appear in /sitemap.xml automatically (App\Models\BlogPost::sitemapEntries).

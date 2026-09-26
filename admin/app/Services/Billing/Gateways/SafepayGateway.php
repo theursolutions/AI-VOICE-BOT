@@ -5,39 +5,68 @@ namespace App\Services\Billing\Gateways;
 use App\Models\Billing\PlanPrice;
 use App\Models\Client;
 use GuzzleHttp\Client as Http;
+use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Safepay (Pakistan) — State Bank regulated, Y Combinator backed.
+ * Safepay (Pakistan) — Payments 2.0 hosted checkout.
  *
- * Hosted checkout in three steps: ask Safepay for a payment session (a
- * "tracker"), build a checkout URL around it, send the customer there. They pay
- * by card, bank account, JazzCash or Easypaisa on Safepay's page, so every
- * method works without a form per method and no card number touches this
- * server.
+ * Three calls and a redirect: open a payment session (a "tracker") for the
+ * amount, attach our order reference to it, mint a time-based token (TBT) that
+ * lets Safepay's page act on that session, then send the customer to
+ * `/embedded` carrying both. They pay on Safepay's page, so no card number
+ * touches this server. A fourth call, to the reporter API, confirms payment.
  *
- * IMPLEMENTED AGAINST THE HTTP API RATHER THAN THEIR SDK, only because Composer
- * cannot reach GitHub from this environment. The endpoints are configuration
- * for the same reason the amount unit is: they are the part most likely to have
- * moved since the docs were read, and `safepay:doctor` exercises them against
- * the sandbox rather than trusting them.
+ * FOLLOWS THE OFFICIAL SDK (getsafepay/sfpy-php) CALL FOR CALL — same paths,
+ * same X-SFPY-MERCHANT-SECRET header, same bodies, same checkout URL — but over
+ * our own Guzzle client rather than the package. The SDK's HTTP client is a
+ * private static curl singleton with no way to substitute it, so every test
+ * that opened a checkout would reach Safepay's servers; it is also a 0.0.x
+ * release whose URL builder silently drops `user_id` and whose webhook sample
+ * mis-verifies any payload containing an empty object. Every path and response
+ * shape below was checked against the sandbox, not copied from prose.
  *
- * THE SIGNATURE IS REAL, unlike PayFast's. Safepay returns the customer with a
- * `tracker` and a `sig`, where sig is HMAC-SHA256 of the tracker under the v1
- * secret — a value only the two of us can compute. So unlike a gateway whose
- * "signature" contains no secret, verifying the redirect here genuinely proves
- * Safepay produced it. The webhook is signed separately, under a different
- * secret, in the X-SFPY-SIGNATURE header.
+ * WHAT 2.0 CHANGED, each of which fails quietly if missed:
  *
- * RECURRING IS NOT CLAIMED. Safepay markets subscription support, but this
- * class will not assert a capability it has not demonstrated: claiming it makes
- * the renewal notices stop, and the failure would surface as customers
- * quietly lapsing. Once a sandbox run proves a saved instrument can be charged
- * without the customer present, add CAP_RECURRING here — one line, and the
- * notices stand down on their own.
+ *   • AMOUNTS ARE PAISA. The v1 endpoint took whole rupees; 2.0 takes minor
+ *     units. Proven on the sandbox: a session for 7500 renders "Rs.75.00". Our
+ *     prices are already stored in minor units, so they now go out unchanged —
+ *     and the old divide-by-100 would charge Rs 0.75 for a Rs 75 plan.
+ *   • AUTH IS THE SECRET KEY IN A HEADER. v1 sent only the public key in the
+ *     body, which let anyone open a session on our account for any amount.
+ *   • THE REDIRECT IS NOT SIGNED. v1 returned `tracker` + `sig`; 2.0 documents
+ *     no signature on the return at all. So the return is treated as a hint
+ *     and the payment confirmed by asking Safepay (the reporter API) — which
+ *     is what PaymentGateway::verifyPayment() demands anyway.
+ *   • WEBHOOKS SIGN THE WHOLE EVENT (HMAC-SHA512), not just its `data`. The v1
+ *     scheme left `type` unsigned; checking only that would reject every
+ *     genuine 2.0 delivery as a forgery.
+ *
+ * RECURRING IS NOT CLAIMED. 2.0 does have saved instruments and native
+ * subscriptions, but this class will not assert a capability it has not
+ * demonstrated: claiming it stands the renewal notices down, and a failure
+ * would surface as customers quietly lapsing. Once a sandbox run proves a saved
+ * instrument can be charged without the customer present, add CAP_RECURRING.
  */
 class SafepayGateway implements PaymentGateway
 {
+    // The SDK's paths (OrderService, PassportService, ReporterService). Fixed
+    // rather than read from .env: a stale override left over from v1 would
+    // otherwise send 2.0 traffic to a v1 endpoint, and fail as "bad tracker".
+    private const PATH_SESSION  = '/order/payments/v3/';
+    private const PATH_METADATA = '/order/payments/v3/%s/metadata';
+    private const PATH_PASSPORT = '/client/passport/v1/token';
+    private const PATH_PAYMENT  = '/reporter/api/v2/payments/%s';
+
+    /** The tracker state once the money has been captured. */
+    public const STATE_PAID = 'TRACKER_ENDED';
+
+    /** A webhook signed over the whole event — 2.0. Its contents can be believed. */
+    public const SIGNED_EVENT = 'event';
+
+    /** A webhook signed over `data` alone — v1. Its `type` is unauthenticated. */
+    public const SIGNED_DATA = 'data';
+
     public function __construct(private readonly Http $http = new Http())
     {
     }
@@ -55,7 +84,7 @@ class SafepayGateway implements PaymentGateway
     public function isConfigured(): bool
     {
         return (string) $this->config('api_key') !== ''
-            && (string) $this->config('v1_secret') !== '';
+            && (string) $this->config('secret_key') !== '';
     }
 
     /** See the class note: nothing is claimed until a sandbox run proves it. */
@@ -75,90 +104,74 @@ class SafepayGateway implements PaymentGateway
     }
 
     /**
-     * Create a session and hand back the URL to send the customer to.
+     * Open a session and hand back the URL to send the customer to.
      *
-     * `$context` must carry basket_id (our correlation id), success_url and
-     * cancel_url. The basket id comes back on the redirect and is the only way
-     * to match Safepay's answer to our own charge record.
+     * `$context` must carry basket_id (our reference), success_url and
+     * cancel_url. The reference is attached to the session as metadata — where
+     * the dashboard and every webhook show it — and is also put in the return
+     * path, because 2.0 does not say what it appends to the redirect and the
+     * return must be able to find its charge regardless.
+     *
+     * The tracker comes back on the handoff so the caller can store it with the
+     * charge. It is the only tracker the return will ever check: one taken from
+     * the returning browser could belong to a cheaper payment.
      */
     public function startCheckout(Client $client, PlanPrice $price, array $context = []): CheckoutHandoff
     {
         $orderId = (string) ($context['basket_id'] ?? '');
 
         if ($orderId === '') {
-            throw new \InvalidArgumentException('Safepay needs a basket_id to correlate the redirect.');
+            throw new \InvalidArgumentException('Safepay needs a basket_id to correlate the payment.');
+        }
+
+        // Every session is opened in rupees. A dollar price would open a rupee
+        // session for the dollar figure — and the customer could pay it before
+        // confirmation refused it for the currency mismatch. Stop it here,
+        // before any money can move.
+        $currency = strtoupper((string) ($price->currency ?: 'PKR'));
+
+        if ($currency !== 'PKR') {
+            throw new \InvalidArgumentException("Safepay settles rupees only, not {$currency}.");
         }
 
         // An add-on is sold for the REMAINDER of a period, so the amount is
         // computed by the caller and is deliberately not the price row's. Passed
         // explicitly rather than mutating the row, which would reprice the plan
         // for everybody.
-        $tracker = $this->createSession($price, $context['amount_override'] ?? null);
+        $tracker = $this->createSession($this->amountFor($price, $context['amount_override'] ?? null));
 
-        // The checkout page, NOT the API host — they are different services and
-        // the production API host 404s this path entirely.
-        $url = $this->checkoutUrl()
-            . '?' . http_build_query([
-                // `beacon`, not `tracker`. The session is created under a
-                // tracker but the checkout component reads it from `beacon`,
-                // and sending the wrong name produces "Session expired!" on
-                // their page rather than an error naming the missing parameter
-                // — which is a long way from the cause.
-                'beacon'       => $tracker,
-                'env'          => $this->config('sandbox') ? 'sandbox' : 'production',
-                'source'       => 'custom',
-                'order_id'     => $orderId,
-                // Their flow POSTs back to this URL with tracker + sig.
-                'redirect_url' => (string) ($context['success_url'] ?? ''),
-                'cancel_url'   => (string) ($context['cancel_url'] ?? ''),
-                // Asks Safepay to also notify us server-to-server. Omitted at
-                // first, and its absence is silent: the page loads, the payment
-                // can complete, and no webhook ever arrives — so the charge stays
-                // pending forever with nothing to indicate why.
-                'webhooks'     => 'true',
-            ]);
+        $this->attachOrder($tracker, $orderId);
 
-        return CheckoutHandoff::redirect($url, $orderId);
+        $url = $this->checkoutHost() . '/embedded?' . http_build_query([
+            'environment'  => $this->environment(),
+            'tracker'      => $tracker,
+            'source'       => 'hosted',
+            'tbt'          => $this->timeBasedToken(),
+            'redirect_url' => $this->returnUrl((string) ($context['success_url'] ?? ''), $orderId),
+            'cancel_url'   => (string) ($context['cancel_url'] ?? ''),
+        ]);
+
+        return CheckoutHandoff::redirect($url, $orderId, $tracker);
     }
 
     /**
-     * Ask Safepay for a payment session and return its tracker.
+     * Open a payment session and return its tracker.
      *
      * @throws \RuntimeException when no tracker comes back — a checkout built
-     *         around an empty tracker would send the customer to a broken page
-     *         rather than fail here where the reason is visible.
+     *         around an empty tracker sends the customer to a broken page rather
+     *         than failing here, where the reason is visible.
      */
-    private function createSession(PlanPrice $price, ?int $amountOverride = null): string
+    private function createSession(int $amount): string
     {
-        $response = $this->http->post(
-            rtrim($this->baseUrl(), '/') . (string) $this->config('paths.session', '/order/v1/init'),
-            [
-                // Exactly the four fields Safepay's own SDK sends for the
-                // hosted flow. The v3 endpoint accepts a richer body and returns
-                // a tracker the hosted page cannot use — it belongs to the
-                // embedded integration, where the merchant drives each step.
-                'json' => [
-                    'client'      => (string) $this->config('api_key'),
-                    'amount'      => $this->amountFor($price, $amountOverride),
-                    'currency'    => 'PKR',
-                    'environment' => $this->config('sandbox') ? 'sandbox' : 'production',
-                ],
-                'timeout' => (int) $this->config('timeout', 20),
-            ],
-        );
+        $body = $this->send('POST', self::PATH_SESSION, [
+            'merchant_api_key' => (string) $this->config('api_key'),
+            'intent'           => 'CYBERSOURCE',
+            'mode'             => 'payment',
+            'currency'         => 'PKR',
+            'amount'           => $amount,
+        ]);
 
-        $body = json_decode((string) $response->getBody(), true) ?: [];
-
-        // Their envelope has moved between versions; accept the shapes seen
-        // rather than assuming one, and fail loudly if none matches.
-        // v3 nests it under data.tracker.token; the older shapes are kept so a
-        // pinned SAFEPAY_SESSION_PATH still works.
-        $tracker = (string) (
-            data_get($body, 'data.tracker.token')
-            ?? data_get($body, 'data.token')
-            ?? data_get($body, 'token')
-            ?? ''
-        );
+        $tracker = (string) data_get($body, 'data.tracker.token', '');
 
         if ($tracker === '') {
             throw new \RuntimeException(
@@ -171,116 +184,360 @@ class SafepayGateway implements PaymentGateway
     }
 
     /**
-     * The amount, in whatever unit Safepay is configured to expect.
+     * Label the session with our reference.
      *
-     * Prices are stored in minor units, so Rs 75 is 7500. Sending that where
-     * rupees are expected charges a hundred times the price — which is why this
-     * is one explicit conversion in one place rather than arithmetic scattered
-     * through the caller.
+     * Not fatal. The charge row keeps the tracker, which is what the return and
+     * the webhook match on, so a failure here costs the dashboard its order
+     * column — not the payment. Refusing a paying customer over a label would
+     * be the worse trade.
+     */
+    private function attachOrder(string $tracker, string $orderId): void
+    {
+        try {
+            $this->send('POST', sprintf(self::PATH_METADATA, rawurlencode($tracker)), [
+                'data' => ['source' => 'billing', 'order_id' => $orderId],
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('safepay.metadata_failed', [
+                'tracker' => $tracker,
+                'order'   => $orderId,
+                'error'   => mb_substr($e->getMessage(), 0, 300),
+            ]);
+        }
+    }
+
+    /**
+     * The time-based token Safepay's page authenticates with.
+     *
+     * It arrives as a bare string in `data`, not an object — the SDK wraps it
+     * in {token: …} itself — so both shapes are read.
+     */
+    private function timeBasedToken(): string
+    {
+        $body  = $this->send('POST', self::PATH_PASSPORT);
+        $token = data_get($body, 'data');
+        $token = is_string($token) ? $token : (string) data_get($body, 'data.token', '');
+
+        if ($token === '') {
+            throw new \RuntimeException('Safepay returned no time-based token for the checkout.');
+        }
+
+        return $token;
+    }
+
+    /**
+     * The amount Safepay should collect, in PAISA.
+     *
+     * Prices are stored in minor units and 2.0 takes minor units, so this is
+     * the identity — kept as a named step because the unit is the single most
+     * expensive thing to get wrong here, and it changed between API versions.
+     * v1 wanted rupees and this used to divide by 100; doing that on 2.0
+     * charges a hundredth of the price.
      */
     private function amountFor(PlanPrice $price, ?int $override = null): int
     {
-        // The override is in the same minor units as the row, so it goes
-        // through exactly the same conversion. Converting it anywhere else
-        // would reintroduce the factor-of-a-hundred bug this method exists to
-        // hold in one place.
-        $minor = $override ?? (int) $price->unit_amount;
-
-        return $this->config('amount_unit', 'rupees') === 'paisa'
-            ? $minor
-            : (int) round($minor / 100);
+        return $override ?? (int) $price->unit_amount;
     }
 
     /**
-     * Confirm a payment.
+     * Where the customer comes back to, with our reference in the PATH.
      *
-     * Safepay's redirect POSTs back `tracker` and `sig`, and unlike a gateway
-     * whose signature carries no secret, that HMAC genuinely proves Safepay
-     * produced it — so here the signature IS the verification, and a valid one
-     * is accepted.
+     * In the path rather than the query because 2.0 does not document what it
+     * appends to the redirect, and a provider that naively adds "?tracker=…"
+     * to a URL that already has a query string would mangle it.
+     */
+    private function returnUrl(string $successUrl, string $orderId): string
+    {
+        if ($successUrl === '') {
+            return '';
+        }
+
+        [$path, $query] = array_pad(explode('?', $successUrl, 2), 2, null);
+
+        return rtrim($path, '/') . '/' . rawurlencode($orderId) . ($query !== null ? '?' . $query : '');
+    }
+
+    /**
+     * Establish, from Safepay, whether a session was paid.
      *
-     * A missing or wrong signature returns PENDING rather than FAILED. It may
-     * be a forgery, but it may equally be a truncated POST or a customer who
-     * refreshed, and cancelling a subscription on that basis would be guessing
-     * with someone else's money. Pending is reconcilable; a cancelled
-     * subscription is not.
+     * The payload must name the tracker, and should carry the amount and
+     * currency the charge expects: a captured session for a different amount is
+     * not payment for this order, and the order id recorded on the session must
+     * be this reference whenever it is present.
+     *
+     * Never FAILED for something that may still resolve — an unreachable API or
+     * a session still in progress is PENDING, because cancelling a subscription
+     * on a guess is gambling with someone else's money. FAILED is kept for a
+     * mismatch, which no amount of waiting fixes.
      */
     public function verifyPayment(string $reference, array $payload = []): PaymentResult
     {
-        $tracker   = (string) ($payload['tracker'] ?? $reference);
-        $signature = (string) ($payload['sig'] ?? $payload['signature'] ?? '');
+        $tracker = (string) ($payload['tracker'] ?? '');
 
-        if ($signature === '') {
-            return PaymentResult::pending($reference, 'Safepay sent no signature to verify.', $payload);
+        if ($tracker === '') {
+            return PaymentResult::pending($reference, 'No Safepay session to check.', $payload);
         }
 
-        if (! $this->signatureValid($tracker, $signature)) {
-            Log::warning('safepay.signature_mismatch', ['tracker' => $tracker, 'order' => $reference]);
+        $payment = $this->lookup($tracker);
 
-            return PaymentResult::pending($reference, 'Signature did not match.', $payload);
+        if ($payment === null) {
+            return PaymentResult::pending(
+                $reference,
+                'Could not reach Safepay to confirm the payment.',
+                ['tracker' => $tracker, 'unreachable' => true],
+            );
         }
 
-        return PaymentResult::paid(
-            $reference,
-            (int) ($payload['amount_cents'] ?? 0),
-            'PKR',
-            $payload + ['tracker' => $tracker],
-        );
-    }
+        $state = (string) ($payment['state'] ?? '');
 
-    /** HMAC-SHA256 of the tracker under the v1 secret. */
-    public function signatureValid(string $tracker, string $signature): bool
-    {
-        $secret = (string) $this->config('v1_secret');
-
-        if ($secret === '' || $tracker === '') {
-            return false;
+        if ($state !== self::STATE_PAID) {
+            return PaymentResult::pending($reference, "Safepay reports the session as {$state}.", $payment);
         }
 
-        // hash_equals, not ===: a timing-safe comparison is the whole point of
-        // checking a MAC, and a plain compare leaks the answer a byte at a time.
-        return hash_equals(hash_hmac('sha256', $tracker, $secret), $signature);
+        $amount   = (int) (data_get($payment, 'purchase_totals.quote_amount.amount')
+            ?? data_get($payment, 'purchase_totals.base_amount.amount')
+            ?? -1);
+        $currency = strtoupper((string) (data_get($payment, 'purchase_totals.quote_amount.currency')
+            ?? data_get($payment, 'purchase_totals.base_amount.currency')
+            ?? ''));
+
+        return $this->matches($reference, $payload, $tracker, $amount, $currency, self::orderIdFrom($payment['metadata'] ?? []), $payment)
+            ?? PaymentResult::paid($reference, $amount, $currency, $payment);
     }
 
     /**
-     * Verify a webhook, which is signed under a DIFFERENT secret and over the
-     * whole raw body rather than the tracker alone.
+     * What a verified 2.0 webhook says about one of our charges.
      *
-     * The raw body matters: re-encoding a decoded payload changes key order and
-     * whitespace, and the MAC is over the bytes that arrived.
+     * The whole event is signed, so its fields can be believed without a
+     * second call — which matters, since Safepay gives an endpoint ten seconds
+     * before queueing a retry. Only a capture counts as payment; everything
+     * else (failed attempts, authorisations, refunds) is not.
      */
-    public function webhookValid(string $rawBody, string $signature): bool
+    public function resultFromEvent(object $charge, array $event): PaymentResult
     {
-        $secret = (string) $this->config('webhook_secret');
+        $reference = (string) $charge->reference;
+        $data      = (array) ($event['data'] ?? []);
+        $type      = (string) ($event['type'] ?? '');
 
-        if ($secret === '' || $signature === '') {
-            return false;
+        if ($type !== 'payment.succeeded') {
+            return PaymentResult::pending($reference, "A {$type} event is not a captured payment.", $data);
         }
 
-        // SHA-512, over the `data` object RE-ENCODED — not SHA-256 over the raw
-        // body, which is what this did first and what the redirect signature
-        // uses. Two different algorithms and two different inputs on the same
-        // integration, taken from Safepay's own SDK (Verify::webhook).
-        //
-        // Getting it wrong is silent in the worst way: every genuine delivery is
-        // rejected as a forgery, so payments succeed at Safepay and never post
-        // here, and the logs show only "invalid signature" — which reads like an
-        // attack rather than our own mistake.
-        $payload = json_decode($rawBody, true);
+        $tracker  = (string) ($data['tracker'] ?? '');
+        $amount   = (int) ($data['amount'] ?? -1);
+        $currency = strtoupper((string) ($data['currency'] ?? ''));
 
-        if (! is_array($payload) || ! isset($payload['data'])) {
-            return false;
+        // Bound to the session opened for this charge, which checkout stored.
+        // A charge with none was opened by v1 and has no 2.0 session to match.
+        if (! $charge->gateway_ref || $charge->gateway_ref !== $tracker) {
+            return PaymentResult::failed($reference, 'The event is for a different Safepay session.', $data);
         }
 
-        // JSON_UNESCAPED_SLASHES matters: PHP escapes forward slashes by
-        // default, so any URL inside the payload would re-encode differently
-        // from what Safepay signed.
-        $canonical = json_encode($payload['data'], JSON_UNESCAPED_SLASHES);
-
-        return hash_equals(hash_hmac('sha512', $canonical, $secret), $signature);
+        return $this->matches(
+            $reference,
+            ['amount_cents' => (int) $charge->amount_cents, 'currency' => $charge->currency ?: 'PKR'],
+            $tracker,
+            $amount,
+            $currency,
+            self::orderIdFrom($data['metadata'] ?? []),
+            $data,
+        ) ?? PaymentResult::paid($reference, $amount, $currency, $data);
     }
 
-    /** Where the API lives — sessions, lookups. */
+    /**
+     * Refuse a captured payment that is not THIS order's, or null if it is.
+     *
+     * Each check closes a way to pay for one thing with another: a session for
+     * a smaller amount, one in another currency, one labelled with a different
+     * order. Logged as an error because every one of them means either a bug in
+     * how sessions are opened or somebody trying it on.
+     */
+    private function matches(
+        string $reference,
+        array $expected,
+        string $tracker,
+        int $amount,
+        string $currency,
+        ?string $orderId,
+        array $raw,
+    ): ?PaymentResult {
+        $problem = match (true) {
+            isset($expected['amount_cents']) && $amount !== (int) $expected['amount_cents']
+                => "Safepay captured {$amount}, but the order is for {$expected['amount_cents']}.",
+            isset($expected['currency']) && $currency !== strtoupper((string) $expected['currency'])
+                => "Safepay captured {$currency}, but the order is in {$expected['currency']}.",
+            $orderId !== null && $orderId !== $reference
+                => "The Safepay session belongs to order {$orderId}.",
+            default => null,
+        };
+
+        if ($problem === null) {
+            return null;
+        }
+
+        Log::error('safepay.payment_mismatch', [
+            'reference' => $reference,
+            'tracker'   => $tracker,
+            'problem'   => $problem,
+        ]);
+
+        return PaymentResult::failed($reference, $problem, $raw);
+    }
+
+    /**
+     * A session as the reporter API sees it, or null when it cannot be read.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function lookup(string $tracker): ?array
+    {
+        try {
+            $body = $this->send('GET', sprintf(self::PATH_PAYMENT, rawurlencode($tracker)));
+        } catch (GuzzleException $e) {
+            Log::warning('safepay.lookup_failed', [
+                'tracker' => $tracker,
+                'error'   => mb_substr($e->getMessage(), 0, 300),
+            ]);
+
+            return null;
+        }
+
+        $data = $body['data'] ?? null;
+
+        return is_array($data) ? $data : null;
+    }
+
+    /**
+     * The order reference recorded on a session, in whichever shape it arrived.
+     *
+     * The same metadata comes back three ways: flat in a webhook
+     * ({order_id: "X"}), as a record in the reporter ({order_id: {value: "X"}}),
+     * and nested as it was sent ({data: {order_id: "X"}}).
+     */
+    public static function orderIdFrom(mixed $metadata): ?string
+    {
+        $metadata = (array) $metadata;
+        $value    = $metadata['order_id'] ?? data_get($metadata, 'data.order_id');
+
+        if (is_array($value)) {
+            $value = $value['value'] ?? null;
+        }
+
+        return is_scalar($value) && (string) $value !== '' ? (string) $value : null;
+    }
+
+    /**
+     * Which scheme signed a webhook: SIGNED_EVENT, SIGNED_DATA, or null for
+     * none — in which case nothing in the body may be believed.
+     *
+     * 2.0 signs the whole event with HMAC-SHA512. The docs describe the input
+     * as the payload re-encoded as JSON, and the SDK re-encodes PHP's decoded
+     * array; those agree with the raw bytes until the payload holds an empty
+     * object (PHP turns {} into []) or non-ASCII text (PHP escapes it, and
+     * JavaScript does not). So the raw body is tried first and the re-encodings
+     * after it. That weakens nothing: every candidate is derived from the body
+     * that arrived, and each still needs the secret to match.
+     *
+     * v1 signed only `data`, leaving `type` outside the signature. It is still
+     * recognised, for payments that were already in flight when 2.0 went live,
+     * but reported separately so the caller confirms those with Safepay rather
+     * than trusting a type anyone could have rewritten.
+     */
+    public function webhookScheme(string $rawBody, string $signature): ?string
+    {
+        $secret    = (string) $this->config('webhook_secret');
+        $signature = strtolower(trim($signature));
+
+        if ($secret === '' || $signature === '') {
+            return null;
+        }
+
+        $asObjects = json_decode($rawBody);
+        $asArrays  = json_decode($rawBody, true);
+
+        if (! $asObjects instanceof \stdClass || ! is_array($asArrays)) {
+            return null;
+        }
+
+        $valid = fn (string $candidate) => hash_equals(hash_hmac('sha512', $candidate, $secret), $signature);
+
+        // JSON_UNESCAPED_SLASHES throughout: PHP escapes "/" by default, and a
+        // URL inside the payload would otherwise re-encode differently from
+        // what Safepay signed.
+        $event = array_unique(array_filter([
+            $rawBody,
+            json_encode($asObjects, JSON_UNESCAPED_SLASHES),
+            json_encode($asObjects, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+            json_encode($asArrays, JSON_UNESCAPED_SLASHES),
+        ]));
+
+        foreach ($event as $candidate) {
+            if ($valid($candidate)) {
+                return self::SIGNED_EVENT;
+            }
+        }
+
+        if (! isset($asArrays['data'])) {
+            return null;
+        }
+
+        $data = array_unique(array_filter([
+            json_encode($asArrays['data'], JSON_UNESCAPED_SLASHES),
+            json_encode($asObjects->data, JSON_UNESCAPED_SLASHES),
+        ]));
+
+        foreach ($data as $candidate) {
+            if ($valid($candidate)) {
+                return self::SIGNED_DATA;
+            }
+        }
+
+        return null;
+    }
+
+    /** Signed by Safepay under either scheme. */
+    public function webhookValid(string $rawBody, string $signature): bool
+    {
+        return $this->webhookScheme($rawBody, $signature) !== null;
+    }
+
+    /**
+     * One authenticated call to Safepay's API.
+     *
+     * Guzzle's default of throwing on 4xx/5xx is kept: a refused session must
+     * stop the checkout with Safepay's reason attached, not carry on with an
+     * empty body.
+     *
+     * @return array<string, mixed>
+     *
+     * @throws GuzzleException
+     */
+    private function send(string $method, string $path, ?array $json = null): array
+    {
+        $options = [
+            'headers' => [
+                'X-SFPY-MERCHANT-SECRET' => (string) $this->config('secret_key'),
+                'Accept'                 => 'application/json',
+            ],
+            'timeout' => (int) $this->config('timeout', 20),
+        ];
+
+        if ($json !== null) {
+            $options['json'] = $json;
+        }
+
+        $response = $this->http->request($method, rtrim($this->baseUrl(), '/') . $path, $options);
+
+        return json_decode((string) $response->getBody(), true) ?: [];
+    }
+
+    /** `sandbox` or `production`, as both the API and the checkout page name them. */
+    public function environment(): string
+    {
+        return $this->config('sandbox') ? 'sandbox' : 'production';
+    }
+
+    /** Where the API lives — sessions, tokens, lookups. */
     public function baseUrl(): string
     {
         return (string) $this->config(
@@ -289,18 +546,14 @@ class SafepayGateway implements PaymentGateway
     }
 
     /**
-     * Where the CUSTOMER goes. A different host from the API in production.
-     *
-     * Kept whole rather than assembled from a base and a path, because the two
-     * environments differ in host AND path and splitting them invites deriving
-     * one from the other — which is exactly the mistake that sent customers to
-     * the marketing site.
+     * Where the CUSTOMER goes: a different host from the API in production
+     * (getsafepay.com, not api.getsafepay.com), the same one in sandbox.
      */
-    public function checkoutUrl(): string
+    public function checkoutHost(): string
     {
         return rtrim((string) $this->config(
-            $this->config('sandbox') ? 'checkout_url.sandbox' : 'checkout_url.production'
-        ), '?');
+            $this->config('sandbox') ? 'checkout_host.sandbox' : 'checkout_host.production'
+        ), '/');
     }
 
     private function config(string $key, mixed $default = null): mixed

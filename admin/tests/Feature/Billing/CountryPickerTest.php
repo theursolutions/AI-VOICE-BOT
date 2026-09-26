@@ -33,7 +33,7 @@ class CountryPickerTest extends BillingTestCase
 
         config([
             'billing.safepay.api_key'   => 'sec_test',
-            'billing.safepay.v1_secret' => 'v1_test',
+            'billing.safepay.secret_key' => 'v1_test',
         ]);
 
         SiteSetting::flushCache();
