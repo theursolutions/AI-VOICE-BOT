@@ -120,6 +120,14 @@ class PricingPresenter
      * are all denominated already, and silently re-routing them because someone
      * opened the billing page from an airport is not a decision an IP address
      * gets to make.
+     *
+     * UNLESS WE NO LONGER SELL TO THE STORED COUNTRY. Both protections exist so
+     * that a customer can go on paying the way they chose; when every payment
+     * from that country is refused, they protect nothing and leave the customer
+     * stuck in front of a checkout that can never take their money. A live
+     * account ended up exactly there — United States remembered, sales narrowed
+     * to Pakistan, the customer sitting in Pakistan — so a country that cannot
+     * be sold to always gives way to one that can.
      */
     private function followDetectedCountry(Client $client, string $detected): void
     {
@@ -129,20 +137,29 @@ class PricingPresenter
             return;
         }
 
-        if (data_get($client->json_data, 'billing.country_source') === 'manual') {
+        $sellable = \App\Support\Payments::sellableCountries();
+
+        if (! isset($sellable[$detected])) {
             return;
         }
 
-        if (! isset(\App\Support\Payments::sellableCountries()[$detected])) {
-            return;
-        }
+        // A dead end is a country that IS stored and cannot be sold to. No
+        // country at all is not one: the protections below still apply there.
+        $stored  = strtoupper((string) $client->billing_country);
+        $deadEnd = $stored !== '' && ! isset($sellable[$stored]);
 
-        $subscription = $client->currentSubscription();
+        if (! $deadEnd) {
+            if (data_get($client->json_data, 'billing.country_source') === 'manual') {
+                return;
+            }
 
-        if ($subscription
-            && $subscription->unit_amount > 0
-            && $subscription->current_period_end?->isFuture()) {
-            return;
+            $subscription = $client->currentSubscription();
+
+            if ($subscription
+                && $subscription->unit_amount > 0
+                && $subscription->current_period_end?->isFuture()) {
+                return;
+            }
         }
 
         $client->forceFill([
