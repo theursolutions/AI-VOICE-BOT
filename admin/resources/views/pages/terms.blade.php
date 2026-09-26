@@ -1,5 +1,5 @@
 @php
-    $brand = tva_setting('content.brand_name', 'Serve AI');
+    $brand = tva_setting('content.brand_name', 'serveAI');
     $email = tva_setting('content.contact_email', 'info@serveai.com.pk');
     $phone = tva_setting('content.contact_phone', '+92 349 149 4383');
     $addr  = tva_setting('content.contact_address', '');

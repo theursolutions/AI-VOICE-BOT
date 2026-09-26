@@ -1,6 +1,6 @@
 @php
     use App\Support\Seo;
-    $brand = tva_setting('content.brand_name', 'Serve AI');
+    $brand = tva_setting('content.brand_name', 'serveAI');
 
     // Category filters are real, crawlable URLs, but they are slices of the
     // same set of articles — so page 2+ and every filtered view is noindex,
@@ -11,7 +11,7 @@
     // Section name is configurable (Insights / Resources / Research / …);
     // the URL stays /blog either way.
     $label   = tva_setting('content.blog_label', 'Insights');
-    $tagline = tva_setting('content.blog_tagline', 'Practical writing on AI receptionists, WhatsApp automation and turning conversations into customers.');
+    $tagline = tva_setting('content.blog_tagline', 'Practical writing on AI customer support, AI agents, voice and WhatsApp automation — and turning conversations into customers.');
 
     $pageHeading = $category
         ? $category
@@ -25,10 +25,10 @@
         : $tagline,
     'seoTitle'        => $category
         ? $category . ' — ' . $label . ' | ' . $brand
-        : $label . ' — AI receptionists, WhatsApp automation & customer conversations | ' . $brand,
+        : $label . ' — AI customer support, AI agents & WhatsApp automation | ' . $brand,
     'metaDescription' => $category
         ? 'Articles about ' . $category . ' from ' . $brand . ' — practical guidance for businesses using AI to answer calls, chats and messages.'
-        : 'Practical guides on AI receptionists, AI voice agents, WhatsApp Business automation and lead capture — written for businesses that lose customers to unanswered calls.',
+        : 'Practical guides on AI customer support, AI agents, AI voice agents, WhatsApp automation and lead capture — for businesses that lose customers to slow replies.',
     'canonicalPath'   => '/blog',
     'pageNoindex'     => $isSlice,
     'breadcrumbs'     => $category

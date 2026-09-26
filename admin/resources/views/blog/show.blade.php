@@ -1,8 +1,10 @@
 @php
     use App\Support\Seo;
-    $brand = tva_setting('content.brand_name', 'Serve AI');
+    $brand = tva_setting('content.brand_name', 'serveAI');
 
     $author = trim((string) $post->author_name) !== '' ? $post->author_name : $brand;
+    // Normalised so the older "Serve AI" spelling on existing posts counts too.
+    $authorIsBrand = strtolower(str_replace(' ', '', $author)) === strtolower(str_replace(' ', '', $brand));
 
     // Article structured data. Every field here is visible on the page —
     // headline, dates, author, cover — which is the rule for markup: describe
@@ -20,11 +22,16 @@
         'articleSection'   => $post->category ?: null,
         'keywords'         => is_array($post->tags) && $post->tags ? implode(', ', $post->tags) : null,
         'image'            => trim((string) $post->cover_url) !== '' ? Seo::absolute($post->cover_url) : null,
-        'author'           => array_filter([
-            '@type'    => 'Person',
-            'name'     => $author,
-            'jobTitle' => $post->author_role ?: null,
-        ]),
+        // A post signed by the company is authored by the Organization node,
+        // not a Person called "serveAI" — marking a brand up as a human is
+        // wrong data, and it splits the entity Google is trying to build.
+        'author'           => $authorIsBrand
+            ? ['@id' => Seo::origin() . '/#organization']
+            : array_filter([
+                '@type'    => 'Person',
+                'name'     => $author,
+                'jobTitle' => $post->author_role ?: null,
+            ]),
         'publisher'        => ['@id' => Seo::origin() . '/#organization'],
         'isPartOf'         => ['@id' => Seo::origin() . '/#website'],
         'mainEntityOfPage' => ['@id' => $post->canonical . '#webpage'],
@@ -43,9 +50,14 @@
     // never enter the index. Same flag covers an author-set noindex.
     'pageNoindex'     => ! $post->isIndexable(),
     'ogType'          => 'article',
+    // The post's own cover as its share card, so a shared article doesn't
+    // preview as the generic homepage banner.
+    'pageImage'       => $post->cover_url ?: null,
+    'pageImageAlt'    => $post->cover_alt ?: $post->title,
     'breadcrumbs'     => array_values(array_filter([
         ['name' => tva_setting('content.blog_label', 'Insights'), 'url' => '/blog'],
-        $post->category ? ['name' => $post->category, 'url' => '/blog?category=' . urlencode($post->category)] : null,
+        // No category crumb: its URL is /blog?category=…, which canonicalises
+        // to /blog — the BreadcrumbList would list the same page twice.
         ['name' => $post->title, 'url' => '/blog/' . $post->slug],
     ])),
     'pageSchemaType'  => 'WebPage',
@@ -169,7 +181,7 @@
             <div>
                 <div class="post-byline__name">{{ $author }}</div>
                 <div class="post-byline__meta">
-                    {{ $post->author_role ?: 'Serve AI team' }}
+                    {{ $post->author_role ?: 'serveAI team' }}
                     @if ($post->published_at)
                         · <time datetime="{{ $post->published_at->toDateString() }}">{{ $post->published_at->format('F j, Y') }}</time>
                     @endif
@@ -200,6 +212,36 @@
     </div>
 </section>
 
+{{-- ── Product pages this post is about, matched by tag against
+     config('site.landing_pages'). Works for posts already published, whose
+     bodies can't be edited from code, and gives every product page
+     contextual links from the articles that support it. ── --}}
+@php
+    $postTags = array_map('strtolower', is_array($post->tags) ? $post->tags : []);
+    $productLinks = collect((array) config('site.landing_pages', []))
+        ->map(fn ($lp, $path) => $lp + ['url' => $path, 'hits' => count(array_intersect($postTags, array_map('strtolower', (array) ($lp['tags'] ?? []))))])
+        ->filter(fn ($lp) => $lp['hits'] > 0)
+        ->sortByDesc('hits')
+        ->take(2);
+@endphp
+@if ($productLinks->isNotEmpty())
+<section class="article" style="padding-top:8px;">
+    <div class="wrap" style="max-width:1000px;">
+        <h2 style="font-size:20px; font-weight:800; margin:0 0 18px;">Where {{ $brand }} fits</h2>
+        <div class="rel-grid">
+            @foreach ($productLinks as $lp)
+                <a href="{{ url($lp['url']) }}" class="rel-card">
+                    <div class="rel-card__body">
+                        <div class="rel-card__title">{{ ucfirst($lp['label']) }}</div>
+                        <div class="rel-card__meta">{{ $lp['blurb'] }}</div>
+                    </div>
+                </a>
+            @endforeach
+        </div>
+    </div>
+</section>
+@endif
+
 {{-- ── Related articles: gives every post inbound links from its siblings,
      rather than depending on the index page as the only route in. ── --}}
 @if ($related->count())
@@ -227,7 +269,7 @@
     <div class="wrap">
         <div class="page-cta">
             <h2>Never miss another customer</h2>
-            <p>{{ $brand }} answers your calls, chats and WhatsApp messages 24/7 — in your own voice.</p>
+            <p>{{ $brand }} answers your calls, chats and WhatsApp messages 24/7 — from your own data, in your customer's language.</p>
             <a href="{{ url('/register') }}" class="btn">Start free — no card required →</a>
             <div style="margin-top:14px;">
                 <a href="{{ url('/blog') }}" style="font-size:13.5px; color:var(--neon-2);">← All {{ strtolower(tva_setting('content.blog_label', 'Insights')) }}</a>

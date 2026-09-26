@@ -156,7 +156,7 @@ class ConversationBudgetTest extends TestCase
         $features = app(\App\Services\Billing\PlanFeatureService::class);
         $features->flush();
 
-        $expected = ['free' => 20, 'starter' => 20, 'growth' => 30, 'scale' => 30];
+        $expected = ['free' => 20, 'starter' => 20, 'growth' => 25, 'scale' => 30];
 
         $this->requireCatalogue(array_keys($expected));
 

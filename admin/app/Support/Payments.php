@@ -251,6 +251,124 @@ class Payments
         SiteSetting::set(self::SETTING_TAX_RATES, $clean);
     }
 
+    // ── Checkout switch and sandbox/live mode ────────────────────────
+
+    /**
+     * Stored as an override of `billing.checkout.enabled`, and applied onto
+     * config at boot rather than read at each call site — fifteen places read
+     * that key, and every one of them follows the switch without being touched.
+     * Absent = the .env value (BILLING_CHECKOUT_ENABLED) stands.
+     */
+    public const SETTING_CHECKOUT = 'payments.checkout.enabled';
+
+    /** ['safepay' => 'sandbox'|'live', …]. A gateway absent = its .env value. */
+    public const SETTING_MODES = 'payments.gateways.mode';
+
+    public const MODES = ['sandbox', 'live'];
+
+    /**
+     * Gateways with a sandbox flag. Stripe is not here: its test and live
+     * modes are decided by which keys it holds, not by a setting.
+     */
+    public const MODE_GATEWAYS = ['safepay', 'payfast', 'paddle'];
+
+    /** Top-level credentials as .env set them, before any mode swapped them. */
+    private static ?array $baseCredentials = null;
+
+    /** Are the buy buttons (and the checkout endpoints) live? */
+    public static function checkoutEnabled(): bool
+    {
+        return (bool) config('billing.checkout.enabled', false);
+    }
+
+    public static function setCheckoutEnabled(bool $enabled): void
+    {
+        SiteSetting::set(self::SETTING_CHECKOUT, $enabled);
+        self::applyConfig();
+    }
+
+    /** sandbox | live, for a gateway in MODE_GATEWAYS. */
+    public static function gatewayMode(string $key): string
+    {
+        return config("billing.{$key}.sandbox", true) ? 'sandbox' : 'live';
+    }
+
+    /** @param array<string, string> $modes */
+    public static function setGatewayModes(array $modes): void
+    {
+        $stored = (array) SiteSetting::get(self::SETTING_MODES, []);
+
+        foreach ($modes as $key => $mode) {
+            if (in_array($key, self::MODE_GATEWAYS, true) && in_array($mode, self::MODES, true)) {
+                $stored[$key] = $mode;
+            }
+        }
+
+        SiteSetting::set(self::SETTING_MODES, $stored);
+        self::applyConfig();
+    }
+
+    /**
+     * True when .env carries a dedicated key set for this gateway and mode
+     * (SAFEPAY_LIVE_API_KEY …). False means the plain keys are used as they
+     * are, which is only right if they belong to that environment.
+     */
+    public static function hasModeCredentials(string $key, string $mode): bool
+    {
+        $set = (array) config("billing.{$key}.credentials.{$mode}", []);
+
+        return $set !== [] && collect($set)->every(fn ($v) => (string) $v !== '');
+    }
+
+    /**
+     * Apply the stored overrides onto config. Called at boot and before each
+     * queued job, so web requests and long-running workers agree.
+     *
+     * Only STORED values are applied: with nothing saved, config is left
+     * exactly as .env built it. Fails silent — a settings table that can't be
+     * read must never take the site down, and .env stays in charge.
+     */
+    public static function applyConfig(): void
+    {
+        try {
+            $checkout = SiteSetting::get(self::SETTING_CHECKOUT);
+            $modes    = (array) SiteSetting::get(self::SETTING_MODES, []);
+        } catch (\Throwable) {
+            return;
+        }
+
+        if (is_bool($checkout)) {
+            config(['billing.checkout.enabled' => $checkout]);
+        }
+
+        foreach (self::MODE_GATEWAYS as $key) {
+            $creds = (array) config("billing.{$key}.credentials", []);
+
+            // Remember the plain keys once, so switching back to a mode with
+            // no dedicated set restores them rather than keeping the other's.
+            self::$baseCredentials[$key] ??= array_intersect_key(
+                (array) config("billing.{$key}", []),
+                array_flip(array_keys((array) ($creds['live'] ?? $creds['sandbox'] ?? []))),
+            );
+
+            $mode = $modes[$key] ?? null;
+            if (! in_array($mode, self::MODES, true)) {
+                continue;
+            }
+
+            config(["billing.{$key}.sandbox" => $mode === 'sandbox']);
+
+            $values = self::$baseCredentials[$key];
+            if (self::hasModeCredentials($key, $mode)) {
+                $values = array_replace($values, (array) $creds[$mode]);
+            }
+
+            foreach ($values as $field => $value) {
+                config(["billing.{$key}.{$field}" => $value]);
+            }
+        }
+    }
+
     // ── Selling ──────────────────────────────────────────────────────
 
     /**

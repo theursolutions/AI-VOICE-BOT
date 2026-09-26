@@ -100,7 +100,10 @@ class SeoTest extends TestCase
 
     public function test_public_pages_have_unique_titles_and_descriptions(): void
     {
-        $paths = ['/', '/about', '/contact', '/security', '/privacy', '/terms', '/refund-policy', '/cookies'];
+        $paths = array_merge(
+            ['/', '/pricing', '/blog', '/about', '/contact', '/security', '/privacy', '/terms', '/refund-policy', '/cookies', '/data-deletion'],
+            array_keys(config('site.landing_pages'))
+        );
 
         $titles = [];
         $descriptions = [];
@@ -177,6 +180,95 @@ class SeoTest extends TestCase
     public function test_private_areas_carry_a_noindex_header(): void
     {
         $this->get('/dashboard')->assertHeader('X-Robots-Tag', 'noindex, nofollow');
+    }
+
+    /**
+     * The bug this guards: saving /admin/seo stored that day's sitemap list,
+     * the stored list replaced the config one wholesale, and every page
+     * shipped afterwards (/pricing, /blog) was missing from the sitemap.
+     */
+    public function test_a_stale_saved_sitemap_list_cannot_drop_pages_shipped_in_code(): void
+    {
+        \App\Models\SiteSetting::set('seo.sitemap_urls', [
+            ['loc' => '/',        'changefreq' => 'daily', 'priority' => '1.0'],
+            ['loc' => '/contact', 'changefreq' => 'weekly', 'priority' => '0.8'],
+        ]);
+
+        $urls = collect(app(\App\Services\Seo\SitemapBuilder::class)->urls())->keyBy('path');
+
+        foreach (array_merge(['/pricing', '/blog'], array_keys(config('site.landing_pages'))) as $path) {
+            $this->assertTrue($urls->has($path), "{$path} is missing from the sitemap.");
+        }
+        // …while the console's own values still win for the paths it names.
+        $this->assertSame('daily', $urls['/']['changefreq']);
+    }
+
+    public function test_landing_pages_are_complete_and_linked(): void
+    {
+        $home   = $this->get('/')->getContent();
+        $footer = $this->get('/about')->getContent();
+
+        foreach (array_keys(config('site.landing_pages')) as $path) {
+            $html = $this->get($path)->assertOk()->getContent();
+
+            $this->assertSame(1, substr_count($html, '<h1'), "{$path} must have exactly one <h1>.");
+            $this->assertStringContainsString('<link rel="canonical" href="' . \App\Support\Seo::canonical($path) . '">', $html);
+            $this->assertStringContainsString('<meta name="robots" content="index, follow', $html);
+
+            $graph = $this->jsonLdGraph($html);
+            $types = array_column($graph, '@type');
+            foreach (['Organization', 'WebPage', 'BreadcrumbList', 'SoftwareApplication', 'FAQPage'] as $type) {
+                $this->assertContains($type, $types, "Missing {$type} on {$path}.");
+            }
+
+            $faq = collect($graph)->firstWhere('@type', 'FAQPage');
+            $this->assertGreaterThanOrEqual(4, count($faq['mainEntity']));
+            foreach ($faq['mainEntity'] as $q) {
+                $this->assertStringContainsString(e($q['name']), $html, "Marked-up question not visible on {$path}: {$q['name']}");
+            }
+
+            // Reachable from the homepage and from the sitewide footer.
+            $this->assertStringContainsString('href="' . url($path) . '"', $home, "Homepage does not link to {$path}.");
+            $this->assertStringContainsString('href="' . url($path) . '"', $footer, "Footer does not link to {$path}.");
+        }
+    }
+
+    public function test_each_public_page_emits_exactly_one_json_ld_block(): void
+    {
+        foreach (array_merge(['/', '/pricing', '/about'], array_keys(config('site.landing_pages'))) as $path) {
+            $html = $this->get($path)->getContent();
+            $this->assertSame(1, substr_count($html, 'application/ld+json'), "{$path} emits more than one JSON-LD block.");
+        }
+    }
+
+    public function test_organization_lists_alternate_brand_spellings(): void
+    {
+        $org = collect($this->jsonLdGraph($this->get('/')->getContent()))->firstWhere('@type', 'Organization');
+
+        $this->assertNotEmpty($org['alternateName'] ?? null);
+        $this->assertNotContains($org['name'], $org['alternateName'], 'The official name must not be its own alternate.');
+    }
+
+    public function test_a_post_signed_by_the_company_is_authored_by_the_organization(): void
+    {
+        \App\Models\BlogPost::create([
+            'slug' => 'seo-author-test', 'title' => 'Author test', 'body' => '<p>Body.</p>',
+            'author_name' => 'Serve AI', 'status' => 'published', 'published_at' => now()->subDay(),
+        ]);
+
+        $graph   = $this->jsonLdGraph($this->get('/blog/seo-author-test')->assertOk()->getContent());
+        $article = collect($graph)->firstWhere('@type', 'BlogPosting');
+
+        $this->assertSame(['@id' => \App\Support\Seo::origin() . '/#organization'], $article['author']);
+    }
+
+    private function jsonLdGraph(string $html): array
+    {
+        preg_match('#<script type="application/ld\+json">(.*?)</script>#s', $html, $m);
+        $ld = json_decode($m[1] ?? '', true);
+        $this->assertIsArray($ld, 'JSON-LD is not valid JSON.');
+
+        return $ld['@graph'] ?? [];
     }
 
     public function test_public_pages_do_not_carry_a_noindex_header(): void

@@ -1,0 +1,120 @@
+<p>AI customer support is the use of an AI agent to answer customer questions automatically — on chat, phone, WhatsApp, social messaging and email — using a business's own information, and to hand conversations to a person when they need one.</p>
+
+<p>That one-sentence definition hides most of what matters. Whether an AI support deployment helps or quietly damages your customer relationships comes down to three things: what the AI is allowed to answer from, what it is allowed to do, and what happens when it should stop. This guide covers all three, without the vendor gloss.</p>
+
+<h2>The short answer</h2>
+
+<table>
+<thead><tr><th>Question</th><th>Short answer</th></tr></thead>
+<tbody>
+<tr><td>What does it handle well?</td><td>High-volume questions with a clear, documented answer: hours, prices, stock, order status, bookings, policies</td></tr>
+<tr><td>What does it handle badly?</td><td>Complaints needing discretion, refunds needing judgement, anything whose answer is not written down anywhere</td></tr>
+<tr><td>Is it the same as a chatbot?</td><td>No. Scripted chatbots follow menus; AI agents read free-form questions and can take actions</td></tr>
+<tr><td>Does it replace a support team?</td><td>It replaces repetitive work. The team moves to the conversations that need a person</td></tr>
+<tr><td>What decides whether it works?</td><td>The quality of the information behind it, and a tested route to a human</td></tr>
+</tbody>
+</table>
+
+<h2>How AI customer support actually works</h2>
+
+<p>Strip away the branding and almost every AI support system is the same four-part loop.</p>
+
+<ol>
+<li><strong>A message arrives.</strong> Typed on a website, sent on WhatsApp, or spoken on a phone call — in which case speech recognition turns it into text first.</li>
+<li><strong>The system finds relevant information.</strong> It searches the knowledge you connected — web pages, documents, a product database, a CRM — for passages that relate to the question. This step is usually called retrieval.</li>
+<li><strong>A language model writes the reply.</strong> It is given the question, the retrieved information and your instructions, and composes an answer. A well-built system tells the model to answer only from what was retrieved and to say it does not know otherwise.</li>
+<li><strong>The system decides what happens next.</strong> Send the answer. Or call a tool — look up an order, check availability, open a ticket. Or hand the conversation to a person.</li>
+</ol>
+
+<p>Step 2 is where most quality problems start, and it is the least glamorous part. A model given an out-of-date price list will quote out-of-date prices, fluently and confidently. Step 4 is where most trust problems start: a system that cannot recognise when to stop will keep a frustrated customer in a loop.</p>
+
+<h2>AI customer support vs traditional support</h2>
+
+<p>It helps to be concrete about what changes, and what does not.</p>
+
+<table>
+<thead><tr><th></th><th>Traditional support</th><th>AI-first support</th></tr></thead>
+<tbody>
+<tr><td>First response</td><td>When someone is free — minutes to a day</td><td>Seconds, at any hour</td></tr>
+<tr><td>Channels</td><td>Each one staffed separately, or not at all</td><td>One agent answers on all of them</td></tr>
+<tr><td>Consistency</td><td>Depends on who answers</td><td>Same source, same answer — right or wrong</td></tr>
+<tr><td>Hard cases</td><td>Handled by people</td><td>Still handled by people</td></tr>
+<tr><td>Main failure mode</td><td>Slow replies, missed messages</td><td>Confident wrong answers, no way out</td></tr>
+</tbody>
+</table>
+
+<p>The last row is the one to plan around. AI swaps a slow failure for a fast one. That is a good trade only if you have made the fast failure rare and recoverable.</p>
+
+<h2>What the research actually says</h2>
+
+<p>The numbers are moving quickly, and the headline figures deserve context.</p>
+
+<ul>
+<li>Salesforce's survey of 3,075 service professionals found AI-agent adoption in customer service rose from <strong>39% to 66%</strong> in a year (<a href="https://www.salesforce.com/blog/state-of-service/" target="_blank" rel="noopener">State of Service, 7th edition</a>).</li>
+<li>The KPI organisations most often report improving after deploying AI service agents is <strong>customer satisfaction</strong> — ahead of productivity and handle time (<a href="https://www.salesforce.com/news/stories/ai-service-agents-improve-customer-satisfaction/" target="_blank" rel="noopener">Salesforce</a>). The usual pitch is cost; the measured benefit is often speed and availability.</li>
+<li>Companies that unify their channel data are <strong>1.4 times more likely</strong> to report a very successful AI implementation (same report) — which is the practical argument for one inbox rather than a separate bot per channel.</li>
+<li>Gartner predicts agentic AI will autonomously resolve <strong>80% of common customer service issues</strong> by 2029 (<a href="https://www.gartner.com/en/newsroom/press-releases/2025-03-05-gartner-predicts-agentic-ai-will-autonomously-resolve-80-percent-of-common-customer-service-issues-without-human-intervention-by-20290" target="_blank" rel="noopener">Gartner</a>). Note the word <em>common</em>, and note the date.</li>
+</ul>
+
+<p>The counterweight belongs in the same list: Gartner also expects more than 40% of agentic AI projects to be cancelled by the end of 2027. We looked at why in <a href="/blog/why-ai-support-projects-fail">why AI support projects fail</a>. The short version is that the failures are organisational — vague goals, stale data, broad scope — rather than technical.</p>
+
+<h2>Chatbot, assistant or agent?</h2>
+
+<p>You will see all three words used for the same product. The useful distinction is how much the system decides on its own.</p>
+
+<ul>
+<li>A <strong>scripted chatbot</strong> matches input to pre-written responses. Predictable, limited, frustrating off-script.</li>
+<li>An <strong>AI assistant</strong> understands free-form questions and answers from your content, but does not act.</li>
+<li>An <strong>AI agent</strong> can also take steps: call your order system, book a slot, qualify a lead, open a ticket, decide to involve a person.</li>
+</ul>
+
+<p>For customer support, the jump from assistant to agent is what turns "here is our returns policy" into "I have started your return — here is the label". It also adds work: every action needs a connection to one of your systems, and every connection needs testing. <a href="/blog/ai-agents-vs-chatbots-vs-assistants">Our taxonomy of chatbots, assistants and agents</a> goes deeper.</p>
+
+<h2>What to automate first</h2>
+
+<p>Do not start with everything. Start with three request types that are:</p>
+
+<ol>
+<li><strong>High volume</strong> — enough that automating them visibly frees your team;</li>
+<li><strong>Low risk</strong> — a wrong answer is annoying, not costly;</li>
+<li><strong>Well documented</strong> — the correct answer already exists in writing and someone owns keeping it current.</li>
+</ol>
+
+<p>For most businesses those are some combination of opening hours and location, prices and availability, order or booking status, and a handful of policy questions. Get those genuinely right, measure, then widen.</p>
+
+<h2>The handoff is the product</h2>
+
+<p>Every demo shows the happy path. Customers remember the other one. Before launch, test these deliberately:</p>
+
+<ul>
+<li>A customer asks for a person. How many messages until they get one?</li>
+<li>The AI does not know the answer. Does it say so, or improvise?</li>
+<li>A customer is angry. Does the system notice, and route accordingly?</li>
+<li>A person takes over. Do they see the whole conversation, or ask the customer to repeat it?</li>
+<li>The person is done. Can the AI pick the conversation back up?</li>
+</ul>
+
+<p>If any answer is unsatisfactory, fix it before worrying about how clever the answers are.</p>
+
+<h2>Frequently asked questions</h2>
+
+<h3>Is AI customer support the same as AI customer service?</h3>
+<p>In practice, yes. Both describe using AI to answer customers and resolve routine requests. Some organisations use "service" for the broader relationship and "support" for problem-solving, but vendors and buyers use the terms interchangeably.</p>
+
+<h3>Will AI customer support replace my team?</h3>
+<p>It replaces a share of their repetitive work. The conversations that remain are, on average, harder and more valuable — which is a reason to keep experienced people, not fewer of them.</p>
+
+<h3>How accurate is it?</h3>
+<p>As accurate as the information behind it and the instructions around it. A system restricted to answering from current, well-maintained sources, and told to admit when it does not know, is far more reliable than one allowed to fall back on general knowledge.</p>
+
+<h3>Can small businesses use AI customer support?</h3>
+<p>Increasingly, yes — and they often benefit most, because they have the fewest people to cover evenings, weekends and multiple channels. Look for tools that work from your existing website and documents without a development project.</p>
+
+<h3>How do I measure whether it is working?</h3>
+<p>Pick one number before launch and record today's value: the share of enquiries resolved without a person, median first-response time, or after-hours enquiries answered. Review it weekly for the first month.</p>
+
+<h2>The takeaway</h2>
+
+<p>AI customer support works when it is narrow, grounded and easy to escape: a small set of well-documented questions, answered only from information someone keeps current, with a tested route to a person. Built that way, it gives customers a faster answer at any hour and gives your team back the time they spend repeating themselves.</p>
+
+<p><strong>Want to see it on your own content?</strong> <a href="/ai-customer-support">serveAI's AI customer support</a> answers on calls, web chat, WhatsApp, Instagram and Facebook from the information you connect, and hands conversations to your team in <a href="/omnichannel-customer-support">one shared inbox</a>. You can <a href="/register">start free</a>.</p>

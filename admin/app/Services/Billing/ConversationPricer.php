@@ -101,18 +101,20 @@ class ConversationPricer
      * protect the catalogue, it makes the calculator useless to anyone with a
      * team.
      *
-     * The published tiers settle it. Scale is $199 for 150,000 messages where
-     * the usage alone justifies $191: in this catalogue seats and agents are
+     * The published tiers settle it: in this catalogue seats and agents are
      * bundled, not sold. So they are bundled here too, capped at the level the
-     * tiers imply — 150,000 messages carries 25 seats, so one per 6,000.
+     * tiers imply — Scale's 60,000 messages carry 25 seats, so one per 2,400,
+     * which also gives Growth's 25,000 exactly its 10. (It was one per 6,000
+     * when Scale was 150,000 messages; re-derive it whenever the tiers move, or
+     * a custom plan of Scale's size gets a smaller team than Scale does.)
      *
      * Price therefore depends on volume alone, which makes it strictly
      * increasing and impossible to game by understating a team. Wanting more
      * people means buying more volume, or buying the seat add-on afterwards at
      * the same price every other plan pays for one.
      */
-    private const MESSAGES_PER_SEAT  = 6_000;
-    private const MESSAGES_PER_AGENT = 6_000;
+    private const MESSAGES_PER_SEAT  = 2_400;
+    private const MESSAGES_PER_AGENT = 2_400;
 
     /**
      * Nothing sells below this, whatever the arithmetic says.
@@ -160,16 +162,19 @@ class ConversationPricer
 
         // ── price ───────────────────────────────────────────────────────
         $margin   = $this->marginFor($messages);
-        $usagePart = $cost / (1 - $margin);
+        $usagePart = max(
+            $cost / (1 - $margin),
+            $this->priceAtBandBelow($messages, $perMessage, $cost - $aiCost),
+        );
 
         [$includedSeats, $includedAgents] = $this->allowances($messages);
 
         // The published tier whose features this volume inherits sets a floor.
         // One rule, and it is the one that actually expresses the intent: you
         // pay at least what the tier you are inheriting costs. Without it a
-        // configuration matching Scale exactly quotes $191 against its
-        // published $199 — a 4% undercut of the flagship, reachable by anyone
-        // who reads the pricing page carefully.
+        // configuration matching Scale exactly — telephony included — quotes
+        // $81 against its published $99, an 18% undercut of the flagship,
+        // reachable by anyone who reads the pricing page carefully.
         $tierFloor = $this->tierFloor($messages);
 
         $price = max(self::FLOOR_USD, $tierFloor, $usagePart);
@@ -338,6 +343,30 @@ class ConversationPricer
         }
 
         return $best;
+    }
+
+    /**
+     * What the top of the next band down would cost, with the same seats and
+     * telephony — the least this volume may be quoted at.
+     *
+     * The margin steps DOWN at each band's ceiling, so without this the price
+     * does too: 200,000 messages quoted $172 and 200,001 quoted $151. That was
+     * hidden only while a tier's price floor sat above both figures, and it
+     * surfaced the moment Scale was repriced below them. Carrying the lower
+     * band's price forward keeps the quote rising through every boundary while
+     * leaving it untouched everywhere the band's own margin already costs more.
+     */
+    private function priceAtBandBelow(int $messages, float $perMessage, float $fixedCost): float
+    {
+        $price = 0.0;
+
+        foreach (self::MARGIN_TIERS as $ceiling => $margin) {
+            if ($messages > $ceiling) {
+                $price = ($ceiling * $perMessage + $fixedCost) / (1 - $margin);
+            }
+        }
+
+        return $price;
     }
 
     private function marginFor(int $messages): float

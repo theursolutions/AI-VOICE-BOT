@@ -25,9 +25,9 @@ class HomepagePlansTest extends BillingTestCase
             $response->assertSee($name, false);
         }
 
-        $response->assertSee('$26', false);
-        $response->assertSee('$75', false);
-        $response->assertSee('$199', false);
+        $response->assertSee('$15', false);
+        $response->assertSee('$39', false);
+        $response->assertSee('$99', false);
         $response->assertSee('Most popular', false);
         $response->assertSee('All plans are charged in USD', false);
         $response->assertSee('id="pricing"', false);
@@ -38,9 +38,14 @@ class HomepagePlansTest extends BillingTestCase
         $response = $this->get('/');
 
         // Volume, verbatim from plan_features — "what we are giving them".
-        $response->assertSee('5,000 AI conversations per month', false);   // Growth
-        $response->assertSee('300 Phone call minutes per month', false);   // Growth
-        $response->assertSee('1,200 Phone call minutes per month', false); // Scale
+        $response->assertSee('25,000 AI messages per month', false);       // Growth
+        $response->assertSee('1,000 AI conversations per month', false);   // Growth
+        $response->assertSee('200 Phone call minutes per month', false);   // Growth
+        $response->assertSee('500 Phone call minutes per month', false);   // Scale
+
+        // The note under the cards states each tier's own conversation length
+        // (Starter 20, Growth 25, Scale 30), not one global default.
+        $response->assertSee('20 to 30 AI replies', false);
         $response->assertSee('50 Widget voice messages per month', false); // Free
 
         // A limit of 1 must read singular, not "1 Projects".
@@ -92,24 +97,27 @@ class HomepagePlansTest extends BillingTestCase
         $response = $this->get('/');
 
         $response->assertOk();
-        $response->assertDontSee('$199', false);
-        $response->assertSee('$75', false);
+        // The price markup itself, not a bare "$99": a feature description on
+        // the same page ("competitors charge $99/mo for one extra language")
+        // would otherwise make this assertion fail for the wrong reason.
+        $response->assertDontSee('<span class="pp-amount">$99</span>', false);
+        $response->assertSee('<span class="pp-amount">$39</span>', false);
     }
 
     public function test_a_private_plan_is_not_shown_on_the_homepage(): void
     {
         Plan::where('slug', 'starter')->update(['is_public' => false]);
 
-        $this->get('/')->assertOk()->assertDontSee('$26', false);
+        $this->get('/')->assertOk()->assertDontSee('$15', false);
     }
 
     public function test_the_annual_interval_renders_and_shows_the_saving(): void
     {
         $this->get('/?billing=annually')
              ->assertOk()
-             ->assertSee('$750', false)
+             ->assertSee('$390', false)
              ->assertSee('Save 17%', false)
-             ->assertSee('$62.50/mo billed annually', false);
+             ->assertSee('$32.50/mo billed annually', false);
     }
 
     public function test_the_homepage_shows_approximate_local_prices_when_available(): void
@@ -121,8 +129,8 @@ class HomepagePlansTest extends BillingTestCase
 
         $this->get('/?country=PK')
              ->assertOk()
-             ->assertSee('$26', false)          // charged
-             ->assertSee('Rs 7,400', false)     // approximate
+             ->assertSee('$15', false)          // charged
+             ->assertSee('Rs 4,300', false)     // approximate: $15 x 283.41, to the nearest 100
              ->assertSee('approximate', false);
     }
 
@@ -162,7 +170,7 @@ class HomepagePlansTest extends BillingTestCase
         $home    = $this->get('/')->getContent();
         $pricing = $this->get('/pricing')->getContent();
 
-        foreach (['$26', '$75', '$199', 'Most popular'] as $needle) {
+        foreach (['$15', '$39', '$99', 'Most popular'] as $needle) {
             $this->assertStringContainsString($needle, $home, "homepage: {$needle}");
             $this->assertStringContainsString($needle, $pricing, "/pricing: {$needle}");
         }

@@ -42,8 +42,8 @@
 <div class="mobile-menu md:hidden">
     <div class="mobile-menu-bar">
         <a href="{{ $clientSlug ? route('dashboard', ['client' => $clientSlug]) : url('/') }}" class="flex mr-auto">
-            <img alt="Serve AI" class="w-6" src="{{ serveai_icon() }}">
-            <span class="text-white text-base ml-2 font-semibold">Serve AI</span>
+            <img alt="serveAI" class="w-6" src="{{ serveai_icon() }}">
+            <span class="text-white text-base ml-2 font-semibold">serveAI</span>
         </a>
         <a href="javascript:;" class="mobile-menu-toggler">
             <i data-lucide="bar-chart-2" class="w-8 h-8 text-white transform -rotate-90"></i>

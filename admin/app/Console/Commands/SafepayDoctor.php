@@ -8,12 +8,12 @@ use Illuminate\Console\Command;
 /**
  * Prove the Safepay integration works before a customer meets it.
  *
- * Exists because three things in this integration were written from
- * documentation rather than from a working call: the endpoint paths, the
- * response envelope the tracker arrives in, and — most dangerously — whether
- * amounts are quoted in rupees or paisa. Getting the last one wrong charges a
- * hundred times the price, and no amount of code review catches it. One sandbox
- * call does.
+ * Exists because the things most likely to break are the ones no code review
+ * catches: credentials for the wrong environment, an endpoint that has moved,
+ * and — most dangerously — the unit amounts are quoted in. That unit changed
+ * between v1 (rupees) and Payments 2.0 (paisa), and getting it wrong is a
+ * factor of a hundred that Safepay's API will happily echo back. One sandbox
+ * checkout, read by a human, settles it.
  *
  * Deliberately a command rather than a test: it talks to a third party over the
  * network, so it belongs where someone runs it on purpose, not in a suite that
@@ -23,109 +23,127 @@ class SafepayDoctor extends Command
 {
     protected $signature = 'safepay:doctor {--amount=7500 : Price in minor units (7500 = Rs 75)}';
 
-    protected $description = 'Check Safepay credentials, endpoints and the amount unit against the sandbox';
+    protected $description = 'Check Safepay 2.0 credentials, endpoints and the amount unit against the sandbox';
 
     public function handle(SafepayGateway $safepay): int
     {
         $this->line('');
-        $this->line('<options=bold>Safepay configuration</>');
+        $this->line('<options=bold>Safepay configuration (Payments 2.0)</>');
 
         $sandbox = (bool) config('billing.safepay.sandbox');
 
         $this->table(['Setting', 'Value'], [
             ['Environment', $sandbox ? 'sandbox' : '<fg=red;options=bold>PRODUCTION</>'],
-            ['Base URL', $safepay->baseUrl()],
-            ['API key', $this->hint(config('billing.safepay.api_key'))],
-            ['v1 secret', $this->hint(config('billing.safepay.v1_secret'))],
+            ['API base', $safepay->baseUrl()],
+            ['Checkout page', $safepay->checkoutHost() . '/embedded'],
+            ['API key (public)', $this->hint(config('billing.safepay.api_key'))],
+            ['Secret key', $this->hint(config('billing.safepay.secret_key'))],
             ['Webhook secret', $this->hint(config('billing.safepay.webhook_secret'))],
-            ['Amount unit', config('billing.safepay.amount_unit')],
-            ['Session path', config('billing.safepay.paths.session')],
-            ['Checkout URL', $safepay->checkoutUrl()],
+            ['Webhook URL', route('safepay.webhook')],
         ]);
 
         if (! $safepay->isConfigured()) {
-            $this->error('Not configured. Set SAFEPAY_API_KEY and SAFEPAY_V1_SECRET.');
+            $this->error('Not configured. Set SAFEPAY_API_KEY and SAFEPAY_SECRET_KEY.');
 
             return self::FAILURE;
         }
 
-        if (! $sandbox && ! $this->confirm('This is PRODUCTION. Really create a live payment session?', false)) {
+        if (! $sandbox && ! $this->confirm('This is PRODUCTION. Really open a live payment session?', false)) {
             return self::SUCCESS;
         }
 
-        // ── The signature scheme, which needs no network ─────────────────
+        // ── Webhook signatures, which need no network ────────────────────
         $this->line('');
-        $this->line('<options=bold>Signature verification</>');
+        $this->line('<options=bold>Webhook signature verification</>');
 
-        $tracker = 'doctor-' . bin2hex(random_bytes(6));
-        $good    = hash_hmac('sha256', $tracker, (string) config('billing.safepay.v1_secret'));
+        if ((string) config('billing.safepay.webhook_secret') === '') {
+            $this->warn('  SAFEPAY_WEBHOOK_SECRET is not set — every delivery will be refused.');
+        } else {
+            $secret = (string) config('billing.safepay.webhook_secret');
+            $body   = json_encode([
+                'token'   => 'evt_doctor',
+                'version' => '2.0.0',
+                'type'    => 'payment.succeeded',
+                'data'    => ['tracker' => 'track_doctor', 'amount' => 7500, 'currency' => 'PKR', 'metadata' => (object) []],
+            ], JSON_UNESCAPED_SLASHES);
 
-        $this->result('A correct signature is accepted', $safepay->signatureValid($tracker, $good));
-        $this->result('A wrong signature is rejected', ! $safepay->signatureValid($tracker, $good . 'x'));
-        $this->result('An empty signature is rejected', ! $safepay->signatureValid($tracker, ''));
+            $this->result(
+                'A 2.0 event signed over the whole payload is accepted',
+                $safepay->webhookScheme($body, hash_hmac('sha512', $body, $secret)) === SafepayGateway::SIGNED_EVENT,
+            );
+            $this->result(
+                'A tampered payload is refused',
+                $safepay->webhookScheme(str_replace('7500', '100', $body), hash_hmac('sha512', $body, $secret)) === null,
+            );
+            $this->result(
+                'A signature under the wrong secret is refused',
+                $safepay->webhookScheme($body, hash_hmac('sha512', $body, $secret . 'x')) === null,
+            );
+            $this->result('An unsigned delivery is refused', $safepay->webhookScheme($body, '') === null);
+        }
 
-        // ── The live call ────────────────────────────────────────────────
-        $minor  = (int) $this->option('amount');
-        $rupees = (int) round($minor / 100);
+        // ── The live calls ───────────────────────────────────────────────
+        $minor = (int) $this->option('amount');
 
         $this->line('');
         $this->line('<options=bold>Payment session</>');
         $this->line(sprintf(
-            '  Asking for a plan priced at <options=bold>Rs %s</> (%d in minor units).',
-            number_format($rupees), $minor
+            '  Opening a session for a plan priced at <options=bold>Rs %s</> — sent as <options=bold>%d</> (paisa).',
+            number_format($minor / 100, 2), $minor
         ));
-        $this->line('  Sending <options=bold>' . (config('billing.safepay.amount_unit') === 'paisa' ? $minor : $rupees)
-            . '</> as the amount, because amount_unit is ' . config('billing.safepay.amount_unit') . '.');
 
         try {
-            $price = new \App\Models\Billing\PlanPrice([
-                'unit_amount' => $minor,
-                'currency'    => 'pkr',
-                'interval'    => 'monthly',
-            ]);
-
             $handoff = $safepay->startCheckout(
                 new \App\Models\Client(['name' => 'Doctor', 'billing_email' => 'doctor@example.com']),
-                $price,
+                new \App\Models\Billing\PlanPrice([
+                    'unit_amount' => $minor,
+                    'currency'    => 'pkr',
+                    'interval'    => 'monthly',
+                ]),
                 [
                     'basket_id'   => 'DOCTOR-' . now()->timestamp,
-                    'success_url' => url('/billing/safepay/return'),
+                    'success_url' => route('safepay.return'),
                     'cancel_url'  => url('/billing'),
                 ],
             );
         } catch (\Throwable $e) {
             $this->line('');
-            $this->error('Could not create a session: ' . $e->getMessage());
+            $this->error('Could not open a session: ' . mb_substr($e->getMessage(), 0, 400));
             $this->line('');
             $this->comment('Most likely one of:');
-            $this->line('  • SAFEPAY_SESSION_PATH is wrong — check their current API reference');
-            $this->line('  • the API key is for the other environment');
-            $this->line('  • the response envelope changed; the raw body is in the message above');
+            $this->line('  • the keys are for the other environment — sandbox and live issue different ones');
+            $this->line('  • the secret key was rotated in the dashboard (old keys stop working at once)');
+            $this->line('  • SAFEPAY_SANDBOX does not match the dashboard the keys came from');
 
             return self::FAILURE;
         }
 
-        $this->result('Session created and a tracker came back', true);
+        $this->result('Session opened, order attached and a checkout token issued', true);
+
+        $lookup = $safepay->lookup((string) $handoff->gatewayRef);
+        $held   = (int) data_get($lookup, 'purchase_totals.quote_amount.amount', -1);
+
+        $this->result('The reporter API can read the session back', $lookup !== null);
+        $this->result(
+            "Safepay holds the amount that was sent ({$held})",
+            $held === $minor,
+        );
+        $this->result(
+            'Our order reference is recorded on the session',
+            SafepayGateway::orderIdFrom($lookup['metadata'] ?? []) === $handoff->reference,
+        );
+
         $this->line('');
         $this->line('  Open this and read the amount Safepay shows:');
         $this->line('  <fg=cyan>' . $handoff->url . '</>');
         $this->line('');
-
-        // The advice has to depend on the CURRENT setting, or it tells someone
-        // already on paisa to switch to paisa — which is how a factor-of-100
-        // bug survives the check built to catch it.
-        $unit  = (string) config('billing.safepay.amount_unit');
-        $other = $unit === 'paisa' ? 'rupees' : 'paisa';
-        $wrong = $unit === 'paisa' ? $rupees * 100 : intdiv(max(1, $rupees), 100);
-
-        $this->line('  <options=bold>Rs ' . number_format($rupees) . '</>  correct — leave SAFEPAY_AMOUNT_UNIT as ' . $unit);
-        $this->line('  <fg=red;options=bold>Rs ' . number_format($wrong) . '</>  wrong  — set SAFEPAY_AMOUNT_UNIT=' . $other);
+        $this->line('  <options=bold>Rs ' . number_format($minor / 100, 2) . '</>  correct.');
+        $this->line('  <fg=red;options=bold>Rs ' . number_format($minor, 2) . '</>  WRONG — Safepay is reading paisa as rupees. Do not go live.');
         $this->line('');
-        $this->warn('  Do not go live until this figure is right — the error is a factor of 100,');
-        $this->warn('  and in one direction it charges a customer a hundred times the price.');
-        $this->line('');
-        $this->comment('  Then pay it with a sandbox instrument and check that the redirect back');
-        $this->comment('  carries `tracker` and `sig`, and that the sig verifies.');
+        $this->comment('  Then pay it with a sandbox test card and check that:');
+        $this->comment('   • you land back on /billing/safepay/return/' . $handoff->reference);
+        $this->comment('   • the log shows safepay.webhook with scheme "event" — if it says "data", the');
+        $this->comment('     endpoint is subscribed to 1.0.0 events; switch it to the 2.0.0 ones.');
 
         return self::SUCCESS;
     }

@@ -120,7 +120,7 @@ class BlogPost extends Model
             return $explicit;
         }
 
-        return $this->title . ' — ' . tva_setting('content.brand_name', 'Serve AI');
+        return $this->title . ' — ' . tva_setting('content.brand_name', 'serveAI');
     }
 
     /**

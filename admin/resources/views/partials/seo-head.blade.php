@@ -13,6 +13,8 @@
         metaDescription  string   meta description for this page
         canonicalPath    string   canonical path if it differs from the URL
         pageNoindex      bool     force noindex on this page
+        pageImage        string   share image for this page (else the site card)
+        pageImageAlt     string   alt text for that image
         ogType           string   'website' (default) | 'article' | …
         jsonLd           array    extra Schema.org nodes for this page
                                   (e.g. FAQPage, SoftwareApplication)
@@ -48,8 +50,11 @@
     $pageDesc  = $pageDesc !== '' ? $pageDesc : (string) ($seo['meta_description'] ?? '');
 
     // ── Images (absolute — relative URLs are invalid in OG and JSON-LD) ─
-    $ogImage = Seo::absolute($seo['og_image'] ?: serveai_icon());
-    $twImage = Seo::absolute($seo['twitter_image'] ?: ($seo['og_image'] ?: serveai_icon()));
+    // A page may supply its own share image (a blog post's cover); it wins
+    // over the site-wide card for both OG and Twitter.
+    $pageImageUrl = trim((string) ($pageImage ?? ''));
+    $ogImage = Seo::absolute($pageImageUrl ?: ($seo['og_image'] ?: serveai_icon()));
+    $twImage = Seo::absolute($pageImageUrl ?: ($seo['twitter_image'] ?: ($seo['og_image'] ?: serveai_icon())));
 
     // ── Social profiles: SEO console list + the footer links ─────────
     $social = array_values(array_filter(array_unique(array_merge(
@@ -66,7 +71,7 @@
     // favicon on every first visit, and iOS wants exactly 180×180.
     $faviconHref = !empty($seo['favicon_url']) ? $seo['favicon_url'] : serveai_icon_sized(64);
     $appleHref   = !empty($seo['apple_touch_icon']) ? $seo['apple_touch_icon'] : serveai_icon_sized(180);
-    $siteName    = $seo['og_site_name'] ?: ($seo['org_name'] ?? 'Serve AI');
+    $siteName    = $seo['og_site_name'] ?: ($seo['org_name'] ?? 'serveAI');
 @endphp
 <title>{{ $pageTitle }}</title>
 <meta name="description" content="{{ $pageDesc }}">
@@ -109,7 +114,7 @@
 @endif
 @if (!empty($ogImage))
 <meta property="og:image" content="{{ $ogImage }}">
-<meta property="og:image:alt" content="{{ $siteName }}">
+<meta property="og:image:alt" content="{{ trim((string) ($pageImageAlt ?? '')) ?: $siteName }}">
 @php
     // Dimensions let Facebook/LinkedIn lay the card out on first scrape
     // instead of showing a blank box until their crawler fetches the file.
@@ -159,10 +164,20 @@
     // above. Dropped by array_filter when it's blank or the same name.
     $orgLegal = trim((string) tva_setting('content.legal_entity', ''));
 
+    // Other spellings people type (and that the site itself used before the
+    // name was settled). alternateName tells Google these all mean the same
+    // entity instead of leaving it to guess. The official name is dropped
+    // from the list so it is never its own alternate.
+    $altNames = array_values(array_filter(
+        (array) config('site.seo.alternate_names', []),
+        fn ($n) => strcasecmp((string) $n, (string) ($seo['org_name'] ?? '')) !== 0
+    ));
+
     $org = array_filter([
         '@type'  => 'Organization',
         '@id'    => $orgId,
         'name'   => $seo['org_name'] ?? null,
+        'alternateName' => $altNames ?: null,
         'legalName' => $orgLegal !== $seo['org_name'] ? $orgLegal : null,
         'url'    => Seo::origin() . '/',
         'logo'   => Seo::absolute($seo['org_logo'] ?: serveai_icon()),
@@ -205,6 +220,7 @@
         '@type'     => 'WebSite',
         '@id'       => $siteId,
         'name'      => $siteName,
+        'alternateName' => $altNames ?: null,
         'url'       => Seo::origin() . '/',
         'publisher' => ['@id' => $orgId],
         'inLanguage' => 'en',

@@ -4,7 +4,7 @@
 @php
     $default   = collect($cards)->firstWhere('is_default', true) ?: ($cards[0] ?? null);
     $isChange  = (bool) $subscription?->stripe_subscription_ref;
-    $brandName = tva_setting('content.brand_name', 'Serve AI');
+    $brandName = tva_setting('content.brand_name', 'serveAI');
 @endphp
 
 @include('billing._styles')

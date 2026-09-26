@@ -199,7 +199,7 @@ class TelephonyController extends Controller
             $secs = max(5, (int) config('services.demo_call.max_seconds', 30));
             $welcomeText = (string) tva_setting(
                 'content.demo_call_greeting',
-                'Hi! This is the Serve AI demo agent calling you back from our website. '
+                'Hi! This is the serveAI demo agent calling you back from our website. '
                 . 'Ask me anything about what we do — this test call lasts about ' . $secs . ' seconds.'
             );
         }

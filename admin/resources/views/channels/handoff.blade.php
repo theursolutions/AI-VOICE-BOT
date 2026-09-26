@@ -13,7 +13,7 @@
     workspace context.
 --}}
 @php
-    $brand = tva_setting('content.brand_name', 'Serve AI');
+    $brand = tva_setting('content.brand_name', 'serveAI');
     $labels = [
         'whatsapp'      => ['WhatsApp',      '#25D366'],
         'instagram'     => ['Instagram',     '#E1306C'],

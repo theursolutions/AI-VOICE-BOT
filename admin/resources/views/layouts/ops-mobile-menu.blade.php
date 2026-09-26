@@ -5,8 +5,8 @@
 <div class="mobile-menu md:hidden">
     <div class="mobile-menu-bar">
         <a href="{{ route('ops.overview') }}" class="flex mr-auto items-center gap-2">
-            <img alt="Serve AI Ops" class="w-6" src="{{ serveai_icon() }}">
-            <span class="text-white text-sm font-semibold">Serve AI</span>
+            <img alt="serveAI Ops" class="w-6" src="{{ serveai_icon() }}">
+            <span class="text-white text-sm font-semibold">serveAI</span>
             <span class="ops-internal-badge">Internal</span>
         </a>
         <a href="javascript:;" class="mobile-menu-toggler">

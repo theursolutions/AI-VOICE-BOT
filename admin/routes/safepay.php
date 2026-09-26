@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Safepay webhook and redirect
+| Safepay webhook and redirect (Payments 2.0)
 |--------------------------------------------------------------------------
 |
 | Registered by RouteServiceProvider with NO middleware group, exactly as
@@ -19,22 +19,25 @@ use Illuminate\Support\Facades\Route;
 |   • Throttle — a batch of renewals legitimately fires at once, and turning
 |                real events into 429s makes them retry for days.
 |
-| Authentication is the SIGNATURE, checked before any part of the body is
-| believed. Without it these would be an unauthenticated "make me a
-| subscriber" API. The two routes are signed differently and that is not
-| interchangeable:
+| Authentication happens in the controller, and differs per route:
 |
-|   /billing/safepay/webhook   X-SFPY-SIGNATURE over the RAW body,
-|                              under SAFEPAY_WEBHOOK_SECRET
-|   /billing/safepay/return    `sig` over the tracker,
-|                              under SAFEPAY_V1_SECRET
+|   /billing/safepay/webhook            X-SFPY-SIGNATURE — HMAC-SHA512 over
+|                                       the whole event, under
+|                                       SAFEPAY_WEBHOOK_SECRET
+|   /billing/safepay/return/{ref}       nothing to verify: 2.0 does not sign
+|                                       the return, so it only prompts a
+|                                       lookup of the session stored when
+|                                       checkout began
 |
-| REGISTER THIS URL IN THE SAFEPAY DASHBOARD:
+| REGISTER THE WEBHOOK IN THE SAFEPAY DASHBOARD (Developers → Endpoints), in
+| each environment separately, and subscribe it to the 2.0.0 events:
 |
 |   https://<APP_DOMAIN>/billing/safepay/webhook
 |
 | The return URL is not registered anywhere — it is sent per checkout as
-| `redirect_url`, so it follows the workspace rather than being global.
+| `redirect_url` with our reference in the path, so it follows the charge.
+| The bare /billing/safepay/return still answers, for a customer who left for
+| Safepay under the v1 integration and comes back after the deploy.
 |
 | The webhook is the source of truth. The redirect is the customer's browser
 | coming back, and a customer who closes the tab mid-payment never sends it;
@@ -47,6 +50,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('/billing/safepay/webhook', [SafepayWebhookController::class, 'webhook'])
     ->name('safepay.webhook');
 
-// Safepay POSTs the customer back here with tracker + sig.
-Route::match(['get', 'post'], '/billing/safepay/return', [SafepayWebhookController::class, 'returned'])
+// Safepay sends the customer back here, by GET or POST.
+Route::match(['get', 'post'], '/billing/safepay/return/{reference?}', [SafepayWebhookController::class, 'returned'])
+    ->where('reference', '[A-Za-z0-9_\-]+')
     ->name('safepay.return');

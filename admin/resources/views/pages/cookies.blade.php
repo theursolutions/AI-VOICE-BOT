@@ -1,5 +1,5 @@
 @php
-    $brand = tva_setting('content.brand_name', 'Serve AI');
+    $brand = tva_setting('content.brand_name', 'serveAI');
     $email = tva_setting('content.contact_email', 'info@serveai.com.pk');
     $effective = 'June 28, 2026';
 @endphp

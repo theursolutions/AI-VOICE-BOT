@@ -60,9 +60,9 @@ class CustomPlanTest extends TestCase
         $features->flush();
 
         $shapes = [
-            'starter' => ['conversations' => 1000, 'replies_per_conversation' => 20, 'seats' => 3,  'agents' => 2,  'phone_numbers' => 1,  'phone_minutes' => 60],
-            'growth'  => ['conversations' => 2500, 'replies_per_conversation' => 30, 'seats' => 10, 'agents' => 10, 'phone_numbers' => 3,  'phone_minutes' => 300],
-            'scale'   => ['conversations' => 5000, 'replies_per_conversation' => 30, 'seats' => 25, 'agents' => 20, 'phone_numbers' => 10, 'phone_minutes' => 1200],
+            'starter' => ['conversations' => 500,  'replies_per_conversation' => 20, 'seats' => 3,  'agents' => 2,  'phone_numbers' => 1, 'phone_minutes' => 50],
+            'growth'  => ['conversations' => 1000, 'replies_per_conversation' => 25, 'seats' => 10, 'agents' => 10, 'phone_numbers' => 2, 'phone_minutes' => 200],
+            'scale'   => ['conversations' => 2000, 'replies_per_conversation' => 30, 'seats' => 25, 'agents' => 20, 'phone_numbers' => 5, 'phone_minutes' => 500],
         ];
 
         $checked = 0;
@@ -158,6 +158,26 @@ class CustomPlanTest extends TestCase
         }
     }
 
+    /**
+     * The margin steps down at each band's ceiling, so a price computed from
+     * the band alone steps down with it: 200,000 messages quoted $172 and
+     * 200,001 quoted $151. Tier floors hid that until Scale was repriced below
+     * both figures. One message past every boundary must never cost less.
+     */
+    public function test_the_price_never_falls_across_a_margin_band_boundary(): void
+    {
+        foreach ([25_000, 200_000, 1_000_000] as $ceiling) {
+            $at   = $this->pricer()->quote(['conversations' => $ceiling,     'replies_per_conversation' => 1, 'seats' => 2, 'agents' => 1]);
+            $past = $this->pricer()->quote(['conversations' => $ceiling + 1, 'replies_per_conversation' => 1, 'seats' => 2, 'agents' => 1]);
+
+            $this->assertGreaterThanOrEqual(
+                $at['price_usd'],
+                $past['price_usd'],
+                "One message past {$ceiling} was quoted \${$past['price_usd']}, below the \${$at['price_usd']} at {$ceiling}",
+            );
+        }
+    }
+
     /** Same property along the other volume axis. */
     public function test_the_price_never_falls_as_conversations_get_longer(): void
     {
@@ -205,10 +225,13 @@ class CustomPlanTest extends TestCase
             'Seats must not be a price lever — they are capped, not sold',
         );
 
-        [$maxSeats, $maxAgents] = $this->pricer()->allowances(75_000);
+        [$maxSeats, $maxAgents] = $this->pricer()->allowances(25_000);
 
-        $this->assertSame(12, $maxSeats, '75,000 messages should allow a Growth-sized team');
-        $this->assertSame(12, $maxAgents);
+        $this->assertSame(10, $maxSeats, "Growth's 25,000 messages should allow Growth's 10 seats");
+        $this->assertSame(10, $maxAgents);
+
+        [$scaleSeats] = $this->pricer()->allowances(60_000);
+        $this->assertSame(25, $scaleSeats, "A custom plan of Scale's size must not get a smaller team than Scale");
 
         // The smallest configurations still get a workable minimum.
         [$minSeats, $minAgents] = $this->pricer()->allowances(500);
@@ -294,9 +317,9 @@ class CustomPlanTest extends TestCase
             $this->markTestSkipped('Standard tiers not seeded.');
         }
 
-        $this->assertSame('starter', $svc->templateFor(20_000)?->slug);
-        $this->assertSame('growth', $svc->templateFor(75_000)?->slug);
-        $this->assertSame('scale', $svc->templateFor(150_000)?->slug);
+        $this->assertSame('starter', $svc->templateFor(10_000)?->slug);
+        $this->assertSame('growth', $svc->templateFor(25_000)?->slug);
+        $this->assertSame('scale', $svc->templateFor(60_000)?->slug);
 
         // A tiny configuration must not inherit the top tier.
         $this->assertNotSame('scale', $svc->templateFor(2_000)?->slug);

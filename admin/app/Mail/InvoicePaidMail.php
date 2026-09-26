@@ -39,7 +39,7 @@ class InvoicePaidMail extends Mailable
 
     public function envelope(): Envelope
     {
-        $brand  = tva_setting('content.brand_name', 'Serve AI');
+        $brand  = tva_setting('content.brand_name', 'serveAI');
         $amount = $this->money($this->invoice['amount_paid'] ?? $this->invoice['total'] ?? 0);
         $what   = $this->plan?->name ?? 'your subscription';
 

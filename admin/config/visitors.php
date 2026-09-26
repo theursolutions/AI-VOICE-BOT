@@ -87,7 +87,9 @@ return [
     'geo' => [
         // Shares the path used by config/billing.php so one downloaded file
         // serves both features.
-        'database_path' => env('GEOIP_DATABASE_PATH', storage_path('app/geoip/GeoLite2-City.mmdb')),
+        // `?:` not a default argument: a blank `GEOIP_DATABASE_PATH=` in .env
+        // is an empty string, which would otherwise hide a downloaded file.
+        'database_path' => env('GEOIP_DATABASE_PATH') ?: storage_path('app/geoip/GeoLite2-City.mmdb'),
 
         // {ip} is substituted. ipwho.is is HTTPS, keyless and free.
         'http_endpoint' => env('VISITOR_GEO_ENDPOINT', 'https://ipwho.is/{ip}'),

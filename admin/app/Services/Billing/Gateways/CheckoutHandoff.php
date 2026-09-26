@@ -21,13 +21,20 @@ class CheckoutHandoff
         /** @var array<string, scalar> */
         public readonly array $fields = [],
         public readonly ?string $reference = null,
+        /**
+         * The provider's own id for this payment, when it exists before the
+         * customer pays. Stored on the charge so the payment can later be
+         * confirmed by asking about THAT id — never one the returning browser
+         * supplies, which could name a cheaper payment.
+         */
+        public readonly ?string $gatewayRef = null,
     ) {
     }
 
     /** Send the browser to $url. */
-    public static function redirect(string $url, ?string $reference = null): self
+    public static function redirect(string $url, ?string $reference = null, ?string $gatewayRef = null): self
     {
-        return new self('redirect', $url, [], $reference);
+        return new self('redirect', $url, [], $reference, $gatewayRef);
     }
 
     /**

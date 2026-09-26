@@ -1,6 +1,6 @@
 @extends('layouts.auth', ['authTitle' => 'Create your account'])
 
-@php $brand = tva_setting('content.brand_name', 'Serve AI'); @endphp
+@php $brand = tva_setting('content.brand_name', 'serveAI'); @endphp
 
 @section('content')
  <div class="container sm:px-10">

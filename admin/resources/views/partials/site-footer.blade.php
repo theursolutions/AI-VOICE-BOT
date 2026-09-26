@@ -8,8 +8,8 @@
     (config/site.php → content.*).
 --}}
 @php
-    $brand    = tva_setting('content.brand_name', 'Serve AI');
-    $tagline  = tva_setting('content.footer_tagline', 'The AI receptionist and CRM that answers every call, chat and message — 24/7, in your own voice.');
+    $brand    = tva_setting('content.brand_name', 'serveAI');
+    $tagline  = tva_setting('content.footer_tagline', 'AI customer support and CRM in one: AI agents that answer every call, chat and message — 24/7, from your own data.');
     $phone    = tva_setting('content.contact_phone', '');
     $email    = tva_setting('content.contact_email', '');
     $address  = tva_setting('content.contact_address', '');
@@ -72,17 +72,14 @@
             <div class="site-footer__links">
                 <div class="site-footer__col">
                     <h3>Product</h3>
-                    <a href="{{ url('/') }}#platform">Features</a>
-                    <a href="{{ url('/') }}#channels">Channels</a>
-                    <a href="{{ url('/') }}#cases">Who it's for</a>
+                    {{-- Real product pages rather than #fragments of the
+                         homepage: a sitewide link to each one is what tells a
+                         crawler they matter (config/site.php → landing_pages). --}}
+                    @foreach ((array) config('site.landing_pages', []) as $lpPath => $lp)
+                        <a href="{{ url($lpPath) }}">{{ ucfirst($lp['label']) }}</a>
+                    @endforeach
                     <a href="{{ url('/pricing') }}">Pricing</a>
                     <a href="{{ url('/security') }}">Security</a>
-                    <a href="{{ url('/') }}#faq">FAQ</a>
-                    @auth
-                        <a href="{{ url('/dashboard') }}">Dashboard</a>
-                    @else
-                        <a href="{{ url('/register') }}">Get started free</a>
-                    @endauth
                 </div>
                 <div class="site-footer__col">
                     <h3>Company</h3>

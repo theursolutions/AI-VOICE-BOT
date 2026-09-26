@@ -3,7 +3,7 @@
      styles — see the layout's header comment for why. --}}
 @component('emails.layout', [
     'heading'   => 'Verify your email address',
-    'preheader' => 'Your ' . tva_setting('content.brand_name', 'Serve AI') . ' verification code is ' . $code,
+    'preheader' => 'Your ' . tva_setting('content.brand_name', 'serveAI') . ' verification code is ' . $code,
 ])
     <p style="margin:0 0 18px 0; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; line-height:1.65; color:#334155;">
         <strong style="font-weight:700; color:#0f172a;">Hi {{ $name ?: 'there' }},</strong>

@@ -2,7 +2,7 @@
      it matches the verification email (same shell, logo, footer, CTAs). --}}
 @component('emails.layout', [
     'heading'   => 'Reset your password',
-    'preheader' => 'Reset your ' . tva_setting('content.brand_name', 'Serve AI') . ' password — link expires in ' . $ttl . ' minutes.',
+    'preheader' => 'Reset your ' . tva_setting('content.brand_name', 'serveAI') . ' password — link expires in ' . $ttl . ' minutes.',
 ])
     <p style="margin:0 0 18px 0; font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:15px; line-height:1.65; color:#334155;">
         <strong style="font-weight:700; color:#0f172a;">Hi {{ $name ?: 'there' }},</strong>

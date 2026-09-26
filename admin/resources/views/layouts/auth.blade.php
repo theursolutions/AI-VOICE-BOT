@@ -12,13 +12,13 @@
          tag is read, and so the links back into the site still count. --}}
     <meta name="robots" content="noindex, follow">
     @include('partials.theme')
-    <meta name="description" content="Sign in to your {{ tva_setting('content.brand_name', 'Serve AI') }} workspace.">
+    <meta name="description" content="Sign in to your {{ tva_setting('content.brand_name', 'serveAI') }} workspace.">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     {{-- Same source as layouts/head.blade.php so the tab title is consistent
          everywhere and doesn't depend on APP_NAME being set correctly in .env.
          The vendor template's own description/keywords/author tags used to sit
          here and were being served on /login and /register verbatim. --}}
-    <title>{{ ($authTitle ?? '') !== '' ? $authTitle . ' — ' : '' }}{{ tva_setting('content.brand_name', 'Serve AI') }}</title>
+    <title>{{ ($authTitle ?? '') !== '' ? $authTitle . ' — ' : '' }}{{ tva_setting('content.brand_name', 'serveAI') }}</title>
     <link rel="stylesheet" href="{{url('/assets/dist/css/app.css')}}" />
 
     {{-- ── Mobile fixes for the Midone auth shell ──────────────────────────

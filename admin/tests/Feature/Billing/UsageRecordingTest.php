@@ -76,13 +76,13 @@ class UsageRecordingTest extends BillingTestCase
 
     public function test_call_minutes_count_towards_the_plan_allowance(): void
     {
-        [$client, $project] = $this->paidWorkspace();   // Growth = 300 minutes
+        [$client, $project] = $this->paidWorkspace();   // Growth = 200 minutes
 
-        $this->assertSame(300, $this->usage()->allowanceFor($client, 'telephony_minutes'));
+        $this->assertSame(200, $this->usage()->allowanceFor($client, 'telephony_minutes'));
 
-        $this->recorder()->callCompleted($project->id, 60 * 290);
+        $this->recorder()->callCompleted($project->id, 60 * 190);
 
-        $this->assertSame(290, $this->usage()->usedFor($client, 'telephony_minutes'));
+        $this->assertSame(190, $this->usage()->usedFor($client, 'telephony_minutes'));
         $this->assertSame(10, $this->usage()->remainingFor($client, 'telephony_minutes'));
         $this->assertTrue($this->usage()->allows($client, 'telephony_minutes', 5));
     }
@@ -91,11 +91,11 @@ class UsageRecordingTest extends BillingTestCase
     {
         [$client, $project] = $this->paidWorkspace();
 
-        $this->recorder()->callCompleted($project->id, 60 * 305);   // 305 of 300
+        $this->recorder()->callCompleted($project->id, 60 * 205);   // 205 of 200
 
         $summary = $this->usage()->summaryFor($client)['telephony_minutes'];
 
-        $this->assertSame(305, $summary['used']);
+        $this->assertSame(205, $summary['used']);
         $this->assertSame(5, $summary['overage']);
 
         // A paid plan keeps answering; the excess bills as overage.

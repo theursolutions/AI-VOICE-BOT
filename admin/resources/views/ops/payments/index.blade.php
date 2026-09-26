@@ -105,6 +105,32 @@
     html.dark .pay-rate__field input { background:#0f172a; border-color:#334155; color:#e2e8f0; }
     html.dark .pay-rate { border-bottom-color:#0f172a; }
 
+    /* ── Sandbox / Live segmented control ── */
+    .pay-mode { display:inline-flex; border:1px solid #e2e8f0; border-radius:10px; padding:3px; gap:3px; background:#f8fafc; }
+    .pay-mode label { cursor:pointer; }
+    .pay-mode input { position:absolute; opacity:0; pointer-events:none; }
+    .pay-mode span {
+        display:inline-block; font-size:12px; font-weight:700; padding:6px 14px; border-radius:7px; color:#64748b;
+        transition:background .15s, color .15s;
+    }
+    .pay-mode input:checked + span.is-sandbox { background:#fef3c7; color:#92400e; }
+    .pay-mode input:checked + span.is-live    { background:#dc2626; color:#fff; }
+    .pay-mode input:focus-visible + span { outline:2px solid #6366f1; outline-offset:1px; }
+    .pay-mode-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .pay-mode-row__label { font-size:12px; font-weight:700; color:#475569; }
+    .pay-note {
+        font-size:11.5px; color:#92400e; background:#fffbeb; border:1px solid #fde68a;
+        border-radius:9px; padding:9px 11px; line-height:1.6;
+    }
+    .pay-note code { font-family:ui-monospace,monospace; font-size:11px; }
+
+    .pay-master { display:flex; align-items:center; gap:16px; }
+    .pay-master__state { font-size:12px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:4px 10px; border-radius:999px; }
+    .pay-master__state.is-on  { background:#dcfce7; color:#166534; }
+    .pay-master__state.is-off { background:#f1f5f9; color:#475569; }
+
+    html.dark .pay-mode { background:#0f172a; border-color:#334155; }
+
     html.dark .pay-card, html.dark .pay-section { background:#1e293b; border-color:#334155; }
     html.dark .pay-card__name, html.dark .pay-section__title { color:#f1f5f9; }
     html.dark .pay-countries { background:#0f172a; border-color:#334155; }
@@ -132,8 +158,35 @@
     @endif
 @endforeach
 
-<form method="POST" action="{{ route('ops.payments.update') }}">
+<form method="POST" action="{{ route('ops.payments.update') }}" id="pay-form">
     @csrf
+
+    {{-- ── Buy buttons (the checkout master switch) ───────────────── --}}
+    <div class="pay-section intro-y" style="margin-top:16px">
+        <div class="pay-master">
+            <div style="min-width:0">
+                <div class="pay-section__head">
+                    <i data-lucide="shopping-cart" class="w-4 h-4" style="color:#6366f1"></i>
+                    <div class="pay-section__title">Buy buttons on plans</div>
+                    <span class="pay-master__state {{ $checkoutEnabled ? 'is-on' : 'is-off' }}" id="pay-master-state">
+                        {{ $checkoutEnabled ? 'Showing' : 'Hidden' }}
+                    </span>
+                </div>
+                <p class="pay-section__note" style="margin:0">
+                    Off: the homepage, /pricing and the billing page show every plan and price, but paid
+                    plans have no buy button and the checkout endpoints refuse. Free signup and
+                    “Talk to us” keep working. On: customers can buy.
+                </p>
+            </div>
+
+            {{-- Hidden 0 first, so an unticked box saves "off" instead of nothing. --}}
+            <input type="hidden" name="checkout_enabled" value="0">
+            <label class="pay-switch" title="Show buy buttons">
+                <input type="checkbox" name="checkout_enabled" value="1" id="pay-master" @checked($checkoutEnabled)>
+                <span class="track"></span>
+            </label>
+        </div>
+    </div>
 
     {{-- ── Providers ──────────────────────────────────────────────── --}}
     <div class="pay-grid intro-y" style="margin-top:16px">
@@ -176,6 +229,39 @@
                         <span class="pay-fact">We chase renewals</span>
                     @endif
                 </div>
+
+                @if ($g['mode'])
+                    <div class="pay-mode-row">
+                        <span class="pay-mode-row__label">Environment</span>
+                        <div class="pay-mode" role="radiogroup" aria-label="{{ $g['name'] }} environment">
+                            <label>
+                                <input type="radio" name="modes[{{ $g['key'] }}]" value="sandbox" data-was="{{ $g['mode'] }}" @checked($g['mode'] === 'sandbox')>
+                                <span class="is-sandbox">Sandbox</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="modes[{{ $g['key'] }}]" value="live" data-was="{{ $g['mode'] }}" data-name="{{ $g['name'] }}" @checked($g['mode'] === 'live')>
+                                <span class="is-live">Live</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {{-- Sandbox and live dashboards issue different keys. Without a
+                         dedicated live set, the plain keys are used — right only if
+                         they are the live ones. --}}
+                    @if ($g['mode'] === 'live' && ! $g['mode_keys']['live'] && $g['configured'])
+                        <div class="pay-note">
+                            <strong>Live, using the plain keys</strong> ({!! implode(', ', array_map(fn ($k) => '<code>' . e($k) . '</code>', $g['env_keys'])) !!}).
+                            Make sure those are LIVE keys, or add
+                            {!! implode(', ', array_map(fn ($k) => '<code>' . e($k) . '</code>', $g['live_env_keys'])) !!}
+                            to the environment.
+                        </div>
+                    @endif
+                @else
+                    <div class="pay-mode-row">
+                        <span class="pay-mode-row__label">Environment</span>
+                        <span class="pay-fact">Set by its keys (test vs live)</span>
+                    </div>
+                @endif
 
                 @if ($broken)
                     <div class="pay-missing">
@@ -340,6 +426,26 @@
 
         box.addEventListener('change', tally);
         tally();
+
+        var master = document.getElementById('pay-master');
+        var state  = document.getElementById('pay-master-state');
+        master.addEventListener('change', function () {
+            state.textContent = master.checked ? 'Showing' : 'Hidden';
+            state.className = 'pay-master__state ' + (master.checked ? 'is-on' : 'is-off');
+        });
+
+        // Going live takes real money — say so before it is saved.
+        document.getElementById('pay-form').addEventListener('submit', function (event) {
+            var goingLive = [];
+            document.querySelectorAll('input[name^="modes["][value="live"]:checked').forEach(function (r) {
+                if (r.dataset.was !== 'live') goingLive.push(r.dataset.name);
+            });
+            if (goingLive.length && !confirm(
+                'Switch ' + goingLive.join(' and ') + ' to LIVE?\n\n' +
+                'Customers will be charged real money from the next checkout.')) {
+                event.preventDefault();
+            }
+        });
 
         // The chosen tax mode is highlighted, so the card and the radio never
         // disagree about which one is selected.

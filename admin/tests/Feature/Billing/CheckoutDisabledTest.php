@@ -30,11 +30,11 @@ class CheckoutDisabledTest extends BillingTestCase
         $response->assertOk();
 
         // Everything informational is still there.
-        $response->assertSee('$26', false);
-        $response->assertSee('$75', false);
-        $response->assertSee('$199', false);
+        $response->assertSee('$15', false);
+        $response->assertSee('$39', false);
+        $response->assertSee('$99', false);
         $response->assertSee('Most popular', false);
-        $response->assertSee('5,000 AI conversations per month', false);
+        $response->assertSee('1,000 AI conversations per month', false);
         $response->assertSee('Compare every feature across all plans', false);
 
         // But there is nothing to click and nothing to submit.
@@ -47,7 +47,7 @@ class CheckoutDisabledTest extends BillingTestCase
         $response = $this->get('/pricing');
 
         $response->assertOk();
-        $response->assertSee('$75', false);
+        $response->assertSee('$39', false);
         $response->assertDontSee('pricing/checkout', false);
     }
 

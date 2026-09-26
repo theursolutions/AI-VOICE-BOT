@@ -570,7 +570,7 @@
                             ['show_visitor_modes', 'New / Returning tiles',    'Home screen asks who they are. Off = the widget opens straight into the chat'],
                             ['show_faq_tab',       'FAQ tab',                 'Bottom-nav tab listing the FAQs below. Hidden automatically when there are none'],
                             ['show_history_tab',   'History tab',              'Bottom-nav tab listing past conversations'],
-                            ['show_powered_by',    'Powered-by footer',        'Small "Powered by Serve AI" line at the bottom'],
+                            ['show_powered_by',    'Powered-by footer',        'Small "Powered by serveAI" line at the bottom'],
                         ];
                     @endphp
                     <div class="tva-toggle-grid">
