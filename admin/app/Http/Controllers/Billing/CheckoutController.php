@@ -196,6 +196,14 @@ class CheckoutController extends Controller
 
         abort_unless(config('billing.checkout.enabled', false), 404);
 
+        // FIRST, before anything reads the country. This is what brings an
+        // unchosen or stale country up to date from the IP, and everything
+        // below — the refusal, the providers on offer, the price — routes on
+        // it. Resolved after them, the page refused a customer in Pakistan
+        // for the United States their workspace still remembered, then fixed
+        // the country only once they had been sent away.
+        $country = app(\App\Services\Billing\PricingPresenter::class)->countryContext($request, $client);
+
         if ($refusal = $this->refusedCountry($client)) {
             return redirect()
                 ->route('billing.plans', ['client' => $client->slug])
@@ -261,8 +269,7 @@ class CheckoutController extends Controller
                 // Still changeable here: someone who reaches checkout and finds
                 // the wrong currency should be able to fix it on the spot
                 // rather than hunt back through the plans page.
-                'country'      => app(\App\Services\Billing\PricingPresenter::class)
-                                    ->countryContext($request, $client),
+                'country'      => $country,
                 // What switching costs them, when it costs anything. Shown
                 // before the button, not discovered afterwards.
                 'forfeits'     => $checkout->forfeits($client, $price),

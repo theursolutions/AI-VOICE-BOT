@@ -218,6 +218,90 @@ class CountryPickerTest extends BillingTestCase
         $this->assertSame('usd', strtolower($plans->resolvePrice('growth', 'monthly', $gb)->currency));
     }
 
+    // ── A stored country we no longer sell to ───────────────────────
+
+    /**
+     * Where a live account got stuck: the workspace remembered a country that
+     * was later switched off (United States, with sales narrowed to Pakistan).
+     * A choice of a country we refuse every payment from protects nothing, so
+     * the IP is allowed to replace it — manual or not — and the customer is
+     * not left facing a checkout that can never take their money.
+     */
+    public function test_a_stored_country_we_no_longer_sell_to_gives_way_to_the_ip(): void
+    {
+        [$client] = $this->stuckInTheUnitedStates();
+
+        $this->detectAs('PK');
+
+        $this->assertSame('PK', $this->context($client->fresh())['current']);
+        $this->assertSame('PK', $client->fresh()->billing_country);
+    }
+
+    /**
+     * The checkout page must bring the country up to date BEFORE deciding
+     * whether it can take the payment. It refused first, from the stale
+     * country, and sent the customer back to the plans page with "we can't
+     * take payments from United States" — about somebody sitting in Pakistan.
+     */
+    public function test_checkout_follows_the_ip_before_refusing_a_stale_country(): void
+    {
+        [$client, $owner] = $this->stuckInTheUnitedStates();
+        app(LocalPriceService::class)->mirrorAll('PKR');
+
+        $this->detectAs('PK');
+
+        $response = $this->actingAs($owner)
+            ->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->get(route('billing.checkout', ['client' => $client->slug, 'plan' => 'growth', 'interval' => 'monthly']));
+
+        $response->assertOk();
+        $response->assertSessionMissing('error');
+        $this->assertSame('PK', $client->fresh()->billing_country);
+    }
+
+    /**
+     * With no sellable country in force the picker used to render its hidden
+     * <select> with nothing marked selected — so the browser selected the FIRST
+     * option itself, and when that was the country the customer then clicked
+     * (Pakistan, when it is the only one on sale) the script saw "no change"
+     * and never submitted. The customer clicked and nothing happened.
+     */
+    public function test_the_picker_has_nothing_preselected_when_no_country_is_in_force(): void
+    {
+        [$client, $owner] = $this->stuckInTheUnitedStates();
+
+        // Detection unavailable, so nothing can replace the stale country.
+        $this->detectAs(null);
+
+        $html = $this->actingAs($owner)
+            ->withServerVariables(['REMOTE_ADDR' => '203.0.113.9'])
+            ->get(route('billing.plans', ['client' => $client->slug]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertMatchesRegularExpression(
+            '/<option value=""[^>]*selected/',
+            $html,
+            'Without an explicit empty choice the browser pre-selects the first country, and clicking it submits nothing',
+        );
+    }
+
+    /** @return array{0: Client, 1: \App\Models\User} */
+    private function stuckInTheUnitedStates(): array
+    {
+        [$client, $owner] = $this->makeWorkspace('Stuck Ltd', 'stuck@example.test');
+
+        $client->forceFill([
+            'billing_country' => 'US',
+            'json_data'       => ['billing' => ['country_source' => 'manual']],
+        ])->save();
+
+        // An operator has since narrowed sales to Pakistan.
+        \App\Support\Payments::setAllowedCountries(['PK']);
+
+        return [$client->fresh(), $owner];
+    }
+
     /** A country an operator has switched off cannot arrive via the IP either. */
     public function test_the_guess_respects_the_countries_we_sell_to(): void
     {
