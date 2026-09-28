@@ -63,8 +63,11 @@
     }
     .xv__stage { grid-column: span 8; min-width: 0; }
     .xv__copy  { grid-column: span 4; min-width: 0; }
+    /* One column when stacked. Keeping the 12-column track here would leave
+       11 gaps (11 x 32px = 352px) inside the row, wider than a phone's content
+       box, so the grid would overflow and eat the right-hand gutter. */
     @media (max-width: 1024px) {
-        .xv__grid { gap: 32px; }
+        .xv__grid { gap: 32px; grid-template-columns: minmax(0, 1fr); }
         .xv__stage, .xv__copy { grid-column: 1 / -1; }
     }
 
