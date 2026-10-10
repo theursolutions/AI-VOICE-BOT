@@ -136,7 +136,9 @@ class SipExtensionController extends Controller
         $ext->user_id = $request->user()->id;
         $ext->save();
 
-        return back()->with('success', "Your browser phone is now extension {$ext->extension}. Reload the phone window to connect.");
+        // The page tells an open phone window to sign in again (extensions.blade.php).
+        return back()->with('success', "Your browser phone is now extension {$ext->extension} — it's signing in.")
+            ->with('phone_reconfigured', true);
     }
 
     private function push(SipExtension $ext): bool

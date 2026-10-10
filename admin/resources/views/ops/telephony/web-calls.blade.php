@@ -27,14 +27,29 @@
         <a href="{{ route('ops.telephony.sip') }}" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3);">🛰️ SIP server</a>
     </div>
 
-    <form method="GET" class="mb-4 flex items-center gap-2">
-        <select name="project_id" class="form-select" style="max-width:340px" onchange="this.form.submit()">
-            <option value="0">All projects</option>
-            @foreach ($projects as $p)
-                <option value="{{ $p->id }}" @selected($projectId === $p->id)>{{ $p->name }} · {{ $clients[$p->client_id]->name ?? '—' }}</option>
-            @endforeach
-        </select>
-    </form>
+    @if (session('success'))
+        <div class="alert alert-success-soft show mb-4">{{ session('success') }}</div>
+    @endif
+    @if ($errors->any())
+        <div class="alert alert-danger-soft show mb-4">@foreach ($errors->all() as $e)<div>{{ $e }}</div>@endforeach</div>
+    @endif
+
+    <div class="mb-4 flex items-center gap-3 flex-wrap">
+        <form method="GET">
+            <select name="project_id" class="form-select" style="min-width:300px" onchange="this.form.submit()">
+                <option value="0">All projects</option>
+                @foreach ($projects as $p)
+                    <option value="{{ $p->id }}" @selected($projectId === $p->id)>{{ $p->name }} · {{ $clients[$p->client_id]->name ?? '—' }}</option>
+                @endforeach
+            </select>
+        </form>
+        <form method="POST" action="{{ route('ops.telephony.web-calls.reset') }}" class="flex items-center gap-2 ml-auto">
+            @csrf
+            @if ($projectId)<input type="hidden" name="project_id" value="{{ $projectId }}">@endif
+            <input name="ip" class="form-control" style="width:200px" placeholder="Visitor IP, e.g. 39.45.1.2" required>
+            <button class="btn btn-secondary" title="Their calls so far stop counting toward the daily limit (they stay in these numbers)">Reset limit</button>
+        </form>
+    </div>
 
     <div class="tva-wcs">
         <div class="tva-wcs__card"><div class="tva-wcs__n">{{ number_format($stats['calls']) }}</div><div class="tva-wcs__l">Calls that connected</div></div>
@@ -74,9 +89,19 @@
                         <td><code>{{ $r->ip }}</code></td>
                         <td class="text-xs" style="max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ $r->page_url ?: $r->origin }}</td>
                         <td>{{ $r->ended_at ? (int) $r->started_at->diffInSeconds($r->ended_at, true) . ' s' : 'in progress' }}</td>
-                        <td>
+                        <td class="whitespace-nowrap">
                             @if ($r->session_id)
                                 <a href="{{ route('ops.sessions.show', ['projectId' => $r->project_id, 'id' => $r->session_id]) }}">Conversation →</a>
+                            @endif
+                            @if ($r->counts_toward_limit)
+                                <form method="POST" action="{{ route('ops.telephony.web-calls.reset') }}" class="inline ml-2">
+                                    @csrf
+                                    <input type="hidden" name="ip" value="{{ $r->ip }}">
+                                    <input type="hidden" name="project_id" value="{{ $r->project_id }}">
+                                    <button class="btn btn-secondary" style="padding:2px 8px; font-size:12px">Reset limit</button>
+                                </form>
+                            @else
+                                <span class="text-slate-400 text-xs ml-2">limit reset</span>
                             @endif
                         </td>
                     </tr>

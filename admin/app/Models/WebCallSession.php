@@ -22,9 +22,11 @@ class WebCallSession extends Model
     public const PREFIX = 'w';
 
     protected $fillable = ['project_id', 'client_id', 'ip', 'origin', 'page_url', 'sip_username',
-                           'secret', 'status', 'session_id', 'expires_at', 'started_at', 'ended_at'];
+                           'secret', 'status', 'counts_toward_limit', 'session_id', 'expires_at',
+                           'started_at', 'ended_at'];
 
     protected $casts = [
+        'counts_toward_limit' => 'boolean',
         'secret'     => 'encrypted',
         'expires_at' => 'datetime',
         'started_at' => 'datetime',

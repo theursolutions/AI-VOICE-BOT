@@ -83,6 +83,7 @@ class WebCalls
 
         $calls = WebCallSession::where('project_id', $project->id)
             ->where('ip', $ip)
+            ->where('counts_toward_limit', true)
             ->whereNotNull('started_at')
             ->where('started_at', '>=', $now->copy()->subDay())
             ->orderBy('started_at')
@@ -106,6 +107,7 @@ class WebCalls
 
         $recent = WebCallSession::where('project_id', $project->id)
             ->where('ip', $ip)
+            ->where('counts_toward_limit', true)
             ->where('created_at', '>=', $now->copy()->subHour())
             ->count();
         if ($recent >= self::ISSUES_PER_HOUR) {
@@ -171,6 +173,19 @@ class WebCalls
         $web->save();
 
         return $web;
+    }
+
+    /**
+     * Give a visitor IP a fresh allowance: its calls so far stop counting
+     * toward the limits (they stay in the stats). $projectIds null = every
+     * project. Returns how many calls were released.
+     */
+    public function resetLimit(string $ip, ?array $projectIds = null): int
+    {
+        return WebCallSession::where('ip', trim($ip))
+            ->where('counts_toward_limit', true)
+            ->when($projectIds !== null, fn ($q) => $q->whereIn('project_id', $projectIds))
+            ->update(['counts_toward_limit' => false]);
     }
 
     /** Remove accounts that were never used, or whose call is long over. */
