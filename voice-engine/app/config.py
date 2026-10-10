@@ -111,6 +111,10 @@ class Settings(BaseSettings):
     whisper_model: str = Field(default="base", alias="WHISPER_MODEL")
     whisper_device: str = Field(default="cpu", alias="WHISPER_DEVICE")
     whisper_compute_type: str = Field(default="int8", alias="WHISPER_COMPUTE_TYPE")
+    # Transcriptions that can run at once. One worker made simultaneous
+    # callers queue for speech-to-text (10 calls: 13.4 s median wait for the
+    # first word of a reply, vs 8.7 s with 4 — measured 2026-10-11).
+    whisper_workers: int = Field(default=4, alias="WHISPER_WORKERS")
     coqui_use_gpu: bool = Field(default=False, alias="COQUI_USE_GPU")
 
     # --- WhatsApp calling (WebRTC media bridge) --------------------------
@@ -130,6 +134,67 @@ class Settings(BaseSettings):
         alias="DEFAULT_SPEAKER_WAV",
     )
     audio_sample_rate: int = Field(default=24000, alias="AUDIO_SAMPLE_RATE")
+
+    # --- Google voices (Gemini text-to-speech) ---------------------------
+    # Ready-made voices picked per project/agent in the admin; uses
+    # GEMINI_API_KEY. The free tier allows ~3 speech requests a minute —
+    # a call needs one per sentence, so real use needs a billed project.
+    gemini_tts_model: str = Field(default="gemini-3.8-flash-lite-tts", alias="GEMINI_TTS_MODEL")
+    # Each model has its own quota: on a 429 the next one here is tried.
+    gemini_tts_fallback_models: str = Field(
+        default="gemini-3.8-flash-tts,gemini-3.1-flash-tts-preview",
+        alias="GEMINI_TTS_FALLBACK_MODELS",
+    )
+    # Short phrases (greetings, "anything else?", goodbyes) are kept here
+    # once spoken, so they never cost a request again — Tier 1 keys get
+    # only 100 speech requests a day per model. Empty = memory only.
+    google_tts_cache_dir: str = Field(
+        default=str(Path(__file__).resolve().parent.parent / "tts_cache"),
+        alias="GOOGLE_TTS_CACHE_DIR",
+    )
+
+    # --- Phone / SIP calls (app/calls) -----------------------------------
+    # Barge-in: the caller talking over the AI cuts the AI off. It takes
+    # this much continuous speech, so a cough or line noise doesn't.
+    call_barge_in: bool = Field(default=True, alias="CALL_BARGE_IN")
+    call_barge_in_ms: int = Field(default=600, alias="CALL_BARGE_IN_MS")
+    # How many earlier exchanges of THIS call the model sees.
+    call_history_turns: int = Field(default=10, alias="CALL_HISTORY_TURNS")
+
+    # Listening: "gemini" hears words, language, mood and the caller's
+    # voice (sir/madam) in one request; "whisper" keeps calls fully local.
+    # gemini-3.1-flash-lite: 1.6 s median, language 11/12, mood 12/12 on
+    # phone-quality clips (2026-10-11); gemini-3.5-flash is a little more
+    # accurate on rarer languages but ~0.3 s slower.
+    call_listener: str = Field(default="gemini", alias="CALL_LISTENER")
+    call_listen_model: str = Field(default="gemini-3.1-flash-lite", alias="CALL_LISTEN_MODEL")
+    call_listen_timeout: float = Field(default=6.0, alias="CALL_LISTEN_TIMEOUT")
+    # Silence that ends the caller's turn. A caller who stopped mid-thought
+    # (the listener can tell) gets CALL_INCOMPLETE_WAIT_MS more to go on.
+    call_end_silence_ms: int = Field(default=650, alias="CALL_END_SILENCE_MS")
+    call_incomplete_wait_ms: int = Field(default=1500, alias="CALL_INCOMPLETE_WAIT_MS")
+    # "Let me check" only when the lookup is slower than this.
+    call_filler_after_ms: int = Field(default=300, alias="CALL_FILLER_AFTER_MS")
+    # The voice's delivery follows the caller's mood (Google voices).
+    call_voice_emotion: bool = Field(default=True, alias="CALL_VOICE_EMOTION")
+    # When the line goes quiet: check in after IDLE_PROMPT seconds (after
+    # an answer) or IDLE_WAIT seconds (after the AI asked something), then
+    # IDLE_GOODBYE seconds later say goodbye and hang up.
+    call_idle_prompts: bool = Field(default=True, alias="CALL_IDLE_PROMPTS")
+    call_idle_prompt_seconds: float = Field(default=4.5, alias="CALL_IDLE_PROMPT_SECONDS")
+    call_idle_wait_seconds: float = Field(default=8.0, alias="CALL_IDLE_WAIT_SECONDS")
+    call_idle_goodbye_seconds: float = Field(default=6.0, alias="CALL_IDLE_GOODBYE_SECONDS")
+
+    # --- Asterisk: ARI call control + AudioSocket audio (app/calls) ------
+    # Off unless ASTERISK_ARI_PASSWORD is set; Twilio needs none of this.
+    asterisk_ari_url: str = Field(default="http://127.0.0.1:8088", alias="ASTERISK_ARI_URL")
+    asterisk_ari_user: str = Field(default="ai-crm", alias="ASTERISK_ARI_USER")
+    asterisk_ari_password: str = Field(default="", alias="ASTERISK_ARI_PASSWORD")
+    asterisk_ari_app: str = Field(default="ai-crm", alias="ASTERISK_ARI_APP")
+    # Where our AudioSocket server listens, and the host:port Asterisk must
+    # connect to — different when Asterisk runs in WSL, Docker or elsewhere.
+    audiosocket_bind: str = Field(default="0.0.0.0:9092", alias="AUDIOSOCKET_BIND")
+    audiosocket_advertise: str = Field(default="127.0.0.1:9092", alias="AUDIOSOCKET_ADVERTISE")
 
     # --- Per-turn audio file storage -------------------------------------
     # Each assistant voice reply is written to disk as a WAV and served

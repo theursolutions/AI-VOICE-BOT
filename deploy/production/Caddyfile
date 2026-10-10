@@ -105,5 +105,15 @@ www.{$APP_DOMAIN} {
 {$VOICE_DOMAIN} {
 	encode zstd gzip
 	import security_headers
-	import to_haproxy
+
+	# SIP over WebSocket for browsers — the admin's browser phone and website
+	# "Call us" buttons — to Asterisk's HTTP server on the host (path /ws).
+	handle_path /sip-ws* {
+		rewrite * /ws
+		reverse_proxy host.docker.internal:8088
+	}
+
+	handle {
+		import to_haproxy
+	}
 }

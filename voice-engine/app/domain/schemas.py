@@ -256,7 +256,9 @@ class TurnCompletedPayload(BaseModel):
     project_id: int
     session_id: int
     role: Role = "assistant"
-    content: str
+    # None when the turn produced no reply (STT failed, caller interrupted
+    # before the first word) — Laravel's column is nullable too.
+    content: Optional[str] = None
     audio_url: Optional[str] = None
     tokens_in: int = 0
     tokens_out: int = 0

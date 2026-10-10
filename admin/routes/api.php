@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AgentApiController;
 use App\Http\Controllers\Api\AgentController;
+use App\Http\Controllers\Api\AsteriskCallController;
 use App\Http\Controllers\Api\DataSourceController;
 use App\Http\Controllers\Api\InternalTurnController;
 use App\Http\Controllers\Api\SessionController;
@@ -98,6 +99,13 @@ Route::middleware('twilio.signature')->group(function () {
 });
 Route::get ('telephony/twilio/diagnose',   [\App\Http\Controllers\Api\TelephonyController::class, 'diagnose'])->name('telephony.diagnose');
 
+// Website "Call us" button (public/webcall/call.js): a one-call SIP account
+// for a visitor to talk to the project's AI from the browser. Per-IP call
+// limits are the project's; the throttle only blunts floods.
+Route::options('webcall/session', [\App\Http\Controllers\Api\WebCallController::class, 'preflight']);
+Route::post('webcall/session', [\App\Http\Controllers\Api\WebCallController::class, 'session'])
+    ->middleware('throttle:20,1')->name('webcall.session');
+
 // Meta WhatsApp webhooks (messages + calls) are registered by the
 // msd/meta-channels package (routes/api.php) → GET|POST /api/whatsapp/webhook.
 
@@ -105,4 +113,8 @@ Route::middleware('internal.webhook')->prefix('internal')->group(function () {
     Route::post('turn-completed',   [InternalTurnController::class, 'turnCompleted']);
     Route::post('resolve-context',  [InternalTurnController::class, 'resolveContext']);
     Route::post('session-ended',    [InternalTurnController::class, 'sessionEnded']);
+    Route::post('call-profile',     [InternalTurnController::class, 'callProfile']);
+
+    // Asterisk has no public webhooks — the voice engine's ARI client asks.
+    Route::post('asterisk/call-start', [AsteriskCallController::class, 'start']);
 });

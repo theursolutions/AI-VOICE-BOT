@@ -69,6 +69,7 @@ voice-engine/*.egg-info/
 # Audio / model artefacts (heavy, machine-generated)
 voice-engine/uploads/
 voice-engine/voice_outputs/
+voice-engine/tts_cache/
 voice-engine/models/
 voice-engine/checkpoints/
 voice-engine/*.wav

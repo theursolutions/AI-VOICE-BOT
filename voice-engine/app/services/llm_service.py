@@ -296,12 +296,25 @@ def _to_openai_messages(messages: List[ChatMessage]) -> List[Dict[str, str]]:
     arrives somewhere the provider will read it. Fixed here rather than at the
     seven call sites because it is a property of the wire format, not of any
     caller — and a caller added tomorrow would otherwise hit it again.
+
+    The same layer keeps only the LAST system message when there are several:
+    a turn sent as [persona + rules, reference data, …] was answered from the
+    reference data alone — no persona, no language rule, no phone rules
+    (verified 2026-10-11: a "begin every reply with PINEAPPLE" rule was obeyed
+    alone and ignored once a second system message followed). So every system
+    message is merged, in order, into one at the top.
     """
-    out = [
-        {"role": msg.role, "content": msg.content}
-        for msg in messages
-        if msg.content and msg.content.strip()
-    ]
+    out: List[Dict[str, str]] = []
+    system: List[str] = []
+    for msg in messages:
+        if not (msg.content and msg.content.strip()):
+            continue
+        if msg.role == "system":
+            system.append(msg.content)
+        else:
+            out.append({"role": msg.role, "content": msg.content})
+    if system:
+        out.insert(0, {"role": "system", "content": "\n\n".join(system)})
 
     if out and not any(m["role"] in ("user", "assistant") for m in out):
         out[-1] = {"role": "user", "content": out[-1]["content"]}

@@ -22,6 +22,7 @@ from app.api.routes import admin as admin_route
 from app.api.routes import extract as extract_route
 from app.api.routes import health as health_route
 from app.api.routes import llm as llm_route
+from app.api.routes import sip as sip_route
 from app.api.routes import stt as stt_route
 from app.api.routes import tts as tts_route
 from app.api.routes import audio as audio_route
@@ -62,6 +63,7 @@ async def lifespan(app: FastAPI):
             model_name=settings.whisper_model,
             device=settings.whisper_device,
             compute_type=settings.whisper_compute_type,
+            num_workers=settings.whisper_workers,
         )
 
     def _build_tts():
@@ -74,6 +76,25 @@ async def lifespan(app: FastAPI):
 
     app.state.stt_service = _try_init("stt_service", _build_stt)
     app.state.tts_service = _try_init("tts_service", _build_tts)
+
+    # Google voices (Gemini TTS) — ready-made voices chosen in the admin.
+    # Needs only an API key; without one every session uses the local voice.
+    app.state.google_tts = None
+    if settings.gemini_api_key:
+        from app.services.google_tts import GoogleTTS
+        app.state.google_tts = GoogleTTS(
+            settings.gemini_api_key,
+            settings.gemini_tts_model,
+            fallback_models=[m.strip() for m in settings.gemini_tts_fallback_models.split(",")],
+            cache_dir=settings.google_tts_cache_dir or None,
+        )
+
+    # Phone calls: Gemini listening (words + language + mood) with Whisper
+    # as the fallback. CALL_LISTENER=whisper keeps calls fully local.
+    app.state.listener = None
+    if settings.gemini_api_key and settings.call_listener == "gemini":
+        from app.services.listener import GeminiListener
+        app.state.listener = GeminiListener(settings.gemini_api_key, settings.call_listen_model)
 
     # Warm up the heavy voice models at boot. Otherwise the *first* user
     # request pays the model-load cost (TTS/XTTS-v2 is ~1.8GB and can take
@@ -109,15 +130,35 @@ async def lifespan(app: FastAPI):
     app.state.vector_store      = None
     app.state.retrieval_service = None
 
+    # Asterisk (SIP trunks, PBXs, WebRTC): ARI call control + AudioSocket
+    # audio. Off unless ASTERISK_ARI_PASSWORD is set — Twilio needs neither.
+    app.state.asterisk = None
+    if settings.asterisk_ari_password:
+        try:
+            from app.calls.asterisk import AsteriskGateway
+            from app.calls.session import CallServices
+            app.state.asterisk = AsteriskGateway(CallServices.from_app(app), settings)
+            await app.state.asterisk.start()
+        except Exception as exc:  # noqa: BLE001 — Twilio + web keep working
+            logger.warning("Asterisk integration not started: %s", exc)
+            app.state.asterisk = None
+
     logger.info(
-        "Voice CRM Agent FastAPI started — stt=%s tts=%s store=%s",
+        "Voice CRM Agent FastAPI started — stt=%s tts=%s store=%s asterisk=%s",
         bool(app.state.stt_service),
         bool(app.state.tts_service),
         "duckdb" if app.state.duck_store else "none",
+        bool(app.state.asterisk),
     )
     try:
         yield
     finally:
+        if app.state.asterisk is not None:
+            await app.state.asterisk.stop()
+        if app.state.google_tts is not None:
+            app.state.google_tts.close()
+        if app.state.listener is not None:
+            await app.state.listener.aclose()
         await app.state.llm_service.aclose()
         await app.state.laravel_client.aclose()
         logger.info("Voice CRM Agent FastAPI shutting down")
@@ -160,6 +201,7 @@ def create_app() -> FastAPI:
     app.include_router(tts_route.router, tags=["tts"])
     app.include_router(audio_route.router, tags=["audio"])
     app.include_router(admin_route.router, tags=["admin"])
+    app.include_router(sip_route.router, tags=["sip"])
 
     # Optional routers — import lazily so missing deps don't break boot.
     try:

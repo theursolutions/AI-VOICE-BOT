@@ -1892,6 +1892,17 @@
          iframe with full style isolation. Identical to what a paying
          customer pastes on their own site. --}}
     <script src="{{ $tvaLoaderSrc }}" data-project-key="{{ $tvaDemoKey }}" async></script>
+    @php
+        // The demo project's "Call us" button (Telephony → Website call
+        // button), from the same origin as the chat widget.
+        $tvaCallProject = \App\Models\Project::where('project_api_key', $tvaDemoKey)->first(['id', 'json_data']);
+        $tvaCallOn = $tvaCallProject && data_get($tvaCallProject->json_data, 'webcall.enabled');
+        $tvaCallLabel = (string) data_get($tvaCallProject?->json_data, 'webcall.button_label', 'Talk to our AI agent');
+    @endphp
+    @if ($tvaCallOn)
+        <script src="{{ str_replace('/widget/loader.js', '/webcall/call.js', $tvaLoaderSrc) }}"
+                data-project-key="{{ $tvaDemoKey }}" data-label="{{ $tvaCallLabel }}" async></script>
+    @endif
 @elseif ($tvaLegacyIframe)
     {{-- Legacy manual iframe — only used if LANDING_WIDGET_URL is set
          AND LANDING_DEMO_KEY isn't. --}}

@@ -3,7 +3,8 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "build:webcall": "javascript-obfuscator resources/webcall/call.js --output public/webcall/call.js --compact true --string-array true --string-array-encoding base64 --string-array-threshold 1 --control-flow-flattening true --control-flow-flattening-threshold 0.4 --identifier-names-generator hexadecimal --rename-globals false --self-defending false"
     },
     "devDependencies": {
         "@popperjs/core": "^2.11.6",
@@ -12,6 +13,7 @@
         "autoprefixer": "^10.4.2",
         "axios": "^1.6.4",
         "bootstrap": "^5.2.3",
+        "javascript-obfuscator": "4.1.1",
         "laravel-vite-plugin": "^1.0.0",
         "postcss": "^8.4.31",
         "sass": "^1.56.1",

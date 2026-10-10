@@ -10,6 +10,8 @@
                 Every phone number assigned across every project — with routing config and owner.
             </div>
         </div>
+        <a href="{{ route('ops.telephony.web-calls') }}" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3);">🌐 Website calls</a>
+        <a href="{{ route('ops.telephony.sip') }}" class="btn btn-secondary btn-sm" style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3);">🛰️ SIP &amp; WebRTC server</a>
     </div>
 
     <div class="tva-dt-card">

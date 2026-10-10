@@ -64,6 +64,17 @@
     html.dark .tva-upload-zone { background:#0f172a; border-color:#334155; }
     html.dark .tva-upload-zone:hover { background:#1e293b; border-color:#6366f1; }
     html.dark .tva-form-label { color:#94a3b8; }
+
+    /* Response voice: Google vs own */
+    .tva-source-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:12px; }
+    .tva-source { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1px solid #e2e8f0; border-radius:10px; cursor:pointer; }
+    .tva-source:has(input:checked) { border-color:#6366f1; background:#eef2ff; }
+    .tva-source.is-disabled { opacity:.55; cursor:not-allowed; }
+    .tva-source input { margin-top:3px; }
+    .tva-source__title { display:block; font-weight:600; font-size:14px; }
+    .tva-source__hint { display:block; font-size:12px; color:#64748b; margin-top:2px; }
+    html.dark .tva-source { border-color:#334155; }
+    html.dark .tva-source:has(input:checked) { background:#1e1b4b; border-color:#6366f1; }
 </style>
 
 <div class="content">
@@ -106,6 +117,105 @@
             </select>
         </form>
     </div>
+
+    {{-- ── Response voice: Google (default) or the project's own ──────── --}}
+    @if ($project && $response)
+        @php
+            $source        = $response->isGoogle() ? 'google' : 'own';
+            $currentGoogle = $response->googleVoice ?: config('services.voice.default_google_voice', 'Kore');
+            $currentOwnId  = $response->isGoogle() ? null : $response->voice?->id;
+            $previewBase   = route('voices.google-preview', ['client' => $client->slug]);
+        @endphp
+        <div class="intro-y box p-5 mb-5" id="tvaResponseVoice">
+            <h3 class="font-medium text-base mb-1 flex items-center">
+                <i data-lucide="volume-2" class="w-4 h-4 mr-2"></i>
+                Response voice
+            </h3>
+            <p class="text-xs text-slate-500 mb-4">
+                The voice that answers this project's calls and website widget. An agent given its
+                own voice on the Agents page overrides it.
+            </p>
+
+            @if ($overridingAgents->isNotEmpty())
+                <div class="alert alert-warning-soft show mb-4 flex items-start text-xs">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 mr-2 flex-shrink-0"></i>
+                    <div>
+                        These agents have a voice of their own, so calls they answer ignore this setting:
+                        @foreach ($overridingAgents as $oa)
+                            <strong>{{ $oa->name }}</strong>
+                            ({{ optional($voices->firstWhere('id', $oa->voice_id))->name ?? 'voice #' . $oa->voice_id }})@if (! $loop->last), @endif
+                        @endforeach.
+                        To use this setting for them, open
+                        <a href="{{ route('bot-agents.index', ['client' => $client->slug]) }}?project_id={{ hashid($projectId) }}" class="font-medium underline">Agents</a>
+                        → edit → Voice → <em>project's response voice</em>.
+                    </div>
+                </div>
+            @endif
+
+            <form method="POST" action="{{ route('voices.response', ['client' => $client->slug]) }}">
+                @csrf
+                <input type="hidden" name="project_id" value="{{ $projectId }}">
+
+                <div class="tva-source-grid mb-4">
+                    <label class="tva-source">
+                        <input type="radio" name="source" value="google" @checked($source === 'google')>
+                        <span>
+                            <span class="tva-source__title">Google voice <span class="tva-chip tva-chip--ok">Recommended</span></span>
+                            <span class="tva-source__hint">Natural ready-made voices, male and female. Fast, and speaks Urdu and Roman Urdu too.</span>
+                        </span>
+                    </label>
+                    <label class="tva-source {{ $ownVoices->isEmpty() ? 'is-disabled' : '' }}">
+                        <input type="radio" name="source" value="own" @checked($source === 'own') @disabled($ownVoices->isEmpty())>
+                        <span>
+                            <span class="tva-source__title">My own voice</span>
+                            <span class="tva-source__hint">
+                                {{ $ownVoices->isEmpty()
+                                    ? 'Upload a voice below first.'
+                                    : 'A voice you cloned. Generated on your own server — slow without a GPU.' }}
+                            </span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="js-source js-source-google mb-4" @if ($source !== 'google') hidden @endif>
+                    <label class="tva-form-label">Google voice</label>
+                    <div class="flex items-center gap-2">
+                        <select name="google_voice" class="form-select w-full md:w-1/2" id="tvaGoogleVoice">
+                            @foreach (['female' => 'Female voices', 'male' => 'Male voices'] as $gender => $groupLabel)
+                                <optgroup label="{{ $groupLabel }}">
+                                    @foreach ($googleVoices as $name => $gv)
+                                        @continue($gv['gender'] !== $gender)
+                                        <option value="{{ $name }}" @selected($name === $currentGoogle)>{{ $name }} — {{ $gv['style'] }}</option>
+                                    @endforeach
+                                </optgroup>
+                            @endforeach
+                        </select>
+                        <button type="button" id="tvaGooglePreview"
+                                class="tva-voice-play inline-flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0"
+                                data-preview-base="{{ $previewBase }}"
+                                data-audio-url="{{ $previewBase }}?voice={{ urlencode($currentGoogle) }}"
+                                title="Preview this voice">
+                            <i data-lucide="play" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <small class="text-slate-500 text-xs">Press play to hear a voice before saving — the first preview of each voice takes a few seconds.</small>
+                </div>
+
+                <div class="js-source js-source-own mb-4" @if ($source !== 'own') hidden @endif>
+                    <label class="tva-form-label">Your voice</label>
+                    <select name="voice_id" class="form-select w-full md:w-1/2">
+                        @foreach ($ownVoices as $ov)
+                            <option value="{{ $ov->id }}" @selected((int) $currentOwnId === (int) $ov->id)>{{ $ov->name }} ({{ $ov->language }})</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <button class="btn btn-primary shadow-md">
+                    <i data-lucide="save" class="w-4 h-4 mr-2 inline"></i> Save response voice
+                </button>
+            </form>
+        </div>
+    @endif
 
     <div class="tva-cols">
         {{-- ── Upload form ────────────────────────────────────────────── --}}
@@ -170,18 +280,26 @@
 
                 @forelse ($voices as $voice)
                     @php
-                        $meta = $voice->metadata ?? [];
-                        $isDefault = !empty($meta['is_default']);
+                        // "Default" = the voice the project answers in right now.
+                        $isDefault = $response && $response->voice && (int) $response->voice->id === (int) $voice->id;
+                        $isGoogleVoice = $voice->isGoogle();
                         $langLabel = $languages[$voice->language] ?? strtoupper($voice->language);
+                        $previewUrl = $isGoogleVoice
+                            ? route('voices.google-preview', ['client' => $client->slug]) . '?voice=' . urlencode((string) $voice->external_id)
+                            : route('voices.audio', ['client' => $client->slug, 'id' => $voice->id]) . '?project_id=' . hashid($projectId);
                     @endphp
                     <div class="tva-voice-card {{ $isDefault ? 'is-default' : '' }} mb-3">
                         <div class="tva-voice-icon">
-                            <i data-lucide="mic" class="w-5 h-5"></i>
+                            <i data-lucide="{{ $isGoogleVoice ? 'sparkles' : 'mic' }}" class="w-5 h-5"></i>
                         </div>
                         <div class="flex-1 min-w-0">
                             <div class="tva-voice-name">{{ $voice->name }}</div>
                             <div class="tva-voice-meta">
-                                <span class="tva-chip">{{ $langLabel }}</span>
+                                @if ($isGoogleVoice)
+                                    <span class="tva-chip">Google</span>
+                                @else
+                                    <span class="tva-chip">{{ $langLabel }}</span>
+                                @endif
                                 <span class="tva-chip {{ $voice->status === 'ready' ? 'tva-chip--ok' : '' }}">{{ $voice->status }}</span>
                                 @if ($isDefault) <span class="tva-chip tva-chip--default">DEFAULT</span> @endif
                                 <span style="opacity:.7;">#{{ $voice->id }}</span>
@@ -191,7 +309,7 @@
                             @if ($voice->status === 'ready')
                                 <button type="button"
                                         class="tva-voice-play inline-flex items-center justify-center w-9 h-9 rounded-full"
-                                        data-audio-url="{{ route('voices.audio', ['client' => $client->slug, 'id' => $voice->id]) }}?project_id={{ hashid($projectId) }}"
+                                        data-audio-url="{{ $previewUrl }}"
                                         title="Preview voice">
                                     <i data-lucide="play" class="w-4 h-4"></i>
                                 </button>
@@ -232,6 +350,28 @@
     if (window.lucide && typeof window.lucide.createIcons === 'function') {
         window.lucide.createIcons();
     }
+
+    // Response voice card: show the picker for the chosen source, and point
+    // the preview button at whichever Google voice is selected.
+    (function () {
+        var card = document.getElementById('tvaResponseVoice');
+        if (!card) return;
+        card.querySelectorAll('input[name="source"]').forEach(function (radio) {
+            radio.addEventListener('change', function () {
+                card.querySelectorAll('.js-source').forEach(function (el) {
+                    el.hidden = !el.classList.contains('js-source-' + radio.value);
+                });
+            });
+        });
+        var select = document.getElementById('tvaGoogleVoice');
+        var preview = document.getElementById('tvaGooglePreview');
+        if (select && preview) {
+            select.addEventListener('change', function () {
+                preview.setAttribute('data-audio-url',
+                    preview.getAttribute('data-preview-base') + '?voice=' + encodeURIComponent(select.value));
+            });
+        }
+    })();
 
     // Voice preview — one shared <audio> element so starting a new
     // voice automatically stops any previous one. We drive the button

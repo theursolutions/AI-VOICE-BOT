@@ -100,7 +100,7 @@ class BotAgentWebController extends Controller
             'user_id'          => $type === BotAgent::TYPE_HUMAN ? ($data['user_id'] ?? null) : null,
             'presence'         => BotAgent::PRESENCE_OFFLINE,
             'max_active_chats' => $type === BotAgent::TYPE_HUMAN ? (int) ($data['max_active_chats'] ?? 3) : 3,
-            'voice_id'         => $type === BotAgent::TYPE_HUMAN ? null : ($data['voice_id'] ?? null),
+            'voice_id'         => $type === BotAgent::TYPE_HUMAN ? null : $this->voiceIdFor($data, $project),
             'persona'          => $type === BotAgent::TYPE_HUMAN ? null : ($data['persona'] ?? null),
             'is_default'       => !empty($data['is_default']),
             'status'           => BotAgent::STATUS_ACTIVE,
@@ -139,7 +139,7 @@ class BotAgentWebController extends Controller
             'type'             => $type,
             'user_id'          => $type === BotAgent::TYPE_HUMAN ? ($data['user_id'] ?? null) : null,
             'max_active_chats' => $type === BotAgent::TYPE_HUMAN ? (int) ($data['max_active_chats'] ?? 3) : $agent->max_active_chats,
-            'voice_id'         => $type === BotAgent::TYPE_HUMAN ? null : ($data['voice_id'] ?? null),
+            'voice_id'         => $type === BotAgent::TYPE_HUMAN ? null : $this->voiceIdFor($data, $project),
             'persona'          => $type === BotAgent::TYPE_HUMAN ? null : ($data['persona'] ?? null),
             'is_default'       => !empty($data['is_default']),
             'status'           => $data['status'] ?? BotAgent::STATUS_ACTIVE,
@@ -171,6 +171,50 @@ class BotAgentWebController extends Controller
             ->with('success', "Agent \"{$name}\" deleted.");
     }
 
+    /**
+     * The agent's voice from the form's `voice_choice`:
+     *   "voice:12"    one of the project's cloned voices
+     *   "google:Kore" a Google voice — its Voice row is created on first pick
+     *   ""            none: the project's response voice applies
+     *
+     * Not named *_id on purpose: DecodeHashids coerces such keys to ints,
+     * which would turn "google:Kore" into 0. Older forms that still post a
+     * plain `voice_id` keep working.
+     */
+    private function voiceIdFor(array $data, Project $project): ?int
+    {
+        if (! array_key_exists('voice_choice', $data)) {
+            return $data['voice_id'] ?? null;
+        }
+
+        $choice = (string) ($data['voice_choice'] ?? '');
+
+        if (str_starts_with($choice, 'voice:')) {
+            $voice = Voice::find((int) substr($choice, 6));
+            return $voice && (int) $voice->project_id === (int) $project->id ? (int) $voice->id : null;
+        }
+
+        if (str_starts_with($choice, 'google:')) {
+            $name    = substr($choice, 7);
+            $catalog = (array) config('services.voice.google_voices', []);
+            if (! isset($catalog[$name])) {
+                return null;
+            }
+            $voice = Voice::firstOrCreate(
+                ['project_id' => $project->id, 'provider' => Voice::PROVIDER_GOOGLE, 'external_id' => $name],
+                [
+                    'name'     => "{$name} (Google, {$catalog[$name]['gender']})",
+                    'language' => 'en',
+                    'status'   => 'ready',
+                    'metadata' => ['style' => $catalog[$name]['style']],
+                ],
+            );
+            return (int) $voice->id;
+        }
+
+        return null;
+    }
+
     private function validateInput(Request $request, bool $forUpdate = false): array
     {
         $rules = [
@@ -180,6 +224,11 @@ class BotAgentWebController extends Controller
             'user_id'          => 'nullable|integer|required_if:type,human',
             'max_active_chats' => 'nullable|integer|min:1|max:50',
             'voice_id'         => 'nullable|integer',
+            'voice_choice'     => 'nullable|string|max:60',
+            'call_language'    => 'nullable|in:' . implode(',', array_keys(BotAgent::CALL_LANGUAGES)),
+            'call_auto_detect' => 'nullable|boolean',
+            'call_greeting'    => 'nullable|string|max:300',
+            'call_vocabulary'  => 'nullable|string|max:500',
             'persona'          => 'nullable|string|max:4000',
             'skill_ids'        => 'nullable|array',
             'skill_ids.*'      => 'integer',
@@ -207,6 +256,17 @@ class BotAgentWebController extends Controller
     private function metadataFor(Request $request, array $data, Client $client, ?BotAgent $existing): array
     {
         $meta = (array) ($existing->metadata ?? []);
+
+        // How the agent talks on calls — anyone who may edit the agent may
+        // set this (unlike channels/capabilities below, which are owner-only).
+        if (array_key_exists('call_language', $data)) {
+            $meta['call'] = [
+                'language'    => $data['call_language'] ?: 'en',
+                'auto_detect' => (bool) ($data['call_auto_detect'] ?? false),
+                'greeting'    => trim((string) ($data['call_greeting'] ?? '')) ?: null,
+                'vocabulary'  => trim((string) ($data['call_vocabulary'] ?? '')) ?: null,
+            ];
+        }
 
         if (! auth()->user()?->isOwnerOf($client->id)) {
             return $meta;

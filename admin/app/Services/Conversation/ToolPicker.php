@@ -39,15 +39,18 @@ class ToolPicker
      * @param bool $customerFacing  On customer-facing turns, only webhook
      *        tools the owner marked customer_visible are offered (the
      *        human-handoff option is unaffected). Internal turns pass false.
+     * @param bool $canTransfer  A phone call whose number has a transfer
+     *        target (e.g. PBX extension 1000): a person is reachable even if
+     *        the project has no human agents in the app.
      * @return array{tool_id:int|string, args:array<string,mixed>}|null
      */
-    public function pick(int $projectId, array $recentHistory, string $userQuery, array $toolGate = [], bool $customerFacing = false): ?array
+    public function pick(int $projectId, array $recentHistory, string $userQuery, array $toolGate = [], bool $customerFacing = false, bool $canTransfer = false): ?array
     {
         $tools = $this->loadWebhookTools($projectId, $toolGate, $customerFacing);
 
-        // Offer "transfer to a human" only when the project actually has
-        // human agents — otherwise there's no point routing the LLM.
-        $hasHumans = BotAgent::where('project_id', $projectId)
+        // Offer "transfer to a human" only when a person can actually take
+        // the conversation — otherwise there's no point routing the LLM.
+        $hasHumans = $canTransfer || BotAgent::where('project_id', $projectId)
             ->where('type', BotAgent::TYPE_HUMAN)
             ->where('status', BotAgent::STATUS_ACTIVE)
             ->exists();
