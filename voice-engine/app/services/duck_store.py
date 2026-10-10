@@ -201,7 +201,21 @@ class DuckStore:
                     f'SELECT text, citation, fts_main_{table}.match_bm25(id, ?) AS score '
                     f'FROM "{table}" WHERE score IS NOT NULL ORDER BY score DESC LIMIT {int(k)}'
                 )
-                for r in con.execute(sql, [query]).fetchall():
+                try:
+                    found = con.execute(sql, [query]).fetchall()
+                except Exception as exc:  # noqa: BLE001 — one source must not sink the rest
+                    # A table with no search index (loaded empty, or the
+                    # index was lost) used to fail the whole lookup with
+                    # "match_bm25 does not exist": build it, or skip it.
+                    if "match_bm25" not in str(exc):
+                        raise
+                    rows = con.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
+                    if not rows:
+                        continue
+                    logger.warning("duck search: %s had no search index — building it", table)
+                    con.execute(f"PRAGMA create_fts_index('{table}', 'id', 'text', overwrite=1)")
+                    found = con.execute(sql, [query]).fetchall()
+                for r in found:
                     out.append({
                         "text": r[0],
                         "citation": json.loads(r[1] or "{}"),
