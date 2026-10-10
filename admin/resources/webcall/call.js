@@ -74,7 +74,7 @@
         '<button class="fab" aria-label="' + esc(LABEL) + '">' + ICON_PHONE + '</button>' +
         '<div class="tip hidden">' + esc(LABEL) + '</div>' +
         '<div class="card hidden" role="dialog" aria-label="' + esc(LABEL) + '">' +
-        '  <div class="head"><h3>' + esc(LABEL) + '</h3><p>Free call from your browser — just allow the microphone.</p>' +
+        '  <div class="head"><h3>' + esc(LABEL) + '</h3><p>Free call from your browser just allow the microphone.</p>' +
         '    <button class="close" aria-label="Close">' + ICON_X + '</button></div>' +
         '  <div class="body">' +
         '    <div class="avatar">' + ICON_PHONE + '</div>' +
@@ -82,7 +82,7 @@
         '    <div class="timer hidden">1:00</div>' +
         '    <div class="sub">Our AI agent answers in English or Urdu.</div>' +
         '    <div class="row">' +
-        '      <button class="btn go">' + ICON_PHONE.replace(/24/g, '18') + 'Call now</button>' +
+        '      <button class="btn go">' + ICON_PHONE.replace('width="24" height="24"', 'width="18" height="18"') + 'Call now</button>' +
         '      <button class="btn mute hidden">' + ICON_MIC + 'Mute</button>' +
         '      <button class="btn end hidden">End</button>' +
         '    </div>' +
