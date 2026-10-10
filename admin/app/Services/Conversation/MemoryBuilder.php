@@ -10,6 +10,12 @@ use App\Services\DataSource\ResolverResult;
 class MemoryBuilder
 {
     /**
+     * Closes the AI's goodbye on a call: the voice engine hangs up once it
+     * has been said (and never speaks the marker). See voicePrompt().
+     */
+    public const END_CALL = '[END_CALL]';
+
+    /**
      * How many exchanges of raw history to replay to the model.
      *
      * Was 6 — twelve messages — which a WhatsApp conversation overflows in
@@ -286,6 +292,108 @@ class MemoryBuilder
         }
 
         return $messages;
+    }
+
+    /**
+     * System prompt for a live phone/SIP call (the voice engine fetches it
+     * through /api/internal/call-profile).
+     *
+     * Same identity, business profile, language rule and caller facts as
+     * chat. The spoken-reply rules go LAST so they override the chat advice
+     * above them: numbered lines and complete walkthroughs read aloud are
+     * noise to a caller.
+     */
+    public function voicePrompt(Session $session): string
+    {
+        $language = data_get($session->metadata, 'language')
+            ?: config('services.voice.default_language', 'en');
+        $agent = $session->agent_id ? BotAgent::find($session->agent_id) : null;
+
+        $parts = [$this->systemPrompt($session->project, $session->summary?->summary, $agent, $language)];
+
+        $known = $this->knownFacts($session);
+        if ($known !== '') {
+            $parts[] = $known;
+        }
+
+        $parts[] = 'THIS IS A LIVE PHONE CALL — everything you write is spoken aloud. Sound like a warm, attentive person on the phone, not a script:'
+            . "\n- Keep replies short: usually one or two sentences, never more than three. If an answer has several steps, give the first one and offer to continue."
+            . "\n- You greeted the caller when the call connected — don't greet again."
+            . "\n- Never use lists, numbering, symbols, URLs, emojis or formatting of any kind."
+            . "\n- Say numbers, prices, dates and times the way a person says them out loud."
+            . "\n- Ask at most one question at a time, then wait for the answer."
+            . "\n- Listen first: answer what the caller actually asked. When it helps, briefly reflect a detail they gave, so they know you understood."
+            . "\n- If the caller sounds worried, upset, angry or confused, acknowledge the feeling sincerely in a few words of your own before helping. Don't over-apologise, and never argue."
+            . "\n- Remember everything said earlier in this call. Never ask for something the caller already told you; refer back to it naturally."
+            . "\n- Talk the way people talk: everyday words, short sentences, a warm tone. Vary how you begin and phrase things — never the same opener or stock phrase reply after reply (\"Great question\", \"I understand\", \"Ji bilkul\"); often just answer directly."
+            . "\n- After answering, when it is useful, offer one natural next step or follow-up question (place the order, check another item, send the details) — never a string of questions."
+            . "\n- Be culturally natural: in Urdu use the respectful aap form and everyday expressions a Pakistani agent would (ji, bilkul, shukriya, InshaAllah for plans). To ask someone to wait, say \"aik second\" — never \"ek lamha\", which nobody says on the phone. In every language be as polite as a good local call-centre agent."
+            . "\n- Don't announce that you are checking or looking something up — the caller has already heard that; just give the answer."
+            . "\n- When the caller has nothing more — they thank you and say goodbye, or answer \"no, that's all\" to \"anything else?\" — reply with a short, warm goodbye in their language and end your reply with " . self::END_CALL . '. Never write ' . self::END_CALL . ' at any other time.';
+
+        // Last, so it overrides the general "mirror the user's language" rule.
+        $parts[] = $this->callLanguageRule((array) data_get($session->metadata, 'call', []), $session);
+
+        return implode("\n\n", $parts);
+    }
+
+    /**
+     * The agent's call language (BotAgent::callSettings, copied onto the
+     * call by CallSessionService) as a hard rule for the model.
+     */
+    private function callLanguageRule(array $call, Session $session): string
+    {
+        $language = $call['language'] ?? 'en';
+        $auto     = (bool) ($call['auto_detect'] ?? true);
+        $name     = BotAgent::callLanguageName($language);
+
+        // Urdu replies in the script the agent is set to; any other agent
+        // that auto-detects answers Urdu callers in Roman Urdu.
+        $urdu = $language === 'ur'
+            ? 'Urdu written in Urdu script (اردو)'
+            : 'Roman Urdu — Urdu written in Latin letters the way Pakistanis text, e.g. "Aap ka order kal tak pohanch jayega" — never Urdu script';
+        $natural = ' Use natural, polite, everyday Pakistani Urdu; words people normally say in English (order, delivery, account, invoice) may stay in English.';
+        $isUrdu  = in_array($language, ['ur', 'roman'], true);
+
+        if ($auto) {
+            $rule = 'LANGUAGE ON THIS CALL: reply in the language the caller is speaking. If they speak English, reply in English. '
+                . 'If they speak Urdu, or mix Urdu and English, reply in ' . $urdu . '. If they speak another language, reply in that language. '
+                . 'Switch whenever the caller switches.' . $natural;
+            if (! $isUrdu && $language !== 'en') {
+                $rule .= ' If you cannot tell which language they are speaking, use ' . $name . '.';
+            }
+        } elseif ($language === 'en') {
+            return 'LANGUAGE ON THIS CALL: speak English only, whatever language the caller uses.';
+        } elseif ($isUrdu) {
+            $rule = 'LANGUAGE ON THIS CALL: speak only ' . $urdu . ', whatever language the caller uses.' . $natural;
+        } else {
+            $rule = 'LANGUAGE ON THIS CALL: speak only ' . $name . ', whatever language the caller uses. '
+                . 'Use natural, polite, everyday ' . $name . ', the way a native speaker talks on the phone, in its usual script.';
+        }
+
+        // Verbs and adjectives agree with the speaker in many languages — a
+        // female voice says "main karti hoon" in Urdu.
+        if ($gender = $this->voiceGender($session)) {
+            $rule .= $gender === 'female'
+                ? ' Your voice is a woman\'s: wherever the language marks gender, use feminine first-person forms (Urdu: main karti hoon, main bata sakti hoon).'
+                : ' Your voice is a man\'s: wherever the language marks gender, use masculine first-person forms (Urdu: main karta hoon, main bata sakta hoon).';
+        }
+
+        return $rule;
+    }
+
+    /** Gender of the call's Google voice, when it has one. */
+    public function voiceGender(Session $session): ?string
+    {
+        try {
+            $choice = app(\App\Services\Voice\VoiceResolver::class)->forSession($session);
+        } catch (\Throwable $e) {
+            return null; // no tenant DB in reach (tests) — the rule works without it
+        }
+
+        return $choice->isGoogle()
+            ? config('services.voice.google_voices.' . $choice->googleVoice . '.gender')
+            : null;
     }
 
     /**

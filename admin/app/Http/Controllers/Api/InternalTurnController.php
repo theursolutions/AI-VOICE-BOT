@@ -49,11 +49,18 @@ class InternalTurnController extends Controller
         $toolPicker = app(ToolPicker::class);
         $memory     = app(MemoryBuilder::class);
 
+        // The LATEST 20 messages, oldest first. `orderBy(...)->limit(20)` gave
+        // the FIRST 20, so once a call ran past them the tool picker never
+        // saw what was just said. Same window shape as MemoryBuilder::build.
         $history = Message::where('session_id', $session->id)
-            ->orderBy('created_at')
+            ->whereIn('role', ['user', 'assistant'])
+            ->whereNotNull('content')
+            ->orderByDesc('id')
             ->limit(20)
             ->get(['role', 'content'])
-            ->map(fn ($m) => ['role' => $m->role, 'content' => (string) ($m->content ?? '')])
+            ->reverse()
+            ->map(fn ($m) => ['role' => $m->role, 'content' => (string) $m->content])
+            ->values()
             ->all();
 
         // Capability gate: restrict tool use to the actions granted by the
@@ -65,13 +72,24 @@ class InternalTurnController extends Controller
         // tools the owner opted in are consulted (see customer_visible).
         $customerFacing = $session->isCustomerFacing();
 
+        // A call whose number names a transfer target (PBX extension, queue)
+        // can always reach a person, so the handoff option is offered.
+        $canTransfer = (string) data_get($session->metadata, 'routing.transfer_to', '') !== '';
+
         $webhookDecision = $toolPicker->pick(
             $session->project_id,
             $history,
             $data['user_text'],
             $toolGate,
             $customerFacing,
+            $canTransfer,
         );
+
+        // The caller asked for a person: the voice engine says so and moves
+        // the call. No data lookup is needed for that turn.
+        if ($canTransfer && ($webhookDecision['tool_id'] ?? null) === ToolPicker::HANDOFF) {
+            return response()->json(['context' => '', 'sources' => [], 'handoff' => true]);
+        }
 
         $resolverContext = ['tool_gate' => $toolGate, 'customer_facing' => $customerFacing];
         if ($webhookDecision) {
@@ -96,10 +114,54 @@ class InternalTurnController extends Controller
 
         return response()->json([
             'context' => $context,
+            'handoff' => false,
             'sources' => array_map(
                 fn ($r) => ['source_id' => $r->sourceId, 'type' => $r->sourceType, 'kind' => $r->kind],
                 $results,
             ),
+        ]);
+    }
+
+    /**
+     * POST /api/internal/call-profile
+     *
+     * Called by the voice engine when a phone/SIP call starts, and again
+     * after each turn: the agent's persona, the business profile, what we
+     * already know about the caller and the spoken-reply rules, as one
+     * system prompt. Without it a call is answered by a generic assistant.
+     */
+    public function callProfile(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'project_id' => 'required|integer',
+            'session_id' => 'required|integer',
+        ]);
+
+        $this->tenants->useForProjectId($data['project_id']);
+
+        $session = Session::find($data['session_id']);
+        if (! $session) {
+            return response()->json(['system_prompt' => ''], 404);
+        }
+
+        // The agent's call language, for listening and the agent's own lines
+        // ("let me check", "anything else?", goodbyes).
+        $call     = (array) data_get($session->metadata, 'call', []);
+        $language = $call['language'] ?? 'en';
+        $memory   = app(MemoryBuilder::class);
+
+        return response()->json([
+            'system_prompt' => $memory->voicePrompt($session),
+            'stt_language'  => \App\Models\BotAgent::sttLanguage($call),
+            'language'      => $language,
+            'urdu_script'   => $language === 'ur' ? 'urdu' : 'roman',
+            // Urdu, Hindi, Arabic … verbs agree with the speaker.
+            'voice_gender'  => $memory->voiceGender($session),
+            // Words to listen for: the business name plus the agent's list.
+            'stt_hints'     => implode(', ', array_filter([
+                optional($session->project)->name,
+                $call['vocabulary'] ?? null,
+            ])),
         ]);
     }
 
@@ -147,6 +209,9 @@ class InternalTurnController extends Controller
         $data = $request->validate([
             'project_id' => 'required|integer',
             'session_id' => 'required|integer',
+            // Sent only by providers with no billing webhook of their own
+            // (Asterisk). Twilio calls are metered by its status callback.
+            'call_seconds' => 'nullable|integer|min:0',
         ]);
 
         $this->tenants->useForProjectId($data['project_id']);
@@ -160,6 +225,19 @@ class InternalTurnController extends Controller
             $session->ended_at = time();
             $session->update_at = time();
             $session->save();
+
+            // Metered inside the active→ended flip, so a repeated callback
+            // can never bill the same call twice.
+            if (! empty($data['call_seconds'])) {
+                app(\App\Services\Billing\UsageRecorder::class)
+                    ->callCompleted((int) $session->project_id, (int) $data['call_seconds']);
+            }
+
+            // A website "Call us" call: its one-call account is done.
+            \App\Models\WebCallSession::where('session_id', $session->id)
+                ->where('project_id', $session->project_id)
+                ->whereNull('ended_at')
+                ->update(['status' => \App\Models\WebCallSession::ENDED, 'ended_at' => now()]);
         }
 
         return response()->json(['ok' => true, 'session_id' => $session->id, 'status' => $session->status]);

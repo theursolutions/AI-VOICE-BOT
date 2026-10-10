@@ -1,0 +1,177 @@
+<!doctype html>
+<!--
+  Phase 0 WebRTC lab phone. Served by Asterisk itself:
+    http://localhost:8088/static/webrtc-lab.html
+  Registers as extension 1002 over SIP-over-WebSocket and makes/answers calls.
+  Lab only — the production agent softphone lives in the admin panel (Phase 3).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WebRTC Lab Phone</title>
+<script src="https://cdn.jsdelivr.net/npm/jssip@3.12.0/dist/jssip.min.js"></script>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --ink:#1d2330; --muted:#677084; --line:#dde1e8;
+          --ok:#1f8a4c; --bad:#c2372f; --accent:#2f5bd3; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:520px; margin:32px auto; padding:0 16px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  input { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:7px; font:inherit; }
+  .row { display:flex; gap:8px; margin-top:12px; }
+  button { flex:1; padding:10px; border:0; border-radius:7px; font:inherit; font-weight:600;
+           background:var(--accent); color:#fff; cursor:pointer; }
+  button.ok { background:var(--ok); } button.bad { background:var(--bad); }
+  button:disabled { opacity:.4; cursor:default; }
+  #status { font-weight:600; }
+  #status.ok { color:var(--ok); } #status.bad { color:var(--bad); }
+  #log { font:12px/1.5 ui-monospace, monospace; color:var(--muted); max-height:220px; overflow:auto; white-space:pre-wrap; }
+</style>
+</head>
+<body>
+<main>
+  <h1>WebRTC Lab Phone</h1>
+  <p class="sub">Dial 600 for the echo test, 1001 for MicroSIP, 1122 for the ARI app.</p>
+
+  <div class="card">
+    <label for="ws">WebSocket URL</label>
+    <input id="ws">
+    <label for="user">Extension</label>
+    <input id="user" value="1002">
+    <label for="pass">Password (from the install output)</label>
+    <input id="pass" type="password">
+    <div class="row">
+      <button id="btnReg">Register</button>
+      <button id="btnUnreg" class="bad" disabled>Unregister</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div>Status: <span id="status">Not registered</span></div>
+    <label for="target">Number</label>
+    <input id="target" value="600">
+    <div class="row">
+      <button id="btnCall" class="ok" disabled>Call</button>
+      <button id="btnAnswer" class="ok" disabled>Answer</button>
+      <button id="btnHang" class="bad" disabled>Hang up</button>
+    </div>
+  </div>
+
+  <div class="card"><div id="log"></div></div>
+  <audio id="remote" autoplay></audio>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const host = location.hostname;
+  $('ws').value = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+
+  let ua = null;
+  let session = null;
+
+  function log(msg) {
+    $('log').textContent = new Date().toLocaleTimeString() + '  ' + msg + '\n' + $('log').textContent;
+  }
+  function setStatus(text, cls) {
+    $('status').textContent = text;
+    $('status').className = cls || '';
+  }
+  function refreshButtons() {
+    const registered = !!ua && ua.isRegistered();
+    const ringingIn = !!session && session.direction === 'incoming' && !session.isEstablished() && !session.isEnded();
+    $('btnReg').disabled = !!ua;
+    $('btnUnreg').disabled = !ua;
+    $('btnCall').disabled = !registered || !!session;
+    $('btnAnswer').disabled = !ringingIn;
+    $('btnHang').disabled = !session;
+  }
+
+  // Play the far end's audio, whichever way the peer connection appears.
+  // Also report the audio path: "media: connected" means audio flows; a call
+  // that is "connected" in SIP but never reaches "media: connected" is an
+  // ICE/DTLS problem, not a SIP one.
+  function attachAudio(pc) {
+    if (!pc || pc._audioAttached) return;
+    pc._audioAttached = true;
+    pc.addEventListener('track', (e) => {
+      $('remote').srcObject = e.streams[0];
+      log('receiving audio track');
+    });
+    pc.addEventListener('iceconnectionstatechange', () => log('media: ' + pc.iceConnectionState));
+    pc.addEventListener('connectionstatechange', () => {
+      if (pc.connectionState === 'failed') log('media FAILED — audio path could not be set up');
+    });
+  }
+
+  function trackSession(s) {
+    session = s;
+    attachAudio(s.connection);
+    s.on('peerconnection', (e) => attachAudio(e.peerconnection));
+    s.on('progress', () => { setStatus('Ringing…'); log('ringing'); });
+    s.on('confirmed', () => { setStatus('In call', 'ok'); log('call connected'); refreshButtons(); });
+    const done = (why) => (e) => {
+      log(why + (e && e.cause ? ': ' + e.cause : ''));
+      session = null;
+      setStatus(ua && ua.isRegistered() ? 'Registered' : 'Not registered', ua && ua.isRegistered() ? 'ok' : '');
+      refreshButtons();
+    };
+    s.on('ended', done('call ended'));
+    s.on('failed', done('call failed'));
+    refreshButtons();
+  }
+
+  const callOptions = {
+    mediaConstraints: { audio: true, video: false },
+    pcConfig: { iceServers: [] }, // same machine / LAN: host candidates are enough
+  };
+
+  $('btnReg').onclick = () => {
+    JsSIP.debug.disable('JsSIP:*');
+    const socket = new JsSIP.WebSocketInterface($('ws').value.trim());
+    ua = new JsSIP.UA({
+      sockets: [socket],
+      uri: 'sip:' + $('user').value.trim() + '@' + host,
+      password: $('pass').value,
+      register: true,
+      session_timers: false,
+    });
+    ua.on('connected', () => log('websocket connected'));
+    ua.on('disconnected', () => { log('websocket disconnected'); setStatus('Disconnected', 'bad'); });
+    ua.on('registered', () => { log('registered'); setStatus('Registered', 'ok'); refreshButtons(); });
+    ua.on('unregistered', () => { log('unregistered'); setStatus('Not registered'); refreshButtons(); });
+    ua.on('registrationFailed', (e) => { log('registration failed: ' + e.cause); setStatus('Registration failed', 'bad'); refreshButtons(); });
+    ua.on('newRTCSession', (e) => {
+      if (session) { e.session.terminate({ status_code: 486 }); return; } // busy
+      if (e.originator === 'remote') {
+        log('incoming call from ' + e.request.from.uri.user);
+        setStatus('Incoming call: ' + e.request.from.uri.user, 'ok');
+      }
+      trackSession(e.session);
+    });
+    ua.start();
+    refreshButtons();
+  };
+
+  $('btnUnreg').onclick = () => {
+    if (session) session.terminate();
+    ua.stop();
+    ua = null;
+    setStatus('Not registered');
+    refreshButtons();
+  };
+
+  $('btnCall').onclick = () => {
+    const target = $('target').value.trim();
+    log('calling ' + target);
+    ua.call('sip:' + target + '@' + host, callOptions);
+  };
+
+  $('btnAnswer').onclick = () => session && session.answer(callOptions);
+  $('btnHang').onclick = () => session && session.terminate();
+</script>
+</body>
+</html>

@@ -10,6 +10,7 @@ use App\Models\Flow;
 use App\Models\Project;
 use App\Models\ProjectTwilioAccount;
 use App\Models\Skill;
+use App\Services\Telephony\TelephonyNumbers;
 use App\Services\Telephony\WelcomeAudioService;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Http\RedirectResponse;
@@ -25,12 +26,14 @@ use Illuminate\View\View;
  *   {
  *     "numbers": [
  *       {
- *         "phone_number":  "+12346352160",
+ *         "phone_number":  "+12346352160",      // or "1122" for Asterisk
+ *         "provider":      "twilio" | "asterisk",
  *         "enabled":       true,
  *         "welcome_voice": "Polly.Matthew",     // Polly fallback
  *         "routing_type":  "agents" | "skill",
  *         "agent_ids":     [1, 3],              // used when routing_type=agents
- *         "skill_id":      5                    // used when routing_type=skill
+ *         "skill_id":      5,                   // used when routing_type=skill
+ *         "transfer_to":   "1000"               // Asterisk: "talk to a person" target
  *       },
  *       ...
  *     ]
@@ -250,14 +253,29 @@ class TelephonyWebController extends Controller
             'agent_ids.*'   => 'integer',
             'skill_id'      => 'nullable|integer',
             'flow_id'       => 'nullable|integer',
+            'provider'      => 'nullable|in:twilio,asterisk',
+            'transfer_to'   => ['nullable', 'string', 'max:32', 'regex:/^[0-9*#+]+$/'],
         ]);
 
         $project = $this->guard($client, (int) $data['project_id']);
 
-        // Normalise phone number to E.164-ish.
-        $number = preg_replace('/\s+/', '', $data['phone_number']);
-        if (!str_starts_with($number, '+')) {
-            $number = '+' . ltrim($number, '0');
+        // Twilio numbers are stored E.164; Asterisk numbers and extensions
+        // exactly as Asterisk dials them ("1122" must not become "+1122").
+        $provider = $data['provider'] ?? TelephonyNumbers::TWILIO;
+        $number   = TelephonyNumbers::normalize($data['phone_number'], $provider);
+
+        if ($provider === TelephonyNumbers::ASTERISK) {
+            if (! preg_match('/^[0-9*#+]+$/', $number)) {
+                return back()->withErrors([
+                    'phone_number' => 'An Asterisk number or extension may only contain digits, +, * and #.',
+                ])->withInput();
+            }
+            // FlowRunner speaks TwiML, which only Twilio understands.
+            if ($data['routing_type'] === 'flow') {
+                return back()->withErrors([
+                    'routing_type' => 'Conversation Flows run on Twilio numbers only. Route this number to agents or a skill.',
+                ])->withInput();
+            }
         }
 
         $json = is_array($project->json_data) ? $project->json_data : [];
@@ -270,7 +288,9 @@ class TelephonyWebController extends Controller
                 $sameProj = ($otherP->id === $project->id);
                 $sameIdx  = ($data['number_index'] !== '__new__' && (int) $data['number_index'] === $idx);
                 if ($sameProj && $sameIdx) continue;
-                if (($n['phone_number'] ?? '') === $number) {
+                // Per provider: Asterisk extension 1122 and a Twilio number
+                // never collide; the same number twice on one provider does.
+                if (($n['phone_number'] ?? '') === $number && TelephonyNumbers::providerOf($n) === $provider) {
                     return back()->withErrors([
                         'phone_number' => "Number {$number} is already assigned to {$otherP->name}.",
                     ])->withInput();
@@ -286,6 +306,10 @@ class TelephonyWebController extends Controller
             'agent_ids'     => array_values($data['agent_ids'] ?? []),
             'skill_id'      => $data['routing_type'] === 'skill' ? (int) ($data['skill_id'] ?? 0) ?: null : null,
             'flow_id'       => $data['routing_type'] === 'flow'  ? (int) ($data['flow_id']  ?? 0) ?: null : null,
+            'provider'      => $provider,
+            // Transfers ride Asterisk (the dialplan's ai-transfer context);
+            // Twilio numbers have no transfer path yet.
+            'transfer_to'   => $provider === TelephonyNumbers::ASTERISK ? (($data['transfer_to'] ?? null) ?: null) : null,
         ];
 
         if ($data['number_index'] === '__new__') {

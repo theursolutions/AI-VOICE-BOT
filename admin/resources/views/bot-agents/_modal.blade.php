@@ -54,26 +54,52 @@
                 <div class="mb-3">
                     <label class="form-label">Voice</label>
                     @php
-                        $currentVoiceId = old('voice_id', $agent->voice_id ?? null);
-                        $notReady = $voices->filter(fn ($v) => $v->status !== 'ready');
+                        // One choice: the project's response voice, one of its own
+                        // cloned voices ("voice:<id>"), or a Google voice
+                        // ("google:<name>"). Not named *_id — DecodeHashids would
+                        // coerce "google:Kore" to an int.
+                        $agentVoice    = ($agent->voice_id ?? null) ? $voices->firstWhere('id', $agent->voice_id) : null;
+                        $savedChoice   = $agentVoice
+                            ? ($agentVoice->isGoogle() ? 'google:' . $agentVoice->external_id : 'voice:' . $agentVoice->id)
+                            : '';
+                        $currentChoice = old('voice_choice', $savedChoice);
+                        $ownVoices     = $voices->reject(fn ($v) => $v->isGoogle());
+                        $googleVoices  = (array) config('services.voice.google_voices', []);
+                        $notReady      = $ownVoices->filter(fn ($v) => $v->status !== 'ready');
                     @endphp
-                    <select name="voice_id" class="form-select">
-                        <option value="">— project default —</option>
-                        @foreach ($voices as $v)
-                            @php
-                                $usable = $v->status === 'ready' && !empty($v->reference_url);
-                                $isCurrent = (string) $currentVoiceId === (string) $v->id;
-                            @endphp
-                            {{-- Never disable the option that's already saved: a disabled
-                                 <option> isn't submitted, so doing so would silently clear
-                                 the agent's voice the next time anyone saved this form. --}}
-                            <option value="{{ $v->id }}"
-                                    @selected($isCurrent)
-                                    @disabled(!$usable && !$isCurrent)>
-                                {{ $v->name }} ({{ $v->language }})@unless ($usable) — {{ $v->status }}, not usable yet @endunless
-                            </option>
+                    <select name="voice_choice" class="form-select">
+                        <option value="">— project's response voice (Voices page) —</option>
+                        @if ($ownVoices->isNotEmpty())
+                            <optgroup label="Your voices (cloned)">
+                                @foreach ($ownVoices as $v)
+                                    @php
+                                        $usable = $v->isUsable();
+                                        $isCurrent = $currentChoice === 'voice:' . $v->id;
+                                    @endphp
+                                    {{-- Never disable the option that's already saved: a disabled
+                                         <option> isn't submitted, so doing so would silently clear
+                                         the agent's voice the next time anyone saved this form. --}}
+                                    <option value="voice:{{ $v->id }}"
+                                            @selected($isCurrent)
+                                            @disabled(!$usable && !$isCurrent)>
+                                        {{ $v->name }} ({{ $v->language }})@unless ($usable) — {{ $v->status }}, not usable yet @endunless
+                                    </option>
+                                @endforeach
+                            </optgroup>
+                        @endif
+                        @foreach (['female' => 'Google voices — female', 'male' => 'Google voices — male'] as $gender => $groupLabel)
+                            <optgroup label="{{ $groupLabel }}">
+                                @foreach ($googleVoices as $name => $gv)
+                                    @continue($gv['gender'] !== $gender)
+                                    <option value="google:{{ $name }}" @selected($currentChoice === 'google:' . $name)>{{ $name }} — {{ $gv['style'] }}</option>
+                                @endforeach
+                            </optgroup>
                         @endforeach
                     </select>
+                    <small class="text-slate-500 text-xs mt-1 block">
+                        Hear the Google voices on the
+                        <a href="{{ route('voices.index', ['client' => $client->slug]) }}?project_id={{ hashid($projectId) }}" class="text-primary">Voices</a> page.
+                    </small>
                     @if ($notReady->isNotEmpty())
                         <small class="text-xs mt-1 block" style="color:#b45309;">
                             <i data-lucide="alert-triangle" class="w-3 h-3 inline -mt-0.5"></i>
@@ -90,6 +116,53 @@
                     <textarea name="persona" rows="5" maxlength="4000" class="form-control"
                               placeholder="You handle billing questions. Be empathetic and concise.">{{ old('persona', $agent->persona ?? '') }}</textarea>
                     <small class="text-slate-500 text-xs">Injected into the LLM as a system message so the bot stays in this character.</small>
+                </div>
+
+                {{-- How the agent talks on phone calls --}}
+                @php
+                    $call = $agent ? $agent->callSettings() : ['language' => 'en', 'auto_detect' => true, 'greeting' => null, 'vocabulary' => null];
+                    $callLang = old('call_language', $call['language']);
+                @endphp
+                <div class="mb-3 p-3 rounded-lg" style="border:1px solid rgba(100,116,139,.25)">
+                    <div class="form-label mb-2" style="font-weight:600">On calls</div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="form-label">Speaks</label>
+                            <select name="call_language" class="form-select">
+                                @foreach (\App\Models\BotAgent::CALL_LANGUAGE_GROUPS as $group => $codes)
+                                    <optgroup label="{{ $group }}">
+                                        @foreach ($codes as $code)
+                                            <option value="{{ $code }}" @selected($callLang === $code)>{{ \App\Models\BotAgent::CALL_LANGUAGES[$code] }}</option>
+                                        @endforeach
+                                    </optgroup>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="flex items-end pb-2">
+                            <label class="flex items-start gap-2 text-sm cursor-pointer">
+                                <input type="hidden" name="call_auto_detect" value="0">
+                                <input type="checkbox" name="call_auto_detect" value="1" class="mt-0.5"
+                                       @checked(old('call_auto_detect', $call['auto_detect']))>
+                                <span>Auto-detect the caller's language and reply in it</span>
+                            </label>
+                        </div>
+                    </div>
+                    <small class="text-slate-500 text-xs block mt-1">
+                        With auto-detect on, each caller is answered in the language they speak — an Urdu caller in
+                        Urdu (in the script chosen above when that's Urdu or Roman Urdu); the language above is used
+                        when it's unclear. Every language here needs a Google voice except English, Spanish, French,
+                        German, Italian, Portuguese, Polish, Turkish, Russian, Dutch, Czech, Arabic, Chinese, Japanese,
+                        Hungarian, Korean and Hindi, which cloned voices can also speak.
+                    </small>
+                    <label class="form-label mt-3">Greeting <span class="text-slate-400 font-normal">(optional)</span></label>
+                    <input type="text" name="call_greeting" maxlength="300" class="form-control"
+                           value="{{ old('call_greeting', $call['greeting']) }}"
+                           placeholder="Leave empty for a greeting in the agent's language">
+                    <label class="form-label mt-3">Words to listen for <span class="text-slate-400 font-normal">(optional)</span></label>
+                    <input type="text" name="call_vocabulary" maxlength="500" class="form-control"
+                           value="{{ old('call_vocabulary', $call['vocabulary']) }}"
+                           placeholder="e.g. Lahore, Karachi, Umer Foods, Super Biscuit">
+                    <small class="text-slate-500 text-xs">Names, products and places callers mention — helps the AI hear them right.</small>
                 </div>
             </div>
 

@@ -209,6 +209,8 @@
                 Twilio phone numbers per project. Each number routes calls to a pool of agents or a whole skill.
             </div>
         </div>
+        <a href="{{ route('telephony.extensions', ['client' => $client]) }}" class="btn btn-sm" style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3);">☎️ Extensions</a>
+        <a href="{{ route('telephony.web-call', ['client' => $client]) }}" class="btn btn-sm" style="background:rgba(255,255,255,.15); color:#fff; border-color:rgba(255,255,255,.3);">🌐 Website call button</a>
     </div>
 
     @if (session('success'))
@@ -454,7 +456,11 @@
                                     AGENTS · {{ empty($names) ? 'unset' : implode(', ', $names) }}
                                 </span>
                             @endif
-                            <span class="tva-num-tile__chip">Polly · {{ $n['welcome_voice'] ?? 'Matthew' }}</span>
+                            @if (($n['provider'] ?? 'twilio') === 'asterisk')
+                                <span class="tva-num-tile__chip">ASTERISK{{ !empty($n['transfer_to']) ? ' · transfers to ' . $n['transfer_to'] : '' }}</span>
+                            @else
+                                <span class="tva-num-tile__chip">Polly · {{ $n['welcome_voice'] ?? 'Matthew' }}</span>
+                            @endif
                         </div>
                     </div>
                     <div class="flex items-center gap-1">

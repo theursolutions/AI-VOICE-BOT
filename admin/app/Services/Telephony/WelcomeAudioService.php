@@ -4,6 +4,8 @@ namespace App\Services\Telephony;
 
 use App\Models\Project;
 use App\Models\Voice;
+use App\Services\Voice\VoiceChoice;
+use App\Services\Voice\VoiceResolver;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -21,6 +23,8 @@ use Illuminate\Support\Facades\Log;
  */
 class WelcomeAudioService
 {
+    public function __construct(private VoiceResolver $voices) {}
+
     /**
      * Return a public HTTPS URL Twilio can <Play>, or null if we can't
      * generate one (no voice configured, Python down, etc.). Callers
@@ -34,25 +38,34 @@ class WelcomeAudioService
      */
     public function urlFor(Project $project, string $welcomeText, ?Voice $voice = null, int $timeoutSecs = 60): ?string
     {
-        $voice = $voice ?: $this->resolveDefaultVoice($project);
-        if (!$voice || empty($voice->reference_url)) {
-            Log::info('WelcomeAudioService: no voice for project, falling back to Say', [
-                'project_id' => $project->id,
-            ]);
-            return null;
+        // The same voice the rest of the call uses: the routed agent's, else
+        // the project's choice, else the default Google voice.
+        $choice = $voice && $voice->isUsable()
+            ? VoiceChoice::fromVoice($voice)
+            : $this->voices->forProject($project);
+
+        if ($choice->isGoogle()) {
+            $voiceKey = 'google:' . $choice->googleVoice;
+        } else {
+            $speakerPath = $choice->speakerWav();
+            if (! $speakerPath) {
+                Log::info('WelcomeAudioService: no voice for project, falling back to Say', [
+                    'project_id' => $project->id,
+                ]);
+                return null;
+            }
+            if (! is_file($speakerPath)) {
+                Log::warning('WelcomeAudioService: speaker_wav not found on disk', [
+                    'project_id' => $project->id, 'path' => $speakerPath,
+                ]);
+                return null;
+            }
+            $voiceKey = $speakerPath;
         }
 
-        $speakerPath = $voice->reference_url;
-        if (!is_file($speakerPath)) {
-            Log::warning('WelcomeAudioService: speaker_wav not found on disk', [
-                'project_id' => $project->id, 'path' => $speakerPath,
-            ]);
-            return null;
-        }
-
-        // Cache filename embeds a hash of (text + speaker path) so
-        // changing the welcome message OR the voice forces regen.
-        $cacheKey = sha1($welcomeText . '|' . $speakerPath);
+        // Cache filename embeds a hash of (text + voice) so changing the
+        // welcome message OR the voice forces regen.
+        $cacheKey = sha1($welcomeText . '|' . $voiceKey);
         $filename = "project_{$project->id}_{$cacheKey}.wav";
 
         $welcomesDir = $this->welcomesDir();
@@ -67,7 +80,7 @@ class WelcomeAudioService
         }
 
         // Cache miss — synthesize via Python's /tts endpoint.
-        $ok = $this->synthesizeViaPython($welcomeText, $speakerPath, $absPath, $voice->language ?? 'en', $timeoutSecs);
+        $ok = $this->synthesizeViaPython($welcomeText, $choice, $absPath, $choice->language ?? 'en', $timeoutSecs);
         if (!$ok || !is_file($absPath)) {
             return null;
         }
@@ -92,19 +105,6 @@ class WelcomeAudioService
         return $deleted;
     }
 
-    private function resolveDefaultVoice(Project $project): ?Voice
-    {
-        $voices = Voice::where('project_id', $project->id)
-            ->where('status', 'ready')
-            ->orderByDesc('id')
-            ->get();
-        foreach ($voices as $v) {
-            $meta = $v->metadata ?? [];
-            if (!empty($meta['is_default'])) return $v;
-        }
-        return $voices->first();
-    }
-
     /**
      * POST the text + speaker file to Python's /tts endpoint and save
      * the returned wav to $outPath. Returns true on success.
@@ -114,24 +114,27 @@ class WelcomeAudioService
      * later if this becomes a perf concern; for now the upload is fine
      * (it only runs once per (text, voice) combo).
      */
-    private function synthesizeViaPython(string $text, string $speakerPath, string $outPath, string $language, int $timeoutSecs = 60): bool
+    private function synthesizeViaPython(string $text, VoiceChoice $choice, string $outPath, string $language, int $timeoutSecs = 60): bool
     {
         $base = rtrim((string) config('services.python.base_url'), '/');
         $url  = $base . '/tts';
 
+        $fields = ['text' => $text, 'language' => $language];
+        if ($choice->isGoogle()) {
+            $fields += ['provider' => 'google', 'voice' => $choice->googleVoice];
+        } else {
+            $speakerPath = (string) $choice->speakerWav();
+            $fields['speaker_wav'] = new \CURLFile($speakerPath, 'audio/wav', basename($speakerPath));
+        }
+
         $ch = curl_init($url);
-        $cfile = new \CURLFile($speakerPath, 'audio/wav', basename($speakerPath));
         curl_setopt_array($ch, [
             CURLOPT_POST           => true,
             // Caller decides: the welcome can afford to wait (it's generated
             // once), an in-flow prompt cannot — Twilio abandons a slow webhook.
             CURLOPT_TIMEOUT        => $timeoutSecs,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POSTFIELDS     => [
-                'text'        => $text,
-                'language'    => $language,
-                'speaker_wav' => $cfile,
-            ],
+            CURLOPT_POSTFIELDS     => $fields,
         ]);
         $body = curl_exec($ch);
         $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);

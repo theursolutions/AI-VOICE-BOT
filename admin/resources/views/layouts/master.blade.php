@@ -38,5 +38,7 @@
         </div>
         @include('layouts.nav-collapse')
         @include('layouts.footer')
+        {{-- The phone rings on every page — after the footer so lucide is loaded. --}}
+        @include('partials.softphone')
     </body>
 </html>

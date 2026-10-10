@@ -12,13 +12,24 @@
         </div>
 
         <div class="tva-modal__body">
+            @php $provider = old('provider', $number['provider'] ?? 'twilio'); @endphp
+            <div class="mb-3">
+                <label class="form-label">Connected through</label>
+                <select name="provider" class="form-select">
+                    <option value="twilio" @selected($provider === 'twilio')>Twilio number</option>
+                    <option value="asterisk" @selected($provider === 'asterisk')>Asterisk — SIP trunk, office PBX or browser (WebRTC)</option>
+                </select>
+            </div>
             <div class="grid grid-cols-2 gap-3 mb-3">
                 <div>
-                    <label class="form-label">Twilio number <span class="text-danger">*</span></label>
+                    <label class="form-label">Number or extension <span class="text-danger">*</span></label>
                     <input type="text" name="phone_number" required maxlength="32" class="form-control"
                            value="{{ old('phone_number', $number['phone_number'] ?? '') }}"
-                           placeholder="+12346352160">
-                    <small class="text-slate-500 text-xs">E.164 format. Leading <code>+</code> auto-added.</small>
+                           placeholder="+12346352160 or 1122">
+                    <small class="text-slate-500 text-xs">
+                        Twilio: E.164, leading <code>+</code> auto-added.
+                        Asterisk: exactly as Asterisk dials it, e.g. <code>1122</code> or <code>0424432233</code>.
+                    </small>
                 </div>
                 <div>
                     <label class="form-label">Polly fallback voice</label>
@@ -47,6 +58,16 @@
                 <input type="checkbox" name="enabled" value="1" @checked(($number['enabled'] ?? true))>
                 <span class="text-sm">Number is active — accept incoming calls</span>
             </label>
+
+            <div class="mb-4">
+                <label class="form-label">Transfer to a person (Asterisk only)</label>
+                <input type="text" name="transfer_to" maxlength="32" class="form-control" style="max-width:220px;"
+                       value="{{ old('transfer_to', $number['transfer_to'] ?? '') }}" placeholder="1000">
+                <small class="text-slate-500 text-xs">
+                    Extension or queue the AI sends callers to when they ask for a person.
+                    Leave empty and the AI never transfers.
+                </small>
+            </div>
 
             {{-- Routing tabs --}}
             @php $routingType = $number['routing_type'] ?? 'agents'; @endphp
