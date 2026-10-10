@@ -178,7 +178,7 @@
             <div class="cp-card__sub">
                 Prices shown in <strong>{{ $countryCurrency }}</strong>.
                 @if ($guessed)
-                    We guessed this from your connection — change it if it's wrong.
+                    We guessed this from your connection. Change it if it's wrong.
                 @endif
             </div>
         </div>

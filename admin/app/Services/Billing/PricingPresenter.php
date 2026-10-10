@@ -317,11 +317,25 @@ class PricingPresenter
 
             $groups[$feature->group ?: 'Included'][] = [
                 'label' => $label,
-                'note'  => $feature->description,
+                'note'  => self::publicNote($feature->description),
             ];
         }
 
         return $groups;
+    }
+
+    /**
+     * A feature's description as a hover note for buyers — or none.
+     *
+     * Descriptions double as notes for the team in Ops ("Gate #1. Off on Free —
+     * this single line is the biggest protector of gross margin."), and those
+     * were shown to the public on the pricing page. Team notes start "Gate #".
+     */
+    public static function publicNote(?string $description): ?string
+    {
+        $description = trim((string) $description);
+
+        return $description === '' || str_starts_with($description, 'Gate #') ? null : $description;
     }
 
     /**
@@ -510,9 +524,9 @@ class PricingPresenter
             $value = $this->features->displayValue($feature, $entry);
 
             // A boolean that resolves to "not included" is simply left off
-            // the card rather than listed with a dash — a card of crossed-out
+            // the card rather than listed with a cross — a card of crossed-out
             // features sells nothing.
-            if ($value === '—') {
+            if ($value === PlanFeatureService::NOT_INCLUDED) {
                 continue;
             }
 

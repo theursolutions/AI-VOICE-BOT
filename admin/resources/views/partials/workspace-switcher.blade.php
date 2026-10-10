@@ -45,7 +45,7 @@
         <button type="button"
                 onclick="document.getElementById('workspace-switcher-menu').classList.toggle('hidden')"
                 class="tva-ws-pill"
-                title="Switch workspace — {{ $current->name }}">
+                title="Switch workspace: {{ $current->name }}">
             <span>{{ $current->name }}</span>
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                 <path fill-rule="evenodd"

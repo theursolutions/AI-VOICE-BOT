@@ -147,7 +147,7 @@ class BillingSeeder extends Seeder
              'type' => 'numeric', 'unit' => 'days', 'headline' => false, 'sort' => 100],
 
             // ── Always included (Bucket 1) ───────────────────────────
-            ['key' => 'voice_cloning', 'name' => 'Voices — 30 stock voices + voice cloning', 'group' => 'Included on every plan',
+            ['key' => 'voice_cloning', 'name' => 'Voices: 30 stock voices + voice cloning', 'group' => 'Included on every plan',
              'type' => 'boolean', 'module' => 'voices', 'headline' => true, 'sort' => 200,
              'desc' => 'Clone a voice from a 10-second sample. Competitors do not sell this at any price.'],
 
@@ -205,7 +205,7 @@ class BillingSeeder extends Seeder
              'type' => 'boolean', 'headline' => false, 'sort' => 380,
              'desc' => 'Gate #8a. Scale only.'],
 
-            ['key' => 'byo_llm', 'name' => 'Brain Settings — bring your own AI keys / local model', 'group' => 'Channels & power features',
+            ['key' => 'byo_llm', 'name' => 'Brain Settings: bring your own AI keys / local model', 'group' => 'Channels & power features',
              'type' => 'boolean', 'module' => 'brain_settings', 'headline' => false, 'sort' => 390,
              'desc' => 'Gate #8b. Scale only — it also keeps the customers most likely to want expensive models on the top tier.'],
 
@@ -318,7 +318,7 @@ class BillingSeeder extends Seeder
             ],
             [
                 'slug' => 'growth', 'name' => 'Growth', 'type' => 'standard',
-                'tagline' => 'Every channel, one inbox — for about half what three separate tools cost.',
+                'tagline' => 'Every channel, one inbox, for about half what three separate tools cost.',
                 'sort' => 2, 'cta' => 'Get started',
                 'featured' => true, 'badge' => 'Most popular',
                 'free_window_days' => null, 'trial_days' => 0,

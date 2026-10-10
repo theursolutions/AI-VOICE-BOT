@@ -107,7 +107,7 @@
 
             <div class="pd__title" id="pd-title">Payment successful</div>
             <div class="pd__sub">
-                {{ $isAddon ? 'Your extra capacity is ready to use.' : 'Your plan is active — thank you.' }}
+                {{ $isAddon ? 'Your extra capacity is ready to use.' : 'Your plan is active. Thank you.' }}
             </div>
 
             <div class="pd__amount">{{ tva_money((int) $paidCharge->amount_cents, $currency, false) }}</div>
