@@ -8,6 +8,7 @@ use App\Models\Project;
 use App\Models\WebCallSession;
 use App\Services\Telephony\SipAccounts;
 use App\Services\Telephony\SipServer;
+use App\Services\Telephony\WebCalls;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -119,7 +120,7 @@ class OpsTelephonyController extends Controller
         $days = collect(range(13, 0))->mapWithKeys(fn ($d) => [now()->subDays($d)->toDateString() => 0])->merge($perDay);
 
         $recent = (clone $calls)->orderByDesc('started_at')->limit(50)
-            ->get(['id', 'project_id', 'client_id', 'ip', 'origin', 'page_url', 'status', 'session_id', 'started_at', 'ended_at']);
+            ->get(['id', 'project_id', 'client_id', 'ip', 'origin', 'page_url', 'status', 'counts_toward_limit', 'session_id', 'started_at', 'ended_at']);
 
         $projectIds = WebCallSession::distinct()->pluck('project_id');
         $projects   = Project::whereIn('id', $projectIds->merge($recent->pluck('project_id'))->unique())->get(['id', 'name', 'client_id'])->keyBy('id');
@@ -134,6 +135,21 @@ class OpsTelephonyController extends Controller
             'clients'   => $clients,
             'projectId' => $projectId,
         ]);
+    }
+
+    /** "Reset limit": this IP may call again now (its calls stay in the stats). */
+    public function resetWebCallLimit(Request $request, WebCalls $calls): RedirectResponse
+    {
+        $data = $request->validate([
+            'ip'         => 'required|ip',
+            'project_id' => 'nullable|integer',
+        ], ['ip.ip' => 'That is not a valid IP address.']);
+
+        $projectIds = ! empty($data['project_id']) ? [(int) $data['project_id']] : null;
+        $n = $calls->resetLimit($data['ip'], $projectIds);
+
+        return back()->with('success', "Limit reset for {$data['ip']} — they can call again now"
+            . ($n ? " ({$n} earlier call" . ($n === 1 ? '' : 's') . ' no longer counted).' : '.'));
     }
 
     public function saveSip(Request $request, SipServer $server): RedirectResponse
