@@ -182,6 +182,7 @@ Route::middleware(['auth', 'super-admin'])
         Route::get('/telephony/sip',           [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'sip'])->name('telephony.sip');
         Route::post('/telephony/sip',          [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'saveSip'])->name('telephony.sip.save');
         Route::get('/telephony/web-calls',     [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'webCalls'])->name('telephony.web-calls');
+        Route::post('/telephony/web-calls/reset', [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'resetWebCallLimit'])->name('telephony.web-calls.reset');
 
         Route::get('/audit',                   [App\Http\Controllers\SuperAdmin\AuditController::class, 'index'])->name('audit.index');
 
@@ -374,8 +375,7 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/telephony/extensions/{extension}/delete',   [App\Http\Controllers\Admin\SipExtensionController::class, 'destroy'])->whereNumber('extension')->name('telephony.extensions.destroy');
         // Website "Call us" button → the project's AI agent, in the browser.
         Route::get   ('/telephony/web-call',                        [App\Http\Controllers\Admin\WebCallSettingsController::class, 'index'])->name('telephony.web-call');
-        Route::post  ('/telephony/web-call',                        [App\Http\Controllers\Admin\WebCallSettingsController::class, 'save'])->name('telephony.web-call.save');
-        // "Bring your own Twilio" setup wizard.
+        Route::post  ('/telephony/web-call',                        [App\Http\Controllers\Admin\WebCallSettingsController::class, 'save'])->name('telephony.web-call.save');        // "Bring your own Twilio" setup wizard.
 
         // Brain & compute settings (LLM provider + CPU/GPU)
         // AI brain — which model serves this workspace, and bring-your-own-key.

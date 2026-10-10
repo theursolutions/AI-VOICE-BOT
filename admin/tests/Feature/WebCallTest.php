@@ -173,6 +173,29 @@ class WebCallTest extends TestCase
         $this->get(route('ops.telephony.sip'))->assertOk()->assertSee('SIP &amp; WebRTC server', false);
     }
 
+    public function test_only_a_super_admin_can_give_one_ip_more_demo_calls(): void
+    {
+        $this->pastCall(1);                              // blocked: 4 h gap
+        $this->pastCall(1, '198.51.100.20');             // another visitor, also blocked
+        $this->ask()->assertStatus(429);
+
+        // A client owner can't reset limits (the super-admin area answers 404).
+        $this->actingAs($this->owner())
+            ->post(route('ops.telephony.web-calls.reset'), ['ip' => '203.0.113.7'])
+            ->assertNotFound();
+        $this->ask()->assertStatus(429);
+
+        $admin = User::create(['name' => 'Ops', 'email' => 'ops2@serveai.test', 'password' => bcrypt('password')]);
+        $admin->forceFill(['is_super_admin' => true, 'email_verified_at' => now()])->save();
+        $this->actingAs($admin)
+            ->post(route('ops.telephony.web-calls.reset'), ['ip' => '203.0.113.7'])
+            ->assertRedirect()->assertSessionHas('success');
+
+        $this->ask()->assertOk();                                       // that IP may call again
+        $this->ask(ip: '198.51.100.20')->assertStatus(429);             // nobody else
+        $this->assertSame(2, WebCallSession::whereNotNull('started_at')->count(), 'calls stay in the stats');
+    }
+
     public function test_a_client_creates_an_extension_on_asterisk_under_its_own_prefix(): void
     {
         $this->actingAs($this->owner())

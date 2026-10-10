@@ -543,7 +543,12 @@
 
     window.tvaSoftphone = {
         dial: function (n) { command('dial', n); },
-        open: function () { U.open = true; render(); }
+        open: function () { U.open = true; render(); },
+        // Quietly: a closed phone window reads the new login when it opens.
+        reloadConfig: function () {
+            if (ENGINE) { engineDo('reload-config'); return; }
+            if (bus) bus.postMessage({ type: 'cmd', name: 'reload-config' });
+        }
     };
 
     // ══ Remote mode: mirror the phone window ═══════════════════════════════
@@ -640,7 +645,19 @@
             case 'consult-complete': completeConsult(); break;
             case 'consult-cancel': if (E.consult) { try { E.consult.terminate(); } catch (e) { /* gone */ } } break;
             case 'save-settings': saveSettings(arg); break;
+            case 'reload-config': reloadConfig(); break;
         }
+    }
+
+    // The login changed elsewhere (Telephony → Extensions → "Use in my
+    // browser"): sign in with it now. Without this the window kept retrying
+    // the old server — "Connecting…" forever — until it was reopened.
+    function reloadConfig() {
+        if (E.session) { toast('New phone login saved — it applies after this call'); return; }
+        fetch(D.configUrl, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(applyConfig)
+            .catch(function () { C.reg = 'failed'; C.regError = 'settings unavailable'; changed(); });
     }
 
     function sipUri(target) {
