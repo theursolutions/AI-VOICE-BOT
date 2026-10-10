@@ -41,6 +41,14 @@
     @if (session('success'))
         <div class="alert alert-success-soft show mb-4">{{ session('success') }}</div>
     @endif
+    @if (session('phone_reconfigured'))
+        {{-- An open phone window still holds the old login: have it sign in with the new one. --}}
+        <script>
+            window.addEventListener('load', function () {
+                setTimeout(function () { if (window.tvaSoftphone && window.tvaSoftphone.reloadConfig) window.tvaSoftphone.reloadConfig(); }, 1000);
+            });
+        </script>
+    @endif
     @if (session('error'))
         <div class="alert alert-danger-soft show mb-4">{{ session('error') }}</div>
     @endif
