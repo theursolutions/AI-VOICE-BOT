@@ -26,6 +26,9 @@ class Kernel extends ConsoleKernel
         // visitor data for N days" is not actually true of anything.
         $schedule->command('visitors:prune')->dailyAt('03:20');
 
+        // Website "Call us" accounts that were issued but never used.
+        $schedule->command('webcall:prune')->everyFiveMinutes()->withoutOverlapping();
+
         // ── Billing ──────────────────────────────────────────────────
         //
         // Refresh USD→local exchange rates. THE ONLY writer of the

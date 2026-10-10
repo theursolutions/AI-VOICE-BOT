@@ -28,6 +28,8 @@ services:
   # ── Edge: Caddy now terminates TLS and forwards to HAProxy ─────────────────
   caddy:
     <<: *logging
+    # Browser SIP (wss://<voice domain>/sip-ws) goes to Asterisk on the host.
+    extra_hosts: ["host.docker.internal:host-gateway"]
     # Swap the Caddyfile for the production one (TLS edge -> haproxy:80).
     volumes: !override
       - ./deploy/production/Caddyfile:/etc/caddy/Caddyfile:ro
@@ -118,9 +120,36 @@ services:
       resources:
         limits: { cpus: "0.5", memory: 256M }
 
+  # ── Asterisk: SIP + WebRTC (client extensions, website "Call us") ─────────
+  # Host network: call audio needs the UDP range 10000-20000 (rtp.conf), far
+  # too many ports to publish. The firewall opens 5060 + that range to the
+  # world and 8088 (ARI, SIP-over-WebSocket) to the Docker networks only.
+  # Browsers reach it at wss://${VOICE_DOMAIN}/sip-ws through Caddy.
+  asterisk:
+    <<: *logging
+    image: aicrm/asterisk:latest
+    build:
+      context: ./telephony/asterisk
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      ASTERISK_ARI_USER: ${ASTERISK_ARI_USER:-ai-crm}
+      ASTERISK_ARI_PASSWORD: ${ASTERISK_ARI_PASSWORD:?set ASTERISK_ARI_PASSWORD in .env}
+    volumes:
+      # astdb: every account the admin panel pushed (extensions, web callers).
+      - asterisk_data:/var/lib/asterisk
+    deploy:
+      resources:
+        limits: { cpus: "1", memory: 512M }
+
   # ── Voice engine: replicas + a real healthcheck (sticky-routed by HAProxy) ─
   voice-engine:
     <<: *logging
+    # Asterisk (host network) is reached at the host gateway for ARI, and
+    # connects back to the AudioSocket port published on localhost.
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports:
+      - "127.0.0.1:9092:9092"
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8000/healthz >/dev/null 2>&1 || exit 1"]
       interval: 30s
@@ -293,6 +322,7 @@ services:
         limits: { cpus: "0.2", memory: 64M }
 
 volumes:
+  asterisk_data:
   haproxy_run:
   prometheus_data:
   alertmanager_data:

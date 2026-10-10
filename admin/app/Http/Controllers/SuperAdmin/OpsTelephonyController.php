@@ -5,6 +5,10 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\Project;
+use App\Models\WebCallSession;
+use App\Services\Telephony\SipAccounts;
+use App\Services\Telephony\SipServer;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\View\View;
@@ -68,5 +72,92 @@ class OpsTelephonyController extends Controller
             'title', 'paginator', 'projectList', 'clients',
             'projectFilter', 'search'
         ));
+    }
+
+    /**
+     * The SIP/WebRTC server every client's extensions and website call
+     * buttons use: where browsers and phones reach Asterisk, and the
+     * STUN/TURN servers that get browser audio through routers.
+     */
+    public function sip(SipServer $server, SipAccounts $accounts): View
+    {
+        return view('ops.telephony.sip', [
+            'title'     => 'SIP & WebRTC server',
+            'settings'  => $server->settings(),
+            // Reachable = the voice engine answered with a list (even empty).
+            'connected' => $accounts->states('zz_') !== null,
+        ]);
+    }
+
+    /**
+     * Who actually tried a website "Call us" button: calls that connected,
+     * different visitors (IPs), how long they talked, and clicks that never
+     * became a call — across every project, or one.
+     */
+    public function webCalls(Request $request): View
+    {
+        $projectId = (int) $request->query('project_id', 0);
+        $base = WebCallSession::query()->when($projectId > 0, fn ($q) => $q->where('project_id', $projectId));
+
+        $calls   = (clone $base)->whereNotNull('started_at');
+        $ended   = (clone $calls)->whereNotNull('ended_at')->get(['started_at', 'ended_at']);
+        $avgSecs = $ended->isEmpty() ? null
+            : (int) round($ended->avg(fn ($c) => $c->started_at->diffInSeconds($c->ended_at, true)));
+
+        $stats = [
+            'calls'      => (clone $calls)->count(),
+            'visitors'   => (clone $calls)->distinct()->count('ip'),
+            'today'      => (clone $calls)->where('started_at', '>=', now()->startOfDay())->count(),
+            'week'       => (clone $calls)->where('started_at', '>=', now()->subDays(7))->count(),
+            'avg_secs'   => $avgSecs,
+            'no_connect' => (clone $base)->where('status', WebCallSession::EXPIRED)->count(),
+        ];
+
+        // Calls per day, last 14 days (oldest first).
+        $perDay = (clone $calls)->where('started_at', '>=', now()->subDays(13)->startOfDay())
+            ->get(['started_at'])->groupBy(fn ($c) => $c->started_at->toDateString())->map->count();
+        $days = collect(range(13, 0))->mapWithKeys(fn ($d) => [now()->subDays($d)->toDateString() => 0])->merge($perDay);
+
+        $recent = (clone $calls)->orderByDesc('started_at')->limit(50)
+            ->get(['id', 'project_id', 'client_id', 'ip', 'origin', 'page_url', 'status', 'session_id', 'started_at', 'ended_at']);
+
+        $projectIds = WebCallSession::distinct()->pluck('project_id');
+        $projects   = Project::whereIn('id', $projectIds->merge($recent->pluck('project_id'))->unique())->get(['id', 'name', 'client_id'])->keyBy('id');
+        $clients    = Client::whereIn('id', $projects->pluck('client_id')->unique())->get(['id', 'name'])->keyBy('id');
+
+        return view('ops.telephony.web-calls', [
+            'title'     => 'Website calls',
+            'stats'     => $stats,
+            'days'      => $days,
+            'recent'    => $recent,
+            'projects'  => $projects,
+            'clients'   => $clients,
+            'projectId' => $projectId,
+        ]);
+    }
+
+    public function saveSip(Request $request, SipServer $server): RedirectResponse
+    {
+        $data = $request->validate([
+            'ws_url'          => ['required', 'string', 'max:255', 'regex:#^wss?://#i'],
+            'host'            => 'required|string|max:255',
+            'port'            => 'required|integer|min:1|max:65535',
+            'stun'            => 'nullable|string|max:1000',
+            'turn_url'        => ['nullable', 'string', 'max:500', 'regex:#^turns?:#i'],
+            'turn_username'   => 'nullable|string|max:255',
+            'turn_credential' => 'nullable|string|max:255',
+        ], [
+            'ws_url.regex'   => 'The WebSocket URL starts with wss:// (or ws:// for a local test).',
+            'turn_url.regex' => 'TURN URLs start with turn: or turns:',
+        ]);
+
+        $data['stun'] = preg_split('/[\s,]+/', (string) ($data['stun'] ?? ''), -1, PREG_SPLIT_NO_EMPTY);
+        // An empty password field keeps the saved one (it is never echoed back).
+        if (($data['turn_credential'] ?? '') === '') {
+            $data['turn_credential'] = $server->settings()['turn_credential'];
+        }
+        $server->save($data);
+
+        return back()->with('success', 'SIP & WebRTC server saved.');
     }
 }

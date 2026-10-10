@@ -20,17 +20,22 @@ async def healthz() -> dict:
 async def metrics(request: Request) -> dict:
     """Lightweight live metrics for the admin compute-mesh dashboard."""
     app = request.app
-    active_calls = 0
+    # Phone/SIP calls (Twilio, Asterisk) run through the shared call core.
+    from app.calls.session import ACTIVE_CALLS
+    active_calls = len(ACTIVE_CALLS)
     try:  # WhatsApp WebRTC bridge keeps in-flight calls in a module dict.
         from app.integrations.meta import whatsapp_call
-        active_calls = len(getattr(whatsapp_call, "_calls", {}) or {})
+        active_calls += len(getattr(whatsapp_call, "_calls", {}) or {})
     except Exception:  # noqa: BLE001
         pass
 
     settings = getattr(app.state, "settings", None)
+    asterisk = getattr(app.state, "asterisk", None)
     return {
         "ok": True,
         "active_calls": active_calls,
+        # None = integration off; False = configured but ARI unreachable.
+        "asterisk_connected": asterisk.connected if asterisk else None,
         "llm_provider": getattr(settings, "llm_provider", None),
         "llm_fallback": (getattr(settings, "llm_fallback_provider", "") or None),
         "stt_ready": getattr(app.state, "stt_service", None) is not None,

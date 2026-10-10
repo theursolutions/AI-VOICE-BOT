@@ -59,32 +59,91 @@ class LaravelClient:
             logger.warning("turn-completed webhook failed: %s", exc)
             return None
 
-    async def post_session_ended(self, project_id: int, session_id: int) -> None:
+    async def post_session_ended(
+        self, project_id: int, session_id: int, call_seconds: Optional[int] = None
+    ) -> None:
         """Tell Laravel the session is over so it flips status='ended'.
 
         Fires from ws_turn's `finally` block on disconnect. Fire-and-
         forget — if Laravel is unreachable, the per-call status webhook
         from Twilio still eventually marks the session ended, so this
         is belt-and-braces.
+
+        ``call_seconds`` meters telephony minutes for providers with no
+        billing webhook of their own (Asterisk). Twilio calls leave it out.
         """
         url = f"{self.base_url}/api/internal/session-ended"
         headers = {"X-Internal-Secret": self.internal_secret}
         body = {"project_id": project_id, "session_id": session_id}
+        if call_seconds is not None:
+            body["call_seconds"] = call_seconds
         try:
             resp = await self.client.post(url, json=body, headers=headers, timeout=5.0)
             resp.raise_for_status()
         except httpx.HTTPError as exc:
             logger.warning("session-ended webhook failed: %s", exc)
 
+    async def call_profile(self, project_id: int, session_id: int) -> dict:
+        """Fetch the agent's voice system prompt for a phone/SIP call.
+
+        Built by Laravel's MemoryBuilder: agent persona, business profile,
+        what we already know about the caller, the reply-language rule and
+        the spoken-reply rules. Returns ``{}`` on failure — the call then
+        falls back to the generic style prompt rather than failing.
+        """
+        url = f"{self.base_url}/api/internal/call-profile"
+        headers = {"X-Internal-Secret": self.internal_secret}
+        body = {"project_id": project_id, "session_id": session_id}
+        try:
+            resp = await self.client.post(url, json=body, headers=headers, timeout=10.0)
+            resp.raise_for_status()
+            return resp.json() or {}
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("call-profile call failed: %s", exc)
+            return {}
+
+    async def asterisk_call_start(
+        self, channel_id: str, caller: str, dialed: str, endpoint: str = ""
+    ) -> Optional[dict]:
+        """Ask Laravel who answers an Asterisk call.
+
+        ``endpoint``: the SIP account that placed it, for calls from client
+        extensions ("c12_2001") and website callers ("w…").
+
+        Returns ``{ok, token, session_id, project_id, greeting, transfer_to,
+        max_seconds}``, ``{ok: false, reason}`` when no project takes the
+        call, or None when Laravel can't be reached.
+        """
+        url = f"{self.base_url}/api/internal/asterisk/call-start"
+        headers = {"X-Internal-Secret": self.internal_secret}
+        body = {"channel_id": channel_id, "caller": caller, "dialed": dialed}
+        if endpoint:
+            body["endpoint"] = endpoint
+        try:
+            resp = await self.client.post(url, json=body, headers=headers, timeout=15.0)
+            if resp.status_code in (403, 404, 429):
+                return resp.json()
+            resp.raise_for_status()
+            return resp.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("asterisk call-start failed: %s", exc)
+            return None
+
     async def resolve_context(
         self, project_id: int, session_id: int, user_text: str
     ) -> str:
+        """The "Reference data" block only — see :meth:`resolve`."""
+        return (await self.resolve(project_id, session_id, user_text))["context"]
+
+    async def resolve(self, project_id: int, session_id: int, user_text: str) -> dict:
         """Ask Laravel to run the full DataSourceRouter chain (RAG,
-        webhook tools, live SQL) and return a single "Reference data"
-        string ready to inject as a system message.
+        webhook tools, live SQL) and return ``{context, handoff}``:
+        a single "Reference data" string ready to inject as a system
+        message, and whether the caller asked for a person (phone calls
+        with a transfer target only).
 
         Without this, the WS path bypasses Laravel and the bot never
-        sees per-project context. Returns an empty string on failure
+        sees per-project context. Returns an empty context on failure
         so the LLM still gets the chance to reply from its base
         knowledge.
         """
@@ -104,7 +163,8 @@ class LaravelClient:
             )
             resp.raise_for_status()
             data = resp.json()
-            return data.get("context", "") or ""
-        except httpx.HTTPError as exc:
+            return {"context": data.get("context", "") or "",
+                    "handoff": bool(data.get("handoff"))}
+        except (httpx.HTTPError, ValueError) as exc:
             logger.warning("resolve-context call failed: %s", exc)
-            return ""
+            return {"context": "", "handoff": False}

@@ -33,6 +33,10 @@ class SessionClaims:
     # metadata so we can split analytics later.
     channel: Optional[str]
     raw: Dict[str, Any]
+    # Which voice speaks: "google" + a Google voice name ("Kore"), or
+    # "xtts" (the cloned speaker_wav above). Absent on older tokens = xtts.
+    tts_provider: Optional[str] = None
+    tts_voice: Optional[str] = None
 
 
 def decode_token(token: str) -> SessionClaims:
@@ -81,4 +85,6 @@ def decode_token(token: str) -> SessionClaims:
         language=language,
         channel=channel,
         raw=payload,
+        tts_provider=(payload.get("tts_provider") or None),
+        tts_voice=(payload.get("tts_voice") or None),
     )

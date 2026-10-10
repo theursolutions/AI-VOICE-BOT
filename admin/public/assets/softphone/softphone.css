@@ -1,0 +1,273 @@
+/* =============================================================================
+   serveAI softphone — the in-browser phone on every admin page.
+   Everything is scoped under #tva-softphone with tsp- classes.
+   ============================================================================= */
+
+#tva-softphone {
+    --tsp-bg: linear-gradient(165deg, #0b2440 0%, #0f3a57 46%, #13626b 100%);
+    --tsp-glass: rgba(255, 255, 255, .09);
+    --tsp-glass-hover: rgba(255, 255, 255, .16);
+    --tsp-line: rgba(255, 255, 255, .10);
+    --tsp-text: #ffffff;
+    --tsp-muted: rgba(255, 255, 255, .64);
+    --tsp-faint: rgba(255, 255, 255, .42);
+    --tsp-green: #22c55e;
+    --tsp-green-deep: #16a34a;
+    --tsp-red: #e5566b;
+    --tsp-red-deep: #d43c53;
+    --tsp-amber: #fbbf24;
+    --tsp-shadow: 0 28px 70px -16px rgba(2, 12, 27, .6), 0 8px 24px -10px rgba(2, 12, 27, .45);
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    z-index: 9990;
+    font-family: inherit;
+    color: var(--tsp-text);
+    -webkit-font-smoothing: antialiased;
+}
+/* Resets in :where() carry zero specificity, so every .tsp- rule below wins
+   (an #id reset would out-rank them and wipe the button colours). */
+:where(#tva-softphone) * { box-sizing: border-box; }
+:where(#tva-softphone) :where(button) { font: inherit; color: inherit; border: 0; background: none; cursor: pointer; padding: 0; }
+:where(#tva-softphone) :where(svg) { width: 18px; height: 18px; stroke-width: 2; }
+
+/* ── Launcher (closed, idle) ───────────────────────────────────────────── */
+.tsp-fab {
+    width: 58px; height: 58px; border-radius: 50%;
+    background: var(--tsp-bg); box-shadow: var(--tsp-shadow);
+    display: grid; place-items: center; position: relative;
+    transition: transform .2s ease, box-shadow .2s ease;
+}
+.tsp-fab.is-enter { animation: tsp-pop .32s cubic-bezier(.2, .9, .3, 1.25); }
+.tsp-fab:hover { transform: translateY(-2px) scale(1.04); }
+.tsp-fab svg { width: 24px; height: 24px; }
+.tsp-fab .tsp-dot { position: absolute; top: 4px; right: 4px; border: 2px solid #0f3a57; }
+
+.tsp-dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; display: inline-block; flex-shrink: 0; }
+.tsp-dot.is-online { background: var(--tsp-green); box-shadow: 0 0 0 0 rgba(34, 197, 94, .6); animation: tsp-online 2.4s infinite; }
+.tsp-dot.is-connecting { background: var(--tsp-amber); }
+.tsp-dot.is-failed { background: var(--tsp-red); }
+
+/* ── Card ──────────────────────────────────────────────────────────────── */
+.tsp-card {
+    width: 320px; max-width: calc(100vw - 32px);
+    background: var(--tsp-bg);
+    border-radius: 22px;
+    box-shadow: var(--tsp-shadow);
+    overflow: hidden; position: relative;
+}
+.tsp-card.is-enter { animation: tsp-rise .34s cubic-bezier(.2, .9, .3, 1.15); }
+.tsp-card::before { /* soft light from the top */
+    content: ""; position: absolute; inset: -40% -20% auto; height: 70%;
+    background: radial-gradient(closest-side, rgba(255, 255, 255, .13), transparent);
+    pointer-events: none;
+}
+.tsp-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 14px 6px; position: relative;
+}
+.tsp-brand { font-size: 13px; font-weight: 600; letter-spacing: .32em; text-transform: uppercase; color: rgba(255, 255, 255, .92); }
+.tsp-iconbtn {
+    width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    color: var(--tsp-muted); transition: background .15s, color .15s;
+}
+.tsp-iconbtn:hover { background: var(--tsp-glass); color: #fff; }
+.tsp-iconbtn svg { width: 16px; height: 16px; }
+
+.tsp-body { padding: 8px 22px 18px; position: relative; }
+.tsp-body.is-enter { animation: tsp-fade .28s ease; }
+
+/* Who's on the line */
+.tsp-who { text-align: center; padding-top: 6px; }
+.tsp-name { font-size: 21px; font-weight: 600; line-height: 1.25; letter-spacing: -.01em; word-break: break-word; }
+.tsp-number { font-size: 13px; color: var(--tsp-muted); margin-top: 3px; letter-spacing: .02em; }
+.tsp-timer { font-size: 20px; font-weight: 500; margin-top: 8px; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.tsp-state { font-size: 13px; color: var(--tsp-muted); margin-top: 8px; }
+.tsp-state .tsp-ellipsis::after { content: ""; animation: tsp-dots 1.4s steps(4, end) infinite; }
+.tsp-note {
+    margin: 12px auto 0; max-width: 260px; font-size: 12px; line-height: 1.45; color: var(--tsp-muted);
+    background: var(--tsp-glass); border: 1px solid var(--tsp-line); border-radius: 12px; padding: 8px 10px;
+}
+.tsp-note a { color: #7dd3fc; text-decoration: none; font-weight: 500; }
+.tsp-note a:hover { text-decoration: underline; }
+.tsp-badges { display: flex; gap: 6px; justify-content: center; margin-top: 8px; flex-wrap: wrap; }
+.tsp-badge { font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: var(--tsp-glass); color: var(--tsp-muted); }
+.tsp-badge.is-hold { background: rgba(251, 191, 36, .18); color: #fde68a; }
+.tsp-badge.is-mute { background: rgba(229, 86, 107, .2); color: #fecdd3; }
+.tsp-badge.is-rec { background: rgba(229, 86, 107, .25); color: #fff; }
+.tsp-badge.is-rec::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #ff5a6e; margin-right: 5px; vertical-align: 1px; animation: tsp-blink 1s infinite; }
+
+/* Avatar with ringing pulses */
+.tsp-avatar {
+    width: 86px; height: 86px; border-radius: 50%; margin: 6px auto 14px; position: relative;
+    display: grid; place-items: center; font-size: 28px; font-weight: 600; letter-spacing: .02em;
+    background: linear-gradient(135deg, rgba(255, 255, 255, .22), rgba(255, 255, 255, .06));
+    border: 1px solid rgba(255, 255, 255, .22);
+}
+.tsp-avatar.is-small { width: 64px; height: 64px; font-size: 21px; margin-bottom: 10px; }
+.tsp-avatar.is-pulsing::before, .tsp-avatar.is-pulsing::after {
+    content: ""; position: absolute; inset: -1px; border-radius: 50%;
+    border: 2px solid rgba(125, 211, 252, .55); animation: tsp-ripple 2s ease-out infinite;
+}
+.tsp-avatar.is-pulsing::after { animation-delay: 1s; }
+
+/* Call controls — the 3-column grid */
+.tsp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 8px; margin: 20px 0 6px; }
+.tsp-ctl { display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 11.5px; color: var(--tsp-muted); transition: color .15s; }
+.tsp-ctl .tsp-round {
+    width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center;
+    background: var(--tsp-glass); border: 1px solid var(--tsp-line); color: #fff;
+    transition: background .15s, transform .12s, color .15s;
+}
+.tsp-ctl:hover .tsp-round { background: var(--tsp-glass-hover); }
+.tsp-ctl:active .tsp-round { transform: scale(.94); }
+.tsp-ctl.is-on { color: #fff; }
+.tsp-ctl.is-on .tsp-round { background: #fff; color: #0f3a57; border-color: #fff; }
+.tsp-ctl.is-rec .tsp-round { background: #fff; color: #e11d48; }
+.tsp-ctl[disabled] { opacity: .38; cursor: not-allowed; }
+.tsp-ctl[disabled] .tsp-round { background: var(--tsp-glass); }
+
+/* Big pills */
+.tsp-hangup, .tsp-answer, .tsp-call {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    height: 46px; border-radius: 999px; font-weight: 600; font-size: 14px; color: #fff;
+    transition: transform .12s, filter .15s, box-shadow .2s;
+}
+.tsp-hangup { width: 132px; margin: 18px auto 4px; background: var(--tsp-red); box-shadow: 0 10px 24px -10px rgba(229, 86, 107, .9); }
+.tsp-hangup svg { transform: rotate(135deg); }
+.tsp-hangup:hover, .tsp-answer:hover, .tsp-call:hover { filter: brightness(1.08); }
+.tsp-hangup:active, .tsp-answer:active, .tsp-call:active { transform: scale(.97); }
+.tsp-pair { display: flex; gap: 12px; margin-top: 20px; }
+.tsp-pair > * { flex: 1; }
+.tsp-decline { background: var(--tsp-red); box-shadow: 0 10px 24px -10px rgba(229, 86, 107, .9); }
+.tsp-decline svg { transform: rotate(135deg); }
+.tsp-answer { background: var(--tsp-green); box-shadow: 0 10px 26px -8px rgba(34, 197, 94, .9); animation: tsp-nudge 1.6s ease-in-out infinite; }
+.tsp-call { width: 100%; margin-top: 14px; background: var(--tsp-green); box-shadow: 0 10px 26px -10px rgba(34, 197, 94, .9); }
+.tsp-call[disabled] { opacity: .45; cursor: not-allowed; animation: none; }
+
+/* Dialpad */
+.tsp-display {
+    display: flex; align-items: center; gap: 6px; border-bottom: 1px solid var(--tsp-line); margin: 4px 0 12px; padding-bottom: 8px;
+}
+.tsp-display input {
+    flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; color: #fff;
+    font-size: 24px; font-weight: 500; text-align: center; letter-spacing: .04em; padding: 4px 0;
+}
+.tsp-display input::placeholder { color: var(--tsp-faint); font-size: 16px; letter-spacing: 0; font-weight: 400; }
+.tsp-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; justify-items: center; }
+.tsp-key {
+    width: 62px; height: 62px; border-radius: 50%; background: var(--tsp-glass); border: 1px solid var(--tsp-line) !important;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;
+    transition: background .12s, transform .1s;
+}
+.tsp-key:hover { background: var(--tsp-glass-hover); }
+.tsp-key:active { transform: scale(.93); background: rgba(255, 255, 255, .24); }
+.tsp-key b { font-size: 22px; font-weight: 500; }
+.tsp-key small { font-size: 9px; letter-spacing: .14em; color: var(--tsp-faint); margin-top: 3px; min-height: 9px; }
+.tsp-keys.is-compact .tsp-key { width: 54px; height: 54px; }
+
+/* In-call keypad — takes over the card, like a real phone */
+.tsp-kp.is-enter { animation: tsp-fade .22s ease; }
+.tsp-kp-head { display: flex; align-items: center; justify-content: space-between; margin: 2px 0 4px; }
+.tsp-kp-who { text-align: center; line-height: 1.3; min-width: 0; }
+.tsp-kp-who b { display: block; font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tsp-kp-who span { font-size: 12px; color: var(--tsp-muted); font-variant-numeric: tabular-nums; }
+.tsp-kp-digits {
+    min-height: 40px; margin: 10px 0 16px; text-align: center;
+    font-size: 30px; font-weight: 500; letter-spacing: .14em; white-space: nowrap; overflow: hidden;
+}
+.tsp-kp .tsp-hangup { margin-top: 20px; }
+
+/* Call quality in the footer */
+.tsp-q { font-weight: 600; }
+.tsp-q.is-good { color: #86efac; }
+.tsp-q.is-fair { color: #fde68a; }
+.tsp-q.is-poor { color: #fda4af; }
+
+/* Inline panels (transfer / consult) */
+.tsp-panel { margin-top: 16px; background: rgba(2, 12, 27, .22); border: 1px solid var(--tsp-line); border-radius: 14px; padding: 12px; }
+.tsp-panel.is-enter { animation: tsp-fade .2s ease; }
+.tsp-panel h4 { margin: 0 0 8px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tsp-muted); }
+.tsp-row { display: flex; gap: 8px; }
+.tsp-input {
+    width: 100%; min-width: 0; height: 38px; border-radius: 10px; padding: 0 12px; outline: 0;
+    background: rgba(255, 255, 255, .1); border: 1px solid var(--tsp-line); color: #fff; font-size: 14px;
+}
+.tsp-input:focus { border-color: rgba(125, 211, 252, .7); background: rgba(255, 255, 255, .14); }
+.tsp-input::placeholder { color: var(--tsp-faint); }
+.tsp-btn {
+    height: 38px; padding: 0 14px; border-radius: 10px; font-weight: 600; font-size: 13px; white-space: nowrap;
+    background: #fff; color: #0f3a57 !important; transition: filter .15s;
+}
+.tsp-btn:hover { filter: brightness(.94); }
+.tsp-btn.is-ghost { background: var(--tsp-glass); color: #fff !important; }
+.tsp-btn.is-red { background: var(--tsp-red); color: #fff !important; }
+.tsp-btn[disabled] { opacity: .5; cursor: not-allowed; }
+
+/* Settings form */
+.tsp-form label { display: block; font-size: 11.5px; color: var(--tsp-muted); margin: 10px 0 5px; }
+.tsp-form .tsp-hint { font-size: 11.5px; color: var(--tsp-faint); margin-top: 10px; line-height: 1.45; }
+.tsp-error { margin-top: 10px; font-size: 12px; color: #fecdd3; background: rgba(229, 86, 107, .18); border-radius: 10px; padding: 8px 10px; }
+
+/* Footer */
+.tsp-foot {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 14px 14px; font-size: 12px; color: var(--tsp-faint); border-top: 1px solid var(--tsp-line);
+}
+.tsp-foot svg { width: 14px; height: 14px; }
+
+/* Toast inside the card */
+.tsp-toast {
+    position: absolute; left: 50%; top: 50px; transform: translateX(-50%);
+    background: rgba(2, 12, 27, .82); color: #fff; font-size: 12px; padding: 7px 12px; border-radius: 999px;
+    white-space: nowrap; animation: tsp-fade .2s ease; z-index: 2; pointer-events: none;
+}
+
+/* ── Minimised banner ──────────────────────────────────────────────────── */
+.tsp-banner {
+    display: flex; align-items: center; gap: 10px;
+    height: 60px; padding: 0 8px 0 10px; border-radius: 30px; min-width: 260px; max-width: calc(100vw - 32px);
+    background: var(--tsp-bg); box-shadow: var(--tsp-shadow);
+}
+.tsp-banner.is-enter { animation: tsp-rise .3s cubic-bezier(.2, .9, .3, 1.15); }
+.tsp-banner.is-ringing { animation: tsp-glow 1.6s ease-in-out infinite; }
+.tsp-banner.is-ringing.is-enter { animation: tsp-rise .3s cubic-bezier(.2, .9, .3, 1.15), tsp-glow 1.6s ease-in-out infinite .3s; }
+.tsp-banner .tsp-avatar { width: 42px; height: 42px; font-size: 15px; margin: 0; flex-shrink: 0; }
+.tsp-banner .tsp-avatar.is-pulsing::before, .tsp-banner .tsp-avatar.is-pulsing::after { border-width: 1.5px; }
+.tsp-banner-text { flex: 1; min-width: 0; line-height: 1.25; }
+.tsp-banner-text b { display: block; font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tsp-banner-text span { font-size: 12px; color: var(--tsp-muted); font-variant-numeric: tabular-nums; }
+.tsp-mini { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--tsp-glass); flex-shrink: 0; transition: background .15s, transform .1s; }
+.tsp-mini:hover { background: var(--tsp-glass-hover); }
+.tsp-mini:active { transform: scale(.93); }
+.tsp-mini.is-red { background: var(--tsp-red); }
+.tsp-mini.is-red svg { transform: rotate(135deg); }
+.tsp-mini.is-green { background: var(--tsp-green); animation: tsp-nudge 1.6s ease-in-out infinite; }
+.tsp-mini.is-on { background: #fff; color: #0f3a57; }
+.tsp-mini svg { width: 17px; height: 17px; }
+
+/* ── Motion ────────────────────────────────────────────────────────────── */
+@keyframes tsp-rise { from { opacity: 0; transform: translateY(14px) scale(.97); } to { opacity: 1; transform: none; } }
+@keyframes tsp-pop { from { opacity: 0; transform: scale(.6); } to { opacity: 1; transform: none; } }
+@keyframes tsp-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes tsp-ripple { from { transform: scale(1); opacity: .9; } to { transform: scale(1.75); opacity: 0; } }
+@keyframes tsp-nudge { 0%, 100% { transform: none; } 8% { transform: rotate(-6deg) scale(1.03); } 16% { transform: rotate(6deg) scale(1.03); } 24% { transform: rotate(-3deg); } 32% { transform: none; } }
+@keyframes tsp-glow { 0%, 100% { box-shadow: var(--tsp-shadow), 0 0 0 0 rgba(34, 197, 94, .55); } 50% { box-shadow: var(--tsp-shadow), 0 0 0 10px rgba(34, 197, 94, 0); } }
+@keyframes tsp-online { 0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, .55); } 70% { box-shadow: 0 0 0 7px rgba(34, 197, 94, 0); } 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); } }
+@keyframes tsp-blink { 50% { opacity: .25; } }
+@keyframes tsp-dots { 0% { content: ""; } 25% { content: "."; } 50% { content: ".."; } 75% { content: "..."; } }
+
+/* ── The phone window (engine): the card is the whole window ───────────── */
+#tva-softphone[data-mode="engine"] { position: static; }
+#tva-softphone[data-mode="engine"] .tsp-card {
+    width: 100%; max-width: none; min-height: 100vh; border-radius: 0; box-shadow: none;
+    display: flex; flex-direction: column;
+}
+#tva-softphone[data-mode="engine"] .tsp-body { flex: 1; }
+
+@media (max-width: 480px) {
+    #tva-softphone { right: 16px; bottom: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    #tva-softphone * { animation: none !important; transition: none !important; }
+}

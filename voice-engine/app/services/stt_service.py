@@ -14,7 +14,7 @@ import logging
 import os
 import tempfile
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
+from typing import Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -40,10 +40,12 @@ class STTService:
         model_name: str = "base",
         device: str = "cpu",
         compute_type: str = "int8",
+        num_workers: int = 1,
     ) -> None:
         self.model_name = model_name
         self.device = device
         self.compute_type = compute_type
+        self.num_workers = max(1, int(num_workers))
         self._model = None  # type: ignore[assignment]
 
     # -- model lifecycle ----------------------------------------------------
@@ -62,6 +64,8 @@ class STTService:
             self.model_name,
             device=self.device,
             compute_type=self.compute_type,
+            # Parallel transcriptions — simultaneous callers don't queue.
+            num_workers=self.num_workers,
         )
 
     @property
@@ -117,10 +121,17 @@ class STTService:
         sample_rate: int = 16000,
         language: Optional[str] = None,
         vad_filter: bool = True,
+        initial_prompt: Optional[str] = None,
+        candidates: Optional[Sequence[str]] = None,
     ) -> Transcription:
         """Transcribe raw little-endian PCM16 mono audio without writing
         to disk. Used by the WebSocket streaming pipeline once the
         client emits ``audio.end``.
+
+        ``initial_prompt``: words the caller is likely to say (business,
+        product and place names) — biases recognition towards them.
+        ``candidates``: with no ``language``, choose only among these
+        (e.g. ["en", "ur"]) instead of trusting open detection.
         """
 
         if not pcm:
@@ -140,18 +151,40 @@ class STTService:
                     "librosa resample failed; passing raw audio at sr=%s", sample_rate
                 )
 
+        if language is None and candidates:
+            language = self._pick_language(audio, candidates)
+
         segments, info = self.model.transcribe(
             audio,
             language=language,
             vad_filter=vad_filter,
             beam_size=1,
+            initial_prompt=initial_prompt or None,
         )
         text = " ".join(seg.text.strip() for seg in segments).strip()
         return Transcription(
             text=text,
-            language=getattr(info, "language", None),
+            language=language or getattr(info, "language", None),
             duration_ms=int((getattr(info, "duration", 0.0) or 0.0) * 1000),
         )
+
+    # Whisper labels spoken Urdu "hi" (Hindi) ~99% of the time — the two
+    # sound the same — so Hindi (and Punjabi) count as Urdu here.
+    _SAME_SPEECH = {"hi": "ur", "pa": "ur"}
+
+    def _pick_language(self, audio, candidates: Sequence[str]) -> Optional[str]:
+        """The likeliest of ``candidates`` for this audio."""
+        try:
+            _, _, probs = self.model.detect_language(audio)
+        except Exception as exc:  # noqa: BLE001 — fall back to open detection
+            logger.warning("language detection failed: %s", exc)
+            return None
+        score: dict = {}
+        for code, prob in probs:
+            code = self._SAME_SPEECH.get(code, code)
+            if code in candidates:
+                score[code] = score.get(code, 0.0) + prob
+        return max(score, key=score.get) if score else candidates[0]
 
 
 # ---------------------------------------------------------------------------

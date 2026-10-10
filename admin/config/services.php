@@ -133,6 +133,22 @@ return [
         'python_public_url' => env('PYTHON_PUBLIC_URL'),
     ],
 
+    // Asterisk (telco SIP trunks, PBXs, WebRTC). Calls reach Laravel through
+    // the voice engine's ARI client, so there are no public webhooks here.
+    'asterisk' => [
+        // Lab / single-tenant: the project that answers Asterisk calls to
+        // numbers no project has claimed. 0 = reject them.
+        'default_project_id' => (int) env('ASTERISK_DEFAULT_PROJECT_ID', 0),
+
+        // The SIP/WebRTC server as phones and browsers reach it. Defaults
+        // only: super admins set these in Ops → Telephony → SIP server
+        // (App\Services\Telephony\SipServer), which wins.
+        'ws_url'   => env('SIP_WS_URL', 'ws://localhost:8088/ws'),   // browsers (wss:// in production)
+        'host'     => env('SIP_HOST', 'localhost'),                  // phones and apps
+        'port'     => (int) env('SIP_PORT', 5060),
+        'stun'     => env('SIP_STUN', 'stun:stun.l.google.com:19302'),
+    ],
+
     // "Call me now" demo on the public landing page. When `enabled` is
     // false the endpoint logs the lead and returns a friendly message
     // instead of actually placing a call — safe to ship before the
@@ -236,6 +252,49 @@ return [
         ],
         'elevenlabs' => [
             'api_key' => env('ELEVENLABS_API_KEY'),
+        ],
+
+        // Which voice speaks when nobody chose one: 'google' (a ready-made
+        // Google voice, the default) or 'xtts' (the newest cloned voice).
+        // Google voices need GEMINI_API_KEY in the voice engine; without it
+        // the engine falls back to the local voice.
+        'default_source'       => env('VOICE_DEFAULT_SOURCE', 'google'),
+        'default_google_voice' => env('VOICE_DEFAULT_GOOGLE', 'Kore'),
+
+        // Google's ready-made voices (Gemini text-to-speech). The names are
+        // Google's; gender + style as Google describes them. Every voice
+        // speaks every language the model supports, Urdu included.
+        'google_voices' => [
+            'Kore'          => ['gender' => 'female', 'style' => 'Firm'],
+            'Aoede'         => ['gender' => 'female', 'style' => 'Breezy'],
+            'Leda'          => ['gender' => 'female', 'style' => 'Youthful'],
+            'Zephyr'        => ['gender' => 'female', 'style' => 'Bright'],
+            'Autonoe'       => ['gender' => 'female', 'style' => 'Bright'],
+            'Callirrhoe'    => ['gender' => 'female', 'style' => 'Easy-going'],
+            'Despina'       => ['gender' => 'female', 'style' => 'Smooth'],
+            'Erinome'       => ['gender' => 'female', 'style' => 'Clear'],
+            'Laomedeia'     => ['gender' => 'female', 'style' => 'Upbeat'],
+            'Achernar'      => ['gender' => 'female', 'style' => 'Soft'],
+            'Gacrux'        => ['gender' => 'female', 'style' => 'Mature'],
+            'Pulcherrima'   => ['gender' => 'female', 'style' => 'Forward'],
+            'Vindemiatrix'  => ['gender' => 'female', 'style' => 'Gentle'],
+            'Sulafat'       => ['gender' => 'female', 'style' => 'Warm'],
+            'Puck'          => ['gender' => 'male', 'style' => 'Upbeat'],
+            'Charon'        => ['gender' => 'male', 'style' => 'Informative'],
+            'Fenrir'        => ['gender' => 'male', 'style' => 'Excitable'],
+            'Orus'          => ['gender' => 'male', 'style' => 'Firm'],
+            'Enceladus'     => ['gender' => 'male', 'style' => 'Breathy'],
+            'Iapetus'       => ['gender' => 'male', 'style' => 'Clear'],
+            'Umbriel'       => ['gender' => 'male', 'style' => 'Easy-going'],
+            'Algieba'       => ['gender' => 'male', 'style' => 'Smooth'],
+            'Algenib'       => ['gender' => 'male', 'style' => 'Gravelly'],
+            'Rasalgethi'    => ['gender' => 'male', 'style' => 'Informative'],
+            'Alnilam'       => ['gender' => 'male', 'style' => 'Firm'],
+            'Schedar'       => ['gender' => 'male', 'style' => 'Even'],
+            'Achird'        => ['gender' => 'male', 'style' => 'Friendly'],
+            'Zubenelgenubi' => ['gender' => 'male', 'style' => 'Casual'],
+            'Sadachbia'     => ['gender' => 'male', 'style' => 'Lively'],
+            'Sadaltager'    => ['gender' => 'male', 'style' => 'Knowledgeable'],
         ],
     ],
 

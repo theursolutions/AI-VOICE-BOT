@@ -9,6 +9,9 @@ use App\Models\Session;
 use App\Services\Conversation\AgentRouter;
 use App\Services\Conversation\SessionTokenService;
 use App\Services\Flow\FlowRunner;
+use App\Services\Telephony\CallGreeting;
+use App\Services\Telephony\CallSessionService;
+use App\Services\Telephony\TelephonyNumbers;
 use App\Services\Telephony\WelcomeAudioService;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Http\Request;
@@ -38,6 +41,8 @@ class TelephonyController extends Controller
         private WelcomeAudioService $welcome,
         private AgentRouter $router,
         private FlowRunner $flowRunner,
+        private CallSessionService $calls,
+        private TelephonyNumbers $numbers,
     ) {}
 
     /**
@@ -92,56 +97,19 @@ class TelephonyController extends Controller
             );
         }
 
-        // Switch to the project's tenant DB — Session/Message/Lead all
-        // live in the per-project tenant DB, not the master. Without
-        // this the insert below fails with a connection / table error.
-        $this->tenants->useFor($project);
-
-        // Create the session up-front so transcripts + lead extraction
-        // can hang off it. Reuses the same `sessions` table as the
-        // widget; channel = "phone" distinguishes telephony.
-        $now = time();
-        $session = Session::create([
-            'project_id'       => $project->id,
-            'channel'          => 'phone',
-            'external_id'      => $callSid,
-            'customer_name'    => null,
-            'customer_phone'   => $from,
-            'voice_id'         => null,
-            'status'           => 'active',
-            'started_at'       => $now,
-            'last_activity_at' => $now,
-            'metadata'         => [
-                'twilio' => [
-                    'call_sid' => $callSid,
-                    'from'     => $from,
-                    'to'       => $to,
-                ],
-                // Carry the per-number routing config forward so the
-                // session-token + memory-builder can pick the agent
-                // (or skill pool) the admin assigned to this number.
-                'routing' => $numberConfig ? [
-                    'routing_type' => $numberConfig['routing_type'] ?? 'agents',
-                    'agent_ids'    => (array) ($numberConfig['agent_ids'] ?? []),
-                    'skill_id'     => $numberConfig['skill_id'] ?? null,
-                    'flow_id'      => $numberConfig['flow_id'] ?? null,
-                ] : null,
-            ],
-            'created_at'       => $now,
-            'update_at'        => $now,
-        ]);
-
-        // Pick the BotAgent for this call BEFORE any branch below can
-        // return. Sets session.agent_id, session.skill_id and — the part
-        // that matters here — session.voice_id, cloned from the agent.
+        // Create the session up-front so transcripts + lead extraction can
+        // hang off it, and pick the agent BEFORE any branch below can return.
         //
-        // This used to run only on the Media-Stream path, *after* the Flow
-        // branch had already returned. A number routed to a Conversation
-        // Flow therefore kept voice_id = null for the whole call, so every
-        // later step (including the transfer-to-AI hand-off) fell back to a
-        // stock voice instead of the caller's cloned one.
-        $this->router->assignToSession($project, $session);
-        $session->refresh();
+        // Agent assignment used to run only on the Media-Stream path, *after*
+        // the Flow branch had already returned. A number routed to a
+        // Conversation Flow therefore kept voice_id = null for the whole call,
+        // so every later step (including the transfer-to-AI hand-off) fell
+        // back to a stock voice instead of the caller's cloned one.
+        $session = $this->calls->start($project, $numberConfig, TelephonyNumbers::TWILIO, $callSid, $from, [
+            'call_sid' => $callSid,
+            'from'     => $from,
+            'to'       => $to,
+        ]);
 
         // If this number is bound to a saved Flow, hand the call to the
         // FlowRunner instead of opening a Media Stream right away. The
@@ -188,8 +156,8 @@ class TelephonyController extends Controller
         // in the `start.customParameters` field of the start frame.
         $streamUrl = $phoneWs;
 
-        $welcomeText = (string) ($project->json_data['widget']['welcome_message']
-            ?? 'Hi! Thanks for calling. One moment please.');
+        // In the routed agent's call language (Urdu / Roman Urdu / English).
+        $welcomeText = CallGreeting::for($project, $session);
 
         // A demo call is OUTBOUND — the project's inbound greeting ("thanks
         // for calling") is simply untrue when we're the ones ringing. Use the
@@ -274,41 +242,79 @@ XML;
         ]);
 
         if (in_array($callStatus, ['completed', 'failed', 'busy', 'no-answer', 'canceled'], true)) {
-            // Find the session by external_id and mark ended.
-            // (Tenant connection is set in the voice webhook, but here
-            // we don't know the project yet — iterate by external_id
-            // across all tenants if we have multiple. Single-tenant
-            // dev setup: just look in the first tenant.)
-            $project = Project::first();
-            if ($project) {
-                app(\App\Services\Tenant\TenantManager::class)->useFor($project);
-                $session = Session::where('external_id', $callSid)->first();
-                if ($session && $session->status === 'active') {
-                    $session->status   = 'ended';
-                    $session->ended_at = time();
-                    $session->save();
-                }
+            $session = $this->findCallSession(
+                $callSid,
+                (string) $request->input('To', ''),
+                (string) $request->input('From', ''),
+            );
 
-                // Meter the call. Twilio reports whole seconds in
-                // `CallDuration` on the terminal status only, which is exactly
-                // once per call — so this cannot double-count on a retry of an
-                // earlier status. Rounded up to the minute in UsageRecorder,
-                // because that is how the carrier bills us.
-                //
-                // Keyed off the SESSION's project, not the `Project::first()`
-                // above — that lookup is a pre-existing single-tenant shortcut
-                // (see the comment there) and would bill the wrong workspace
-                // on a multi-tenant install.
-                if ($session) {
-                    app(\App\Services\Billing\UsageRecorder::class)->callCompleted(
-                        (int) $session->project_id,
-                        (int) $request->input('CallDuration', 0),
-                    );
-                }
+            if (! $session) {
+                Log::warning('Twilio status: no session for call', ['call_sid' => $callSid]);
+                return response('', 204);
             }
+
+            if ($session->status === 'active') {
+                $session->status   = 'ended';
+                $session->ended_at = time();
+                $session->save();
+            }
+
+            // Meter the call. Twilio reports whole seconds in `CallDuration`
+            // on the terminal status only, which is exactly once per call —
+            // so this cannot double-count on a retry of an earlier status.
+            // Rounded up to the minute in UsageRecorder, because that is how
+            // the carrier bills us.
+            app(\App\Services\Billing\UsageRecorder::class)->callCompleted(
+                (int) $session->project_id,
+                (int) $request->input('CallDuration', 0),
+            );
         }
 
         return response('', 204);
+    }
+
+    /**
+     * The phone session for a Twilio call, in whichever tenant DB it lives.
+     *
+     * The status callback names no project, so try the projects that own
+     * the call's numbers first (To = ours on inbound, From = ours on
+     * outbound), then the demo project, then every project. This used to
+     * look only in Project::first()'s tenant, so a call to any other
+     * project was never marked ended and never billed.
+     */
+    private function findCallSession(string $callSid, string $to, string $from): ?Session
+    {
+        if ($callSid === '') {
+            return null;
+        }
+
+        $likely = array_filter([
+            $this->numbers->owner($to)[0] ?? null,
+            $this->numbers->owner($from)[0] ?? null,
+            $this->resolveDemoProject()[0] ?? null,
+        ]);
+
+        $tried = [];
+        foreach ([...$likely, ...Project::orderBy('id')->get()] as $project) {
+            if (isset($tried[$project->id])) {
+                continue;
+            }
+            $tried[$project->id] = true;
+
+            try {
+                $this->tenants->useFor($project);
+                $session = Session::where('external_id', $callSid)->first();
+            } catch (\Throwable $e) {
+                // A project whose tenant DB is missing must not hide the
+                // call from the projects after it.
+                continue;
+            }
+            if ($session) {
+                return $session;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -454,36 +460,13 @@ XML;
 
     private function resolveProjectForNumber(string $number): ?array
     {
-        $number = trim($number);
-
-        foreach (Project::all(['id', 'name', 'json_data']) as $p) {
-            // 1) New shape — walk the numbers[] array.
-            $numbers = (array) data_get($p->json_data, 'telephony.numbers', []);
-            foreach ($numbers as $n) {
-                if (trim((string) ($n['phone_number'] ?? '')) === $number) {
-                    return [$p, $n];
-                }
-            }
-
-            // 2) Legacy shape — single phone_number string.
-            $legacy = data_get($p->json_data, 'telephony.phone_number');
-            if ($legacy && trim((string) $legacy) === $number) {
-                return [$p, null];
-            }
+        if ($owner = $this->numbers->owner($number)) {
+            return $owner;
         }
 
-        // 3) Env-default fallback (dev mode): if no project owns the
-        //    dialed number but it matches TWILIO_PHONE_NUMBER, route to
-        //    the first project. Keeps single-tenant local testing alive.
-        $envDefault = trim((string) config('services.twilio.phone_number', ''));
-        if ($envDefault && $envDefault === $number) {
-            $p = Project::orderBy('id')->first();
-            return $p ? [$p, null] : null;
-        }
-
-        // 4) Last resort — first project so trial callers don't hear
-        //    "this number is not configured" right after sign-up. Real
-        //    deploys should always hit step 1.
+        // Last resort — first project so trial callers don't hear "this
+        // number is not configured" right after sign-up. Real deploys should
+        // always match a configured number.
         $p = Project::orderBy('id')->first();
         return $p ? [$p, null] : null;
     }

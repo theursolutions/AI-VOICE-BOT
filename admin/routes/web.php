@@ -93,6 +93,10 @@ Route::middleware('signed')->group(function () {
 
 // ── User-scoped (cross-workspace) ────────────────────────────────────────
 Route::middleware('auth')->group(function () {
+    // The in-browser phone: the signed-in user's own SIP login.
+    Route::get('/me/phone',  [App\Http\Controllers\Admin\SoftphoneController::class, 'config'])->name('softphone.config');
+    Route::post('/me/phone', [App\Http\Controllers\Admin\SoftphoneController::class, 'save'])->name('softphone.save');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -175,6 +179,9 @@ Route::middleware(['auth', 'super-admin'])
         Route::get('/leads',                   [App\Http\Controllers\SuperAdmin\OpsLeadsController::class, 'index'])->name('leads.index');
         Route::get('/voices',                  [App\Http\Controllers\SuperAdmin\OpsVoicesController::class, 'index'])->name('voices.index');
         Route::get('/telephony',               [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'index'])->name('telephony.index');
+        Route::get('/telephony/sip',           [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'sip'])->name('telephony.sip');
+        Route::post('/telephony/sip',          [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'saveSip'])->name('telephony.sip.save');
+        Route::get('/telephony/web-calls',     [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'webCalls'])->name('telephony.web-calls');
 
         Route::get('/audit',                   [App\Http\Controllers\SuperAdmin\AuditController::class, 'index'])->name('audit.index');
 
@@ -284,6 +291,11 @@ Route::middleware(['auth', 'active.client'])
         Route::get ('/setup', [App\Http\Controllers\Admin\SetupController::class, 'show'])->name('setup');
         Route::post('/setup', [App\Http\Controllers\Admin\SetupController::class, 'store'])->name('setup.store');
 
+        // Softphone caller lookup — rings on every page, so it sits outside
+        // the per-module gates below.
+        Route::get('/softphone/lookup', [App\Http\Controllers\Admin\SoftphoneController::class, 'lookup'])->name('softphone.lookup');
+        Route::get('/phone',            [App\Http\Controllers\Admin\SoftphoneController::class, 'window'])->name('softphone.window');
+
         // ── Everything below requires a provisioned workspace, then passes
         //    four gates, in this order:
         //
@@ -352,6 +364,17 @@ Route::middleware(['auth', 'active.client'])
         // Each project brings its own Twilio account; .env is the demo only.
         Route::post  ('/telephony/credentials',            [App\Http\Controllers\Admin\TelephonyWebController::class, 'saveCredentials'])->name('telephony.save-credentials');
         Route::post  ('/telephony/credentials/delete',     [App\Http\Controllers\Admin\TelephonyWebController::class, 'deleteCredentials'])->name('telephony.delete-credentials');
+        // SIP extensions on our Asterisk (desk phones, MicroSIP, the browser phone).
+        Route::get   ('/telephony/extensions',                      [App\Http\Controllers\Admin\SipExtensionController::class, 'index'])->name('telephony.extensions');
+        Route::post  ('/telephony/extensions',                      [App\Http\Controllers\Admin\SipExtensionController::class, 'store'])->name('telephony.extensions.store');
+        Route::post  ('/telephony/extensions/{extension}/password', [App\Http\Controllers\Admin\SipExtensionController::class, 'resetPassword'])->whereNumber('extension')->name('telephony.extensions.password');
+        Route::post  ('/telephony/extensions/{extension}/reveal',   [App\Http\Controllers\Admin\SipExtensionController::class, 'reveal'])->whereNumber('extension')->name('telephony.extensions.reveal');
+        Route::post  ('/telephony/extensions/{extension}/sync',     [App\Http\Controllers\Admin\SipExtensionController::class, 'sync'])->whereNumber('extension')->name('telephony.extensions.sync');
+        Route::post  ('/telephony/extensions/{extension}/use',      [App\Http\Controllers\Admin\SipExtensionController::class, 'useInBrowser'])->whereNumber('extension')->name('telephony.extensions.use');
+        Route::post  ('/telephony/extensions/{extension}/delete',   [App\Http\Controllers\Admin\SipExtensionController::class, 'destroy'])->whereNumber('extension')->name('telephony.extensions.destroy');
+        // Website "Call us" button → the project's AI agent, in the browser.
+        Route::get   ('/telephony/web-call',                        [App\Http\Controllers\Admin\WebCallSettingsController::class, 'index'])->name('telephony.web-call');
+        Route::post  ('/telephony/web-call',                        [App\Http\Controllers\Admin\WebCallSettingsController::class, 'save'])->name('telephony.web-call.save');
         // "Bring your own Twilio" setup wizard.
 
         // Brain & compute settings (LLM provider + CPU/GPU)
@@ -495,6 +518,8 @@ Route::middleware(['auth', 'active.client'])
         // Voices (per-project speaker references + language)
         Route::get   ('/voices',                           [App\Http\Controllers\Admin\VoiceWebController::class, 'index'])->name('voices.index');
         Route::post  ('/voices',                           [App\Http\Controllers\Admin\VoiceWebController::class, 'store'])->name('voices.store');
+        Route::post  ('/voices/response',                  [App\Http\Controllers\Admin\VoiceWebController::class, 'saveResponseVoice'])->name('voices.response');
+        Route::get   ('/voices/google-preview',            [App\Http\Controllers\Admin\VoiceWebController::class, 'googlePreview'])->name('voices.google-preview');
         Route::post  ('/voices/{id}/default',              [App\Http\Controllers\Admin\VoiceWebController::class, 'setDefault'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('voices.default');
         Route::get   ('/voices/{id}/audio',                [App\Http\Controllers\Admin\VoiceWebController::class, 'audio'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('voices.audio');
         Route::delete('/voices/{id}',                      [App\Http\Controllers\Admin\VoiceWebController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('voices.destroy');

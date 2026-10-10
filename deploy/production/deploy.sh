@@ -168,7 +168,7 @@ case "$cmd" in
 
     has() { printf '%s\n' "$changed" | grep -qE "$1"; }
 
-    build_app=0; build_voice=0; recreate=""; reconcile=0
+    build_app=0; build_voice=0; build_asterisk=0; recreate=""; reconcile=0
 
     has '^admin/'                        && build_app=1
     # The webchat widget is BAKED INTO the app image (admin/Dockerfile copies
@@ -181,12 +181,14 @@ case "$cmd" in
     # editing it changes the image without touching a single copied path.
     has '^\.dockerignore$'               && build_app=1
     has '^voice-engine/'                 && build_voice=1
+    # Asterisk (SIP + WebRTC): image and configs live in telephony/asterisk.
+    has '^telephony/asterisk/'           && build_asterisk=1
     has '^deploy/production/haproxy/'    && recreate="$recreate haproxy"
     has '^deploy/(production/)?Caddyfile' && recreate="$recreate caddy"
     has '^deploy/production/monitoring/' && recreate="$recreate prometheus alertmanager grafana"
     has '^docker-compose\.yml$|^deploy/production/docker-compose\.prod\.yml$|^deploy/production/ollama\.override\.yml$' && reconcile=1
 
-    echo ">> planned: app_build=$build_app voice_build=$build_voice recreate='${recreate:-none}' reconcile=$reconcile"
+    echo ">> planned: app_build=$build_app voice_build=$build_voice asterisk_build=$build_asterisk recreate='${recreate:-none}' reconcile=$reconcile"
 
     # --- Validate BEFORE mutating anything that is currently serving ---------
     echo ">> validating configs…"
@@ -207,6 +209,10 @@ case "$cmd" in
     if [ "$build_voice" = 1 ]; then
       echo ">> building voice-engine… (slow if requirements.lock.txt changed)"
       "${DC[@]}" build voice-engine || { echo "!! voice-engine build FAILED — ABORTED, production untouched" >&2; exit 1; }
+    fi
+    if [ "$build_asterisk" = 1 ]; then
+      echo ">> building asterisk…"
+      "${DC[@]}" build asterisk || { echo "!! asterisk build FAILED — ABORTED, production untouched" >&2; exit 1; }
     fi
 
     # --- Warn about new env vars instead of failing at runtime ---------------
@@ -230,6 +236,12 @@ case "$cmd" in
     if [ "$build_voice" = 1 ]; then
       echo ">> recreating voice-engine… (brief voice blip — single replica)"
       "${DC[@]}" up -d --no-deps --force-recreate voice-engine
+      acted=1
+    fi
+    if [ "$build_asterisk" = 1 ]; then
+      # Accounts survive: they live in the asterisk_data volume (astdb).
+      echo ">> recreating asterisk… (calls in progress drop)"
+      "${DC[@]}" up -d --no-deps --force-recreate asterisk
       acted=1
     fi
     if [ "$reconcile" = 1 ] || [ "$acted" = 0 ] || [ "$forced" = 1 ]; then
