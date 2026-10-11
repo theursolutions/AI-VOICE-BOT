@@ -5,7 +5,10 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\ContactLead;
+use App\Support\Xlsx;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -24,6 +27,57 @@ class ContactsController extends Controller
         // Sources are written by the public endpoints, not enumerated anywhere,
         // so build the filter list from what's actually in the table.
         $sources = ContactLead::query()->select('source')->distinct()->orderBy('source')->pluck('source')->all();
+
+        $contacts = $this->filtered($request, $sources)->orderByDesc('created_at')->paginate(25)->withQueryString();
+
+        // Pill counts respect the source filter (but not status — each pill IS
+        // a status) so the numbers match what clicking a pill will show.
+        $countsQuery = fn () => ContactLead::query()
+            ->when($source !== '' && in_array($source, $sources, true), fn ($w) => $w->where('source', $source));
+
+        $counts = [
+            'total'     => $countsQuery()->count(),
+            'new'       => $countsQuery()->where('status', 'new')->count(),
+            'contacted' => $countsQuery()->where('status', 'contacted')->count(),
+            'closed'    => $countsQuery()->where('status', 'closed')->count(),
+        ];
+
+        return view('ops.contacts.index', compact('contacts', 'status', 'source', 'sources', 'search', 'counts'));
+    }
+
+    /**
+     * GET /admin/contacts/export: the contacts on screen (same status, source
+     * and search filters, every page) as an Excel file, full messages included.
+     */
+    public function export(Request $request): BinaryFileResponse
+    {
+        $sources = ContactLead::query()->select('source')->distinct()->pluck('source')->all();
+        $tz      = (string) config('services.ops_alerts.timezone', 'Asia/Karachi');
+        $label   = ['contact_form' => 'Contact form', 'reach_out' => 'Reach out bar', 'demo_call' => 'Demo call'];
+
+        $rows = $this->filtered($request, $sources)->orderByDesc('created_at')->limit(50000)->cursor()
+            ->map(fn (ContactLead $c) => [
+                $c->created_at?->copy()->timezone($tz)->format('Y-m-d H:i'),
+                $c->name, $c->phone, $c->email, $c->subject, $c->message,
+                $label[$c->source] ?? $c->source, ucfirst((string) $c->status),
+                $c->referrer, $c->ip, $c->user_agent,
+            ]);
+
+        $path = Xlsx::build('Website contacts',
+            ['Date (PKT)', 'Name', 'Phone', 'Email', 'Subject', 'Message', 'Source', 'Status', 'Page', 'IP address', 'Browser'],
+            $rows, [17, 22, 18, 28, 30, 60, 16, 11, 40, 16, 40]);
+
+        return response()->download($path, 'website-contacts-' . now($tz)->format('Y-m-d') . '.xlsx', [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ])->deleteFileAfterSend(true);
+    }
+
+    /** The status / source / search filters shared by the list and the export. */
+    private function filtered(Request $request, array $sources): Builder
+    {
+        $status = (string) $request->query('status', '');
+        $source = (string) $request->query('source', '');
+        $search = trim((string) $request->query('q', ''));
 
         $q = ContactLead::query();
 
@@ -44,21 +98,7 @@ class ContactsController extends Controller
             });
         }
 
-        $contacts = $q->orderByDesc('created_at')->paginate(25)->withQueryString();
-
-        // Pill counts respect the source filter (but not status — each pill IS
-        // a status) so the numbers match what clicking a pill will show.
-        $countsQuery = fn () => ContactLead::query()
-            ->when($source !== '' && in_array($source, $sources, true), fn ($w) => $w->where('source', $source));
-
-        $counts = [
-            'total'     => $countsQuery()->count(),
-            'new'       => $countsQuery()->where('status', 'new')->count(),
-            'contacted' => $countsQuery()->where('status', 'contacted')->count(),
-            'closed'    => $countsQuery()->where('status', 'closed')->count(),
-        ];
-
-        return view('ops.contacts.index', compact('contacts', 'status', 'source', 'sources', 'search', 'counts'));
+        return $q;
     }
 
     public function updateStatus(Request $request, int $id): RedirectResponse

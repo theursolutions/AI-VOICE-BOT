@@ -216,6 +216,12 @@
 
         <li class="side-nav__devider my-4"></li>
         <li>
+            <a href="{{ route('ops.notifications.index') }}" class="side-menu {{ $is('ops.notifications.*') ? 'side-menu--active' : '' }}">
+                <div class="side-menu__icon"><i data-lucide="bell"></i></div>
+                <div class="side-menu__title">Notifications</div>
+            </a>
+        </li>
+        <li>
             <a href="{{ route('ops.audit.index') }}" class="side-menu {{ $is('ops.audit.*') ? 'side-menu--active' : '' }}">
                 <div class="side-menu__icon"><i data-lucide="file-text"></i></div>
                 <div class="side-menu__title">Audit log</div>

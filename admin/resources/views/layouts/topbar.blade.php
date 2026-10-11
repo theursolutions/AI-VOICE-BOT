@@ -365,6 +365,11 @@
     <!-- END: Theme -->
 
     <!-- BEGIN: Notifications -->
+    @if (auth()->user()?->is_super_admin)
+        {{-- Super admins: the platform notification panel (new users,
+             clients, projects, website contacts, payments). --}}
+        <div class="mr-auto sm:mr-0">@include('partials.ops-notifications')</div>
+    @else
     <div class="intro-x dropdown mr-auto sm:mr-6">
         {{-- Bell kept for layout continuity, but WITHOUT the template's demo
              notifications. There is no notification backend yet, so showing
@@ -386,6 +391,7 @@
             </div>
         </div>
     </div>
+    @endif
     <!-- END: Notifications -->
     <!-- BEGIN: Account Menu -->
     @php

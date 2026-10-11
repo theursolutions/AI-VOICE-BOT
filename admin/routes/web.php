@@ -187,8 +187,15 @@ Route::middleware(['auth', 'super-admin'])
 
         Route::get('/audit',                   [App\Http\Controllers\SuperAdmin\AuditController::class, 'index'])->name('audit.index');
 
+        // Notification panel (the bell): new users, clients, projects, website contacts, payments.
+        Route::get ('/notifications',           [App\Http\Controllers\SuperAdmin\NotificationsController::class, 'index'])->name('notifications.index');
+        Route::get ('/notifications/feed',      [App\Http\Controllers\SuperAdmin\NotificationsController::class, 'feed'])->name('notifications.feed');
+        Route::post('/notifications/read',      [App\Http\Controllers\SuperAdmin\NotificationsController::class, 'read'])->name('notifications.read');
+        Route::get ('/notifications/{id}/open', [App\Http\Controllers\SuperAdmin\NotificationsController::class, 'open'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('notifications.open');
+
         // Website contacts — "Call me now" / contact captures from the marketing site.
         Route::get ('/contacts',               [App\Http\Controllers\SuperAdmin\ContactsController::class, 'index'])->name('contacts.index');
+        Route::get ('/contacts/export',        [App\Http\Controllers\SuperAdmin\ContactsController::class, 'export'])->name('contacts.export');
         Route::post('/contacts/{id}/status',   [App\Http\Controllers\SuperAdmin\ContactsController::class, 'updateStatus'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('contacts.status');
 
         // ── Marketing site: SEO + page content (drives the public website) ──
