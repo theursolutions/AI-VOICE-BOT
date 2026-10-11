@@ -180,6 +180,15 @@ return [
     //
     // Legacy LANDING_WIDGET_URL is still honoured if set (manual iframe
     // fallback) — leave it unset to use the loader.js path.
+    // Team alerts (App\Services\Ops\OpsAlerts): new users, clients, projects,
+    // website contacts and payments go to the super-admin notification panel
+    // and are emailed here. OPS_ALERT_MAIL=false keeps only the panel.
+    'ops_alerts' => [
+        'email'    => env('OPS_ALERT_EMAIL', 'info@serveai.com.pk'),
+        'mail'     => (bool) env('OPS_ALERT_MAIL', true),
+        'timezone' => env('OPS_ALERT_TIMEZONE', 'Asia/Karachi'),
+    ],
+
     'landing' => [
         'demo_key'   => env('LANDING_DEMO_KEY', null),
         'widget_url' => env('LANDING_WIDGET_URL', null),

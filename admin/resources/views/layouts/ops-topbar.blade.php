@@ -20,6 +20,8 @@
         </span>
     </div>
 
+    @include('partials.ops-notifications')
+
     {{-- Account dropdown — mirrors the customer topbar shape --}}
     <div class="intro-x dropdown w-8 h-8">
         <div class="dropdown-toggle w-8 h-8 rounded-full overflow-hidden shadow-lg image-fit zoom-in flex items-center justify-center"

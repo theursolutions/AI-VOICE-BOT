@@ -1,13 +1,31 @@
 @extends('layouts.ops')
 
 @section('content')
+<style>
+    .tva-xlsx { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; font-size:12px; font-weight:600; border-radius:9px;
+        background:#16a34a; color:#fff; text-decoration:none; white-space:nowrap; }
+    .tva-xlsx:hover { background:#15803d; color:#fff; }
+    .tva-msg { min-width:240px; max-width:380px; color:#334155; font-size:12.5px; line-height:1.5; }
+    .tva-msg__subj { font-weight:600; color:#0f172a; margin-bottom:2px; }
+    .tva-msg__full { white-space:pre-wrap; word-break:break-word; }
+    .tva-msg details summary { cursor:pointer; list-style:none; }
+    .tva-msg details summary::-webkit-details-marker { display:none; }
+    .tva-msg__more { color:#2563eb; font-weight:600; margin-left:4px; white-space:nowrap; }
+    .tva-msg details[open] summary .tva-msg__preview { display:none; }
+    .tva-msg details[open] summary { margin-bottom:4px; }
+    .tva-msg details[open] .tva-msg__more { font-size:0; margin-left:0; }
+    .tva-msg details[open] .tva-msg__more::after { font-size:12px; content:"Show less"; }
+    .tva-msg__none { color:#94a3b8; font-style:italic; }
+    html.dark .tva-msg { color:#cbd5e1; }
+    html.dark .tva-msg__subj { color:#f1f5f9; }
+</style>
 <div class="content">
     <div class="tva-dt-hero mt-6">
         <div class="tva-dt-hero__icon">📞</div>
         <div class="flex-1">
             <div style="font-size:20px; font-weight:700;">Website Contacts</div>
             <div style="font-size:13px; opacity:.9; margin-top:4px;">
-                People who reached out from the marketing site (“Call me now” / contact requests).
+                People who reached out from the website: contact form messages and "Reach out" phone numbers.
             </div>
         </div>
     </div>
@@ -60,7 +78,10 @@
                 <a href="{{ route('ops.contacts.index', array_filter(['status' => $status])) }}" class="btn btn-secondary btn-sm">Clear</a>
             @endif
             <div class="ml-auto" style="color:#64748b; font-size:12px;">{{ number_format($contacts->total()) }} contact(s)</div>
-            @include('partials.table-export', ['table' => '#tva-t-ops-contacts', 'filename' => 'ops-contacts', 'paginator' => $contacts ?? null])
+            <a href="{{ route('ops.contacts.export', array_filter(['status' => $status, 'source' => $source, 'q' => $search])) }}"
+               class="tva-xlsx" title="Download these contacts, with full messages, as an Excel file">
+                <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export to Excel
+            </a>
         </form>
 
         <div class="overflow-x-auto">
@@ -81,7 +102,7 @@
                 @forelse ($contacts as $c)
                     @php
                         $statusColor = ['new' => '#2563eb', 'contacted' => '#92400e', 'closed' => '#15803d'][$c->status] ?? '#64748b';
-                        $when = $c->created_at ? $c->created_at->format('M j, Y · H:i') : '—';
+                        $when = $c->created_at ? $c->created_at->copy()->timezone(config('services.ops_alerts.timezone', 'Asia/Karachi'))->format('M j, Y · H:i') : '';
                     @endphp
                     <tr>
                         <td data-label="When" style="font-family:ui-monospace,monospace; color:#475569; white-space:nowrap;">{{ $when }}</td>
@@ -93,15 +114,31 @@
                             @endif
                             @if ($c->name)<div style="font-size:12px;color:#475569;">{{ $c->name }}</div>@endif
                             @if ($c->email)<div style="font-size:11px;color:#94a3b8;">{{ $c->email }}</div>@endif
-                            @if (!$c->phone && !$c->name && !$c->email)<span style="color:#94a3b8;">—</span>@endif
+                            @if (!$c->phone && !$c->name && !$c->email)<span style="color:#94a3b8;">Unknown</span>@endif
                         </td>
-                        <td data-label="Message" style="max-width:280px;color:#475569;font-size:12.5px;">
-                            {{ $c->subject ? $c->subject.' — ' : '' }}{{ $c->message ?: '—' }}
+                        <td data-label="Message" class="tva-msg">
+                            @if ($c->message)
+                                @if ($c->subject)<div class="tva-msg__subj">{{ $c->subject }}</div>@endif
+                                @if (mb_strlen($c->message) > 160)
+                                    <details>
+                                        <summary><span class="tva-msg__preview">{{ \Illuminate\Support\Str::limit($c->message, 160) }}</span>
+                                            <span class="tva-msg__more">Read all</span></summary>
+                                        <div class="tva-msg__full">{{ $c->message }}</div>
+                                    </details>
+                                @else
+                                    <div class="tva-msg__full">{{ $c->message }}</div>
+                                @endif
+                            @elseif (in_array($c->source, ['reach_out', 'demo_call'], true))
+                                <span class="tva-msg__none">No message: left a phone number on the homepage "Reach out" bar.</span>
+                            @else
+                                @if ($c->subject)<div class="tva-msg__subj">{{ $c->subject }}</div>@endif
+                                <span class="tva-msg__none">No message.</span>
+                            @endif
                         </td>
                         <td data-label="Source"><span style="font-family:ui-monospace,monospace;font-size:11px;color:#64748b;">{{ $c->source }}</span></td>
                         <td data-label="Referrer" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:#94a3b8;"
-                            title="{{ $c->referrer }}">{{ $c->referrer ?: '—' }}</td>
-                        <td data-label="IP" style="font-family:ui-monospace,monospace;color:#94a3b8;font-size:11px;">{{ $c->ip ?: '—' }}</td>
+                            title="{{ $c->referrer }}">{{ $c->referrer }}</td>
+                        <td data-label="IP" style="font-family:ui-monospace,monospace;color:#94a3b8;font-size:11px;">{{ $c->ip }}</td>
                         <td data-label="Status">
                             <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:700;text-transform:capitalize;background:{{ $statusColor }}1a;color:{{ $statusColor }};">
                                 {{ $c->status }}
