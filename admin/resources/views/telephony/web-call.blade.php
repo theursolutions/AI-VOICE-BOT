@@ -107,6 +107,7 @@
                     <small class="text-slate-500 text-xs block mt-2">
                         Paste before <code>&lt;/body&gt;</code>. It adds a round call button (bottom left). Any element with
                         <code>data-tva-call</code> opens it too, e.g. <code>&lt;button data-tva-call&gt;Call our AI&lt;/button&gt;</code>.
+                        Add <code>data-color="#1b3962"</code> to the tag to match your brand colour.
                         The AI that answers is the agent your project uses for phone calls (Agents → <i>On calls</i>).
                     </small>
                 </div>
