@@ -5,7 +5,8 @@
  *   <script src="https://serveai.com.pk/webcall/call.js"
  *           data-project-key="PROJECT_PUBLIC_KEY" async></script>
  *
- * Optional: data-label="Talk to our AI", data-position="left|right".
+ * Optional: data-label="Talk to our AI", data-position="left|right",
+ * data-color="#1b3962" (or a theme variable: "var(--brand, #1b3962)").
  * Any element with [data-tva-call] opens it; window.TvaCall.open() too.
  *
  * Each call asks the server for a one-call SIP account (POST /api/webcall/session);
@@ -26,6 +27,10 @@
     var API = (script.getAttribute('data-api') || new URL(script.src).origin).replace(/\/$/, '');
     var LABEL = script.getAttribute('data-label') || 'Talk to our AI agent';
     var SIDE = script.getAttribute('data-position') === 'right' ? 'right' : 'left';
+    // Button colour: any CSS colour, or the site's own theme variable, e.g.
+    // data-color="var(--brand, #1b3962)" follows the page's light/dark theme.
+    var COLOR = script.getAttribute('data-color') || '';
+    if (!/^[#a-zA-Z0-9(),.%\s-]{1,80}$/.test(COLOR)) COLOR = '#2563eb';
     var JSSIP_SRC = 'https://cdn.jsdelivr.net/npm/jssip@3.12.0/dist/jssip.min.js';
     if (!KEY) { console.warn('[tva-call] data-project-key is missing'); return; }
 
@@ -37,27 +42,26 @@
         ':host{all:initial}',
         '*{box-sizing:border-box;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}',
         '.fab{position:fixed;bottom:22px;' + SIDE + ':22px;width:60px;height:60px;border-radius:50%;border:0;cursor:pointer;color:#fff;',
-        ' background:linear-gradient(135deg,#4f46e5,#7c3aed);box-shadow:0 10px 25px -6px rgba(79,70,229,.6);z-index:2147483000;',
+        ' background:var(--c);box-shadow:0 10px 25px -6px rgba(15,23,42,.45);z-index:2147483000;',
         ' display:flex;align-items:center;justify-content:center;transition:transform .2s}',
-        '.fab:hover{transform:scale(1.07)}',
-        '.fab::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid #7c3aed;animation:ring 2.2s infinite}',
+        '.fab:hover{transform:scale(1.07);filter:brightness(1.12)}',
+        '.fab::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);animation:ring 2.2s infinite}',
         '@keyframes ring{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.6);opacity:0}}',
         '.tip{position:fixed;bottom:34px;' + SIDE + ':92px;background:#0f172a;color:#fff;font-size:13px;padding:7px 12px;border-radius:999px;',
         ' z-index:2147483000;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.2)}',
         '.card{position:fixed;bottom:96px;' + SIDE + ':22px;width:340px;max-width:calc(100vw - 32px);background:#fff;color:#0f172a;border-radius:18px;',
         ' box-shadow:0 24px 60px -12px rgba(15,23,42,.45);z-index:2147483001;overflow:hidden;animation:pop .18s ease-out}',
         '@keyframes pop{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}',
-        '.head{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:11px 44px 10px 16px;position:relative}',
+        '.head{background:var(--c);background-image:linear-gradient(135deg,rgba(255,255,255,.14),rgba(255,255,255,0));color:#fff;padding:11px 44px 10px 16px;position:relative}',
         '.head h3{margin:0;font-size:15px;font-weight:700;line-height:1.3}',
         '.head p{margin:2px 0 0;font-size:11.5px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
         '.close{position:absolute;top:50%;transform:translateY(-50%);right:10px;background:rgba(255,255,255,.18);border:0;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}',
         '.body{padding:18px;text-align:center}',
-        '.avatar{width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:#eef2ff;color:#4f46e5;display:flex;align-items:center;justify-content:center}',
-        '.avatar.live{animation:talk 1.4s ease-in-out infinite}',
-        '@keyframes talk{0%,100%{box-shadow:0 0 0 0 rgba(79,70,229,.35)}50%{box-shadow:0 0 0 12px rgba(79,70,229,0)}}',
+        '.avatar{width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:#f1f5f9;color:var(--c);display:flex;align-items:center;justify-content:center;position:relative}',
+        '.avatar.live::after{content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);animation:ring 1.4s ease-out infinite}',
         '.status{font-size:14px;font-weight:600;min-height:20px}',
         '.sub{font-size:12px;color:#64748b;margin-top:4px;min-height:16px}',
-        '.timer{font-variant-numeric:tabular-nums;font-size:26px;font-weight:700;margin:6px 0 2px;color:#4f46e5}',
+        '.timer{font-variant-numeric:tabular-nums;font-size:26px;font-weight:700;margin:6px 0 2px;color:var(--c)}',
         '.row{display:flex;gap:10px;justify-content:center;margin-top:16px}',
         '.btn{border:0;border-radius:999px;padding:11px 18px;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px}',
         '.go{background:#16a34a;color:#fff}.go:hover{background:#15803d}',
@@ -66,13 +70,14 @@
         '.note{font-size:11px;color:#94a3b8;margin-top:12px}',
         '.langs{display:inline-flex;background:#f1f5f9;border-radius:999px;padding:3px;margin-top:12px}',
         '.lang{border:0;background:transparent;padding:6px 16px;border-radius:999px;font-size:13px;font-weight:600;color:#64748b;cursor:pointer}',
-        '.lang.on{background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(15,23,42,.15)}',
+        '.lang.on{background:#fff;color:var(--c);box-shadow:0 1px 3px rgba(15,23,42,.15)}',
         '.lang:disabled{cursor:default}',
         '.hidden{display:none!important}'
     ].join('');
 
     var host = document.createElement('div');
     host.id = 'tva-call';
+    host.style.setProperty('--c', COLOR);
     var root = host.attachShadow ? host.attachShadow({ mode: 'open' }) : host;
     root.innerHTML = '<style>' + CSS + '</style>' +
         '<button class="fab" aria-label="' + esc(LABEL) + '">' + ICON_PHONE + '</button>' +
