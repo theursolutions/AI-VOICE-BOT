@@ -1902,6 +1902,12 @@
         $tvaCallLabel = (string) data_get($tvaCallProject?->json_data, 'webcall.button_label', 'Talk to our AI agent');
     @endphp
     @if ($tvaCallOn)
+        {{-- The call button (60px, bottom-left) takes the sound toggle's corner:
+             stack the toggle just above it, centred on it. --}}
+        <style>
+            .sfx-toggle { bottom: 94px; left: 29px; }
+            @media (max-width: 560px) { .sfx-toggle { bottom: 92px; left: 31px; } }
+        </style>
         <script src="{{ str_replace('/widget/loader.js', '/webcall/call.js', $tvaLoaderSrc) }}"
                 data-project-key="{{ $tvaDemoKey }}" data-label="{{ $tvaCallLabel }}"
                 data-color="var(--cta-blue, #1d4ed8)" async></script>
