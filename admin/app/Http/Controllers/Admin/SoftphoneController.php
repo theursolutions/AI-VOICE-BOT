@@ -8,7 +8,10 @@ use App\Models\Lead;
 use App\Models\Message;
 use App\Models\Project;
 use App\Models\Session;
+use App\Models\SipExtension;
+use App\Models\User;
 use App\Models\UserPhoneAccount;
+use App\Services\Telephony\SipServer;
 use App\Services\Tenant\TenantManager;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,7 +24,7 @@ use Illuminate\Support\Str;
  */
 class SoftphoneController extends Controller
 {
-    public function __construct(private TenantManager $tenants) {}
+    public function __construct(private TenantManager $tenants, private SipServer $server) {}
 
     /**
      * GET /c/{client}/phone — the phone window. It owns the SIP sign-in and
@@ -43,15 +46,27 @@ class SoftphoneController extends Controller
         $account = UserPhoneAccount::where('user_id', $request->user()->id)->first();
 
         if (! $account) {
-            return response()->json(['configured' => false, 'display_name' => $request->user()->name]);
+            return response()->json(['configured' => false, 'display_name' => $request->user()->name,
+                                     'server_ws_url' => $this->server->wsUrl()]);
+        }
+
+        // A login saved by hand as "9122" (or with a wrong server address)
+        // never registers: point it at the extension's real login and server.
+        $ext = $this->workspaceExtension($request->user(), (string) $account->extension);
+        if ($ext && $ext->kind === SipExtension::KIND_WEBRTC
+            && ($account->extension !== $ext->sip_username || $account->ws_url !== $this->server->wsUrl())) {
+            $account->extension = $ext->sip_username;
+            $account->ws_url    = $this->server->wsUrl();
+            $account->save();
         }
 
         return response()->json([
-            'configured'   => true,
-            'extension'    => $account->extension,
-            'password'     => $account->sip_password,
-            'ws_url'       => $account->ws_url,
-            'display_name' => $account->display_name ?: $request->user()->name,
+            'configured'    => true,
+            'extension'     => $account->extension,
+            'password'      => $account->sip_password,
+            'ws_url'        => $account->ws_url,
+            'display_name'  => $account->display_name ?: $request->user()->name,
+            'server_ws_url' => $this->server->wsUrl(),
         ]);
     }
 
@@ -61,9 +76,21 @@ class SoftphoneController extends Controller
         $data = $request->validate([
             'extension'    => ['required', 'string', 'max:32', 'regex:/^[A-Za-z0-9_.+-]+$/'],
             'password'     => 'nullable|string|max:128',
-            'ws_url'       => ['required', 'string', 'max:255', 'regex:#^wss?://#i'],
+            'ws_url'       => ['nullable', 'string', 'max:255', 'regex:#^wss?://#i'],
             'display_name' => 'nullable|string|max:120',
         ]);
+
+        // "9122" typed for one of the workspace's own extensions: on our phone
+        // server its login is "c<client>_9122", and it lives on that server only.
+        if ($ext = $this->workspaceExtension($request->user(), $data['extension'])) {
+            if ($ext->kind !== SipExtension::KIND_WEBRTC) {
+                return response()->json(['message' => "Extension {$ext->extension} is set up for a phone or app. "
+                    . 'Use a "Browser phone" extension here (Telephony → Extensions).'], 422);
+            }
+            $data['extension'] = $ext->sip_username;
+            $data['ws_url']    = $this->server->wsUrl();
+        }
+        $data['ws_url'] = ($data['ws_url'] ?? '') !== '' ? $data['ws_url'] : $this->server->wsUrl();
 
         $account = UserPhoneAccount::firstOrNew(['user_id' => $request->user()->id]);
         if (! $account->exists && empty($data['password'])) {
@@ -79,6 +106,23 @@ class SoftphoneController extends Controller
         $account->save();
 
         return $this->config($request);
+    }
+
+    /**
+     * The extension a user means by "9122" (or its full login "c1_9122") in
+     * one of their workspaces, the active one first.
+     */
+    private function workspaceExtension(User $user, string $typed): ?SipExtension
+    {
+        $clientIds = $user->clients()->pluck('clients.id')->map(fn ($id) => (int) $id)->all();
+        if ($clientIds === []) {
+            return null;
+        }
+
+        return SipExtension::whereIn('client_id', $clientIds)
+            ->where(fn ($q) => $q->where('extension', $typed)->orWhere('sip_username', $typed))
+            ->orderByRaw('client_id = ? desc', [(int) $user->active_client_id])
+            ->first();
     }
 
     /**

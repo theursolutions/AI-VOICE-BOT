@@ -126,6 +126,8 @@ class OpsTelephonyController extends Controller
         $projects   = Project::whereIn('id', $projectIds->merge($recent->pluck('project_id'))->unique())->get(['id', 'name', 'client_id'])->keyBy('id');
         $clients    = Client::whereIn('id', $projects->pluck('client_id')->unique())->get(['id', 'name'])->keyBy('id');
 
+        $demo = $this->demoProject();
+
         return view('ops.telephony.web-calls', [
             'title'     => 'Website calls',
             'stats'     => $stats,
@@ -134,7 +136,47 @@ class OpsTelephonyController extends Controller
             'projects'  => $projects,
             'clients'   => $clients,
             'projectId' => $projectId,
+            'demo'      => $demo,
+            'demoSettings' => $demo ? app(WebCalls::class)->settings($demo) : null,
         ]);
+    }
+
+    /**
+     * The free demo call on serveai.com.pk: how long a call may last and how
+     * often one visitor may call. Whatever the length, the AI greets at the
+     * start and says the free-call goodbye in the last five seconds.
+     */
+    public function saveDemoCall(Request $request, WebCalls $calls): RedirectResponse
+    {
+        $demo = $this->demoProject();
+        abort_unless($demo, 404);
+
+        $data = $request->validate([
+            'enabled'       => 'nullable|boolean',
+            'max_seconds'   => 'required|integer|min:20|max:1800',
+            'calls_per_day' => 'required|integer|min:1|max:50',
+            'gap_hours'     => 'required|numeric|min:0|max:24',
+        ], [
+            'max_seconds.min' => 'A call needs at least 20 seconds: the greeting and the goodbye take about 5 seconds each.',
+            'max_seconds.max' => 'A free call can last at most 30 minutes.',
+        ]);
+
+        $calls->save($demo, [
+            'enabled'       => (bool) ($data['enabled'] ?? false),
+            'max_seconds'   => (int) $data['max_seconds'],
+            'calls_per_day' => (int) $data['calls_per_day'],
+            'gap_hours'     => (float) $data['gap_hours'],
+        ]);
+
+        return back()->with('success', 'Main website demo call saved. New calls use it straight away.');
+    }
+
+    /** The project behind the serveai.com.pk demo (LANDING_DEMO_KEY). */
+    private function demoProject(): ?Project
+    {
+        $key = (string) config('services.landing.demo_key', '');
+
+        return $key === '' ? null : Project::where('project_api_key', $key)->first();
     }
 
     /** "Reset limit": this IP may call again now (its calls stay in the stats). */
@@ -148,7 +190,7 @@ class OpsTelephonyController extends Controller
         $projectIds = ! empty($data['project_id']) ? [(int) $data['project_id']] : null;
         $n = $calls->resetLimit($data['ip'], $projectIds);
 
-        return back()->with('success', "Limit reset for {$data['ip']} — they can call again now"
+        return back()->with('success', "Limit reset for {$data['ip']}. They can call again now"
             . ($n ? " ({$n} earlier call" . ($n === 1 ? '' : 's') . ' no longer counted).' : '.'));
     }
 

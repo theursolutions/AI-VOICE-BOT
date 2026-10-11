@@ -139,7 +139,78 @@ class WebCallTest extends TestCase
         $this->assertSame(['turn:turn.serveai.com.pk:3478'], $resp->json('ice_servers.1.urls'));
     }
 
+    public function test_the_visitors_language_choice_is_kept_for_the_greeting(): void
+    {
+        $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.7'])->withHeaders(['Origin' => 'https://serveai.com.pk'])
+            ->postJson('/api/webcall/session', ['key' => 'demo-key-123', 'lang' => 'ur'])->assertOk();
+        $this->assertSame('ur', WebCallSession::latest('id')->value('language'));
+
+        $this->withServerVariables(['REMOTE_ADDR' => '198.51.100.30'])->withHeaders(['Origin' => 'https://serveai.com.pk'])
+            ->postJson('/api/webcall/session', ['key' => 'demo-key-123', 'lang' => 'fr'])->assertStatus(422);
+    }
+
+    public function test_only_a_super_admin_sets_the_main_website_demo_call_length(): void
+    {
+        config(['services.landing.demo_key' => 'demo-key-123']);
+        $form = ['enabled' => 1, 'max_seconds' => 90, 'calls_per_day' => 5, 'gap_hours' => 2];
+
+        $this->actingAs($this->owner())->post(route('ops.telephony.web-calls.demo'), $form)->assertNotFound();
+
+        $admin = User::create(['name' => 'Ops', 'email' => 'ops3@serveai.test', 'password' => bcrypt('password')]);
+        $admin->forceFill(['is_super_admin' => true, 'email_verified_at' => now()])->save();
+        $this->actingAs($admin)->get(route('ops.telephony.web-calls'))->assertOk()->assertSee('Main website demo call');
+        $this->post(route('ops.telephony.web-calls.demo'), $form)->assertRedirect()->assertSessionHas('success');
+
+        $s = app(WebCalls::class)->settings($this->project->fresh());
+        $this->assertSame([90, 5, true], [$s['max_seconds'], $s['calls_per_day'], $s['enabled']]);
+        $this->assertEquals(2, $s['gap_hours']);
+        $this->assertSame(['serveai.com.pk'], $s['allowed_origins'], 'other settings untouched');
+        $this->assertSame(90, $this->ask()->json('max_seconds'));
+
+        // Too short for the greeting and the goodbye.
+        $this->post(route('ops.telephony.web-calls.demo'), ['max_seconds' => 10] + $form)->assertSessionHasErrors('max_seconds');
+    }
+
     // ── Extensions ──────────────────────────────────────────────────────
+
+    private function extension(string $number, string $kind): SipExtension
+    {
+        return SipExtension::create(['client_id' => $this->client->id, 'extension' => $number, 'name' => "Ext {$number}",
+            'kind' => $kind, 'sip_username' => SipExtension::usernameFor($this->client->id, $number), 'secret' => 'pw-' . $number]);
+    }
+
+    public function test_the_browser_phone_takes_the_extension_number_people_know(): void
+    {
+        app(SipServer::class)->save(['ws_url' => 'wss://voice.serveai.test/sip-ws', 'host' => 'voice.serveai.test', 'port' => 5060,
+            'stun' => [], 'turn_url' => '', 'turn_username' => '', 'turn_credential' => '']);
+        $this->extension('9122', SipExtension::KIND_WEBRTC);
+        $this->extension('2001', SipExtension::KIND_APP);
+        $this->actingAs($this->owner());
+
+        // "9122" and a guessed server address: saved as the real login on our server.
+        $this->postJson(route('softphone.save'), ['extension' => '9122', 'password' => 'pw-9122', 'ws_url' => 'wss://voice.serveai.test:8080/ws'])
+            ->assertOk()
+            ->assertJson(['extension' => 'c' . $this->client->id . '_9122', 'ws_url' => 'wss://voice.serveai.test/sip-ws']);
+
+        // A phone/app extension can't sign in from the browser: say so.
+        $this->postJson(route('softphone.save'), ['extension' => '2001', 'password' => 'pw-2001'])
+            ->assertStatus(422)->assertJsonFragment(['message' => 'Extension 2001 is set up for a phone or app. Use a "Browser phone" extension here (Telephony → Extensions).']);
+    }
+
+    public function test_a_browser_phone_login_saved_wrong_is_corrected_when_it_loads(): void
+    {
+        app(SipServer::class)->save(['ws_url' => 'wss://voice.serveai.test/sip-ws', 'host' => 'voice.serveai.test', 'port' => 5060,
+            'stun' => [], 'turn_url' => '', 'turn_username' => '', 'turn_credential' => '']);
+        $this->extension('9122', SipExtension::KIND_WEBRTC);
+        $owner = $this->owner();
+        \App\Models\UserPhoneAccount::create(['user_id' => $owner->id, 'extension' => '9122', 'sip_password' => 'pw-9122',
+            'ws_url' => 'wss://voice.serveai.test:8080/ws']);
+
+        $this->actingAs($owner)->getJson(route('softphone.config'))->assertOk()
+            ->assertJson(['extension' => 'c' . $this->client->id . '_9122', 'ws_url' => 'wss://voice.serveai.test/sip-ws',
+                          'password' => 'pw-9122', 'server_ws_url' => 'wss://voice.serveai.test/sip-ws']);
+        $this->assertDatabaseHas('user_phone_accounts', ['user_id' => $owner->id, 'extension' => 'c' . $this->client->id . '_9122']);
+    }
 
     private function owner(): User
     {

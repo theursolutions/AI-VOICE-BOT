@@ -49,7 +49,7 @@ class WebCallSettingsController extends Controller
             'project_id'      => 'required|integer',
             'enabled'         => 'nullable|boolean',
             'allowed_origins' => 'nullable|string|max:1000',
-            'max_seconds'     => 'required|integer|min:30|max:900',
+            'max_seconds'     => 'required|integer|min:20|max:1800',
             'calls_per_day'   => 'required|integer|min:1|max:50',
             'gap_hours'       => 'required|numeric|min:0|max:24',
             'button_label'    => 'required|string|max:40',

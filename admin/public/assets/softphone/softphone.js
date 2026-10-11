@@ -91,6 +91,8 @@
             return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
     }
+    // "c1_9122" (the login on the phone server) → "9122" (what people dial).
+    function shortExt(login) { return String(login || '').replace(/^c\d+_/, ''); }
     function cleanNumber(s) { return String(s || '').replace(/[^0-9+*#]/g, ''); }
     function fmt(ms) {
         var t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60;
@@ -258,7 +260,7 @@
 
     function footHtml() {
         if (!ENGINE && !U.alive) return '<div class="tsp-foot"><span class="tsp-dot"></span>Phone window closed</div>';
-        var label = C.reg === 'online' ? 'ext ' + esc(C.cfg.extension) + ' — my CID'
+        var label = C.reg === 'online' ? 'ext ' + esc(shortExt(C.cfg.extension)) + ' · my CID'
             : C.reg === 'connecting' ? 'Connecting…'
             : C.reg === 'failed' ? 'Not signed in' : 'Offline';
         var q = C.view === 'connected' && C.quality
@@ -286,7 +288,7 @@
         return '<div class="tsp-who" style="padding:10px 0 2px">' +
             '<div class="tsp-avatar is-small"><i data-lucide="phone-off"></i></div>' +
             '<div class="tsp-name" style="font-size:18px">Your phone is closed</div>' +
-            '<div class="tsp-state" style="line-height:1.5">Open the phone window to make and take calls. Keep it open — refreshing or moving between pages won\'t drop your calls.</div>' +
+            '<div class="tsp-state" style="line-height:1.5">Open the phone window to make and take calls. Keep it open: refreshing or moving between pages won\'t drop your calls.</div>' +
             '</div>' +
             '<button class="tsp-call" data-act="open-window"><i data-lucide="external-link"></i> Open phone</button>';
     }
@@ -295,7 +297,7 @@
         return '<div class="tsp-who" style="padding:24px 0 6px">' +
             '<div class="tsp-avatar is-small"><i data-lucide="copy"></i></div>' +
             '<div class="tsp-name" style="font-size:18px">Phone already open</div>' +
-            '<div class="tsp-state" style="line-height:1.5">Your phone is running in another window. Use that one — this window can be closed.</div>' +
+            '<div class="tsp-state" style="line-height:1.5">Your phone is running in another window. Use that one, this window can be closed.</div>' +
             '</div>' +
             '<button class="tsp-call" style="background:rgba(255,255,255,.14)" data-act="close-window"><i data-lucide="x"></i> Close this window</button>';
     }
@@ -370,7 +372,7 @@
             ctl('panel-consult', 'users', 'Consultation', panel === 'consult') +
             ctl('rec', 'rec', C.recording ? 'Stop rec' : 'Rec', C.recording, false, C.recording ? ' is-rec' : '') +
             '<span></span>' +
-            '<button class="tsp-ctl" disabled title="Three-way calling — coming soon"><span class="tsp-round"><i data-lucide="user-plus"></i></span>Conference</button>' +
+            '<button class="tsp-ctl" disabled title="Three-way calling, coming soon"><span class="tsp-round"><i data-lucide="user-plus"></i></span>Conference</button>' +
             '<span></span>' +
             '</div>' +
             panelHtml(panel) +
@@ -402,7 +404,7 @@
             if (C.consult) {
                 var connected = C.consult === 'connected';
                 return '<div class="tsp-panel' + enterCls + '"><h4>Consulting ' + esc(C.consultTarget) + '</h4>' +
-                    '<div class="tsp-state" style="margin:0 0 10px">' + (connected ? 'Connected — the caller is on hold' : 'Ringing<span class="tsp-ellipsis"></span>') + '</div>' +
+                    '<div class="tsp-state" style="margin:0 0 10px">' + (connected ? 'Connected, the caller is on hold' : 'Ringing<span class="tsp-ellipsis"></span>') + '</div>' +
                     '<div class="tsp-row">' +
                     '<button class="tsp-btn" data-act="consult-complete"' + (connected ? '' : ' disabled') + '>Complete transfer</button>' +
                     '<button class="tsp-btn is-ghost" data-act="consult-cancel">Cancel</button></div></div>';
@@ -420,10 +422,10 @@
 
     function setupHtml() {
         var c = C.cfg || {};
-        var defaultWs = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':8088/ws';
+        var defaultWs = c.server_ws_url || (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':8088/ws';
         return '<form class="tsp-form" data-form="settings">' +
             '<div class="tsp-name" style="font-size:17px;text-align:center">Phone settings</div>' +
-            '<label>Extension</label><input class="tsp-input" name="extension" required value="' + esc(c.extension || '') + '" placeholder="e.g. 1002">' +
+            '<label>Extension</label><input class="tsp-input" name="extension" required value="' + esc(shortExt(c.extension || '')) + '" placeholder="e.g. 2001">' +
             '<label>Password</label><input class="tsp-input" name="password" type="password" autocomplete="new-password" placeholder="' + (c.configured ? 'Unchanged' : 'Extension password') + '">' +
             '<label>Phone server (WebSocket)</label><input class="tsp-input" name="ws_url" required value="' + esc(c.ws_url || defaultWs) + '">' +
             '<label>Name shown on calls</label><input class="tsp-input" name="display_name" value="' + esc(c.display_name || D.user || '') + '">' +
@@ -432,7 +434,8 @@
             '<button class="tsp-btn" type="submit" style="flex:1">Save &amp; connect</button>' +
             (c.configured ? '<button class="tsp-btn is-ghost" type="button" data-act="setup-cancel">Cancel</button>' : '') +
             '</div>' +
-            '<div class="tsp-hint">Your extension on the company phone system (Asterisk). In the lab: 1002 with PASS_1002 from the install output.</div>' +
+            '<div class="tsp-hint">Easiest: on Telephony → Extensions, click "Use in my browser" next to a browser phone extension. ' +
+            'Typing it here works too: its number (e.g. 2001) and the password from that page.</div>' +
             '</form>';
     }
 
@@ -653,7 +656,7 @@
     // browser"): sign in with it now. Without this the window kept retrying
     // the old server — "Connecting…" forever — until it was reopened.
     function reloadConfig() {
-        if (E.session) { toast('New phone login saved — it applies after this call'); return; }
+        if (E.session) { toast('New phone login saved. It applies after this call'); return; }
         fetch(D.configUrl, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
             .then(function (r) { return r.json(); })
             .then(applyConfig)
@@ -692,7 +695,8 @@
     function applyConfig(cfg) {
         E.password = cfg.password || '';
         C.cfg = { configured: !!cfg.configured, extension: cfg.extension || '', ws_url: cfg.ws_url || '',
-                  display_name: cfg.display_name || '', ice_servers: cfg.ice_servers || [] };
+                  display_name: cfg.display_name || '', ice_servers: cfg.ice_servers || [],
+                  server_ws_url: cfg.server_ws_url || '' };
         if (!cfg.configured) { C.view = 'setup'; changed(); return; }
         C.view = 'idle'; C.formError = '';
         connect();
@@ -718,9 +722,22 @@
         } catch (e) {
             C.reg = 'failed'; C.regError = e.message; changed(); return;
         }
-        ua.on('registered', function () { C.reg = 'online'; C.regError = ''; changed(); });
+        // A server that never answers left the phone on "Connecting…" forever:
+        // after a while say so (JsSIP keeps retrying and still signs in later).
+        clearTimeout(E.connectTimer);
+        E.connectTimer = setTimeout(function () {
+            if (E.ua === ua && C.reg === 'connecting') {
+                C.reg = 'failed'; C.regError = 'no answer from ' + E.domain + ', check the phone server address'; changed();
+            }
+        }, 15000);
+        ua.on('registered', function () { clearTimeout(E.connectTimer); C.reg = 'online'; C.regError = ''; changed(); });
         ua.on('unregistered', function () { if (C.reg === 'online') { C.reg = 'offline'; changed(); } });
-        ua.on('registrationFailed', function (e) { C.reg = 'failed'; C.regError = e.cause || ''; changed(); });
+        ua.on('registrationFailed', function (e) {
+            clearTimeout(E.connectTimer);
+            C.reg = 'failed';
+            C.regError = e.cause === 'Authentication Error' ? 'wrong extension or password' : (e.cause || '');
+            changed();
+        });
         ua.on('disconnected', function () { if (C.reg !== 'failed') { C.reg = 'connecting'; changed(); } });
         ua.on('newRTCSession', onNewSession);
         ua.start();
@@ -1003,7 +1020,7 @@
                 }
                 applyConfig(res.body);
             })
-            .catch(function () { C.formError = 'Could not save — check your connection'; C.view = 'setup'; changed(); });
+            .catch(function () { C.formError = 'Could not save, check your connection'; C.view = 'setup'; changed(); });
     }
 
     // The phone window owns the call: warn before it is closed or reloaded.

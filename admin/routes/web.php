@@ -183,6 +183,7 @@ Route::middleware(['auth', 'super-admin'])
         Route::post('/telephony/sip',          [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'saveSip'])->name('telephony.sip.save');
         Route::get('/telephony/web-calls',     [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'webCalls'])->name('telephony.web-calls');
         Route::post('/telephony/web-calls/reset', [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'resetWebCallLimit'])->name('telephony.web-calls.reset');
+        Route::post('/telephony/web-calls/demo',  [App\Http\Controllers\SuperAdmin\OpsTelephonyController::class, 'saveDemoCall'])->name('telephony.web-calls.demo');
 
         Route::get('/audit',                   [App\Http\Controllers\SuperAdmin\AuditController::class, 'index'])->name('audit.index');
 

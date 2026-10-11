@@ -16,6 +16,8 @@
     .tva-ext-kv { display:grid; grid-template-columns:150px 1fr; gap:6px 12px; font-size:13px; }
     .tva-ext-kv code, .tva-ext-secret code { background:#f1f5f9; padding:2px 6px; border-radius:6px; }
     .tva-ext-secret { background:#fefce8; border:1px solid #fde68a; border-radius:8px; padding:6px 10px; display:inline-flex; gap:8px; align-items:center; }
+    .tva-ext-grid { display:grid; grid-template-columns:minmax(0,5fr) minmax(0,7fr); gap:20px; align-items:start; }
+    @media (max-width: 1100px) { .tva-ext-grid { grid-template-columns:1fr; } }
     .tva-ext-actions form { display:inline; }
     .tva-ext-actions .btn { padding:4px 8px; font-size:12px; }
     html.dark .tva-ext-card { background:#1e293b; border-color:#334155; }
@@ -31,7 +33,7 @@
         <div class="flex-1">
             <div style="font-size:20px; font-weight:700;">Extensions</div>
             <div style="font-size:13px; opacity:.9; margin-top:4px;">
-                Your team's phone extensions — call each other, and your AI agent, from MicroSIP, Zoiper, a desk phone or the browser.
+                Your team's phone extensions. Call each other, and your AI agent, from MicroSIP, Zoiper, a desk phone or the browser.
             </div>
         </div>
         <a href="{{ route('telephony.index', ['client' => $client]) }}" class="btn btn-sm">Numbers</a>
@@ -56,8 +58,8 @@
         <div class="alert alert-danger-soft show mb-4">@foreach ($errors->all() as $e)<div>{{ $e }}</div>@endforeach</div>
     @endif
 
-    <div class="grid grid-cols-12 gap-5">
-        <div class="col-span-12 lg:col-span-5">
+    <div class="tva-ext-grid">
+        <div>
             <div class="tva-ext-card">
                 <div class="tva-ext-card__title">Add an extension</div>
                 <form method="POST" action="{{ route('telephony.extensions.store', ['client' => $client]) }}" class="grid gap-3">
@@ -65,12 +67,12 @@
                     <div class="grid grid-cols-3 gap-3">
                         <div>
                             <label class="form-label">Number</label>
-                            <input name="extension" class="form-control" required inputmode="numeric" pattern="[1-9][0-9]{1,5}"
+                            <input type="text" name="extension" class="form-control" required inputmode="numeric" pattern="[1-9][0-9]{1,5}"
                                    value="{{ old('extension') }}" placeholder="2001">
                         </div>
                         <div class="col-span-2">
                             <label class="form-label">Name</label>
-                            <input name="name" class="form-control" required maxlength="100" value="{{ old('name') }}" placeholder="Reception — Ali">
+                            <input type="text" name="name" class="form-control" required maxlength="100" value="{{ old('name') }}" placeholder="Reception, Ali">
                         </div>
                     </div>
                     <div>
@@ -109,14 +111,14 @@
             </div>
         </div>
 
-        <div class="col-span-12 lg:col-span-7">
+        <div>
             <div class="tva-ext-card">
                 <div class="tva-ext-card__title">Your extensions ({{ $extensions->count() }})</div>
                 @if ($states === null)
                     <div class="alert alert-warning-soft show mb-3 text-sm">The phone server isn't reachable right now, so who is online is unknown.</div>
                 @endif
                 @if ($extensions->isEmpty())
-                    <div class="text-slate-500 text-sm">No extensions yet — add your first one on the left.</div>
+                    <div class="text-slate-500 text-sm">No extensions yet. Add your first one on the left.</div>
                 @else
                 <div class="overflow-x-auto">
                 <table class="tva-ext-table">
