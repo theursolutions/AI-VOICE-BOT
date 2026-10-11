@@ -44,13 +44,13 @@
         '@keyframes ring{0%{transform:scale(1);opacity:.8}100%{transform:scale(1.6);opacity:0}}',
         '.tip{position:fixed;bottom:34px;' + SIDE + ':92px;background:#0f172a;color:#fff;font-size:13px;padding:7px 12px;border-radius:999px;',
         ' z-index:2147483000;white-space:nowrap;box-shadow:0 6px 18px rgba(0,0,0,.2)}',
-        '.card{position:fixed;bottom:96px;' + SIDE + ':22px;width:300px;max-width:calc(100vw - 32px);background:#fff;color:#0f172a;border-radius:18px;',
+        '.card{position:fixed;bottom:96px;' + SIDE + ':22px;width:340px;max-width:calc(100vw - 32px);background:#fff;color:#0f172a;border-radius:18px;',
         ' box-shadow:0 24px 60px -12px rgba(15,23,42,.45);z-index:2147483001;overflow:hidden;animation:pop .18s ease-out}',
         '@keyframes pop{from{transform:translateY(10px);opacity:0}to{transform:none;opacity:1}}',
-        '.head{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:18px 18px 16px;position:relative}',
-        '.head h3{margin:0;font-size:16px;font-weight:700}',
-        '.head p{margin:4px 0 0;font-size:12px;opacity:.9}',
-        '.close{position:absolute;top:12px;right:12px;background:rgba(255,255,255,.18);border:0;color:#fff;width:28px;height:28px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}',
+        '.head{background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#fff;padding:11px 44px 10px 16px;position:relative}',
+        '.head h3{margin:0;font-size:15px;font-weight:700;line-height:1.3}',
+        '.head p{margin:2px 0 0;font-size:11.5px;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+        '.close{position:absolute;top:50%;transform:translateY(-50%);right:10px;background:rgba(255,255,255,.18);border:0;color:#fff;width:26px;height:26px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}',
         '.body{padding:18px;text-align:center}',
         '.avatar{width:72px;height:72px;margin:0 auto 10px;border-radius:50%;background:#eef2ff;color:#4f46e5;display:flex;align-items:center;justify-content:center}',
         '.avatar.live{animation:talk 1.4s ease-in-out infinite}',
@@ -64,6 +64,10 @@
         '.end{background:#dc2626;color:#fff}.end:hover{background:#b91c1c}',
         '.mute{background:#f1f5f9;color:#0f172a}.mute.on{background:#fee2e2;color:#b91c1c}',
         '.note{font-size:11px;color:#94a3b8;margin-top:12px}',
+        '.langs{display:inline-flex;background:#f1f5f9;border-radius:999px;padding:3px;margin-top:12px}',
+        '.lang{border:0;background:transparent;padding:6px 16px;border-radius:999px;font-size:13px;font-weight:600;color:#64748b;cursor:pointer}',
+        '.lang.on{background:#fff;color:#4f46e5;box-shadow:0 1px 3px rgba(15,23,42,.15)}',
+        '.lang:disabled{cursor:default}',
         '.hidden{display:none!important}'
     ].join('');
 
@@ -81,6 +85,10 @@
         '    <div class="status">Ready when you are</div>' +
         '    <div class="timer hidden">1:00</div>' +
         '    <div class="sub">Our AI agent answers in English or Urdu.</div>' +
+        '    <div class="langs" role="group" aria-label="Call language">' +
+        '      <button class="lang" data-lang="en">English</button>' +
+        '      <button class="lang" data-lang="ur" lang="ur">اردو</button>' +
+        '    </div>' +
         '    <div class="row">' +
         '      <button class="btn go">' + ICON_PHONE.replace('width="24" height="24"', 'width="18" height="18"') + 'Call now</button>' +
         '      <button class="btn mute hidden">' + ICON_MIC + 'Mute</button>' +
@@ -97,7 +105,87 @@
     var ui = { fab: $('.fab'), tip: $('.tip'), card: $('.card'), status: $('.status'), sub: $('.sub'), timer: $('.timer'),
                go: $('.go'), mute: $('.mute'), end: $('.end'), avatar: $('.avatar'), close: $('.close') };
 
-    var state = { busy: false, ua: null, session: null, stream: null, tick: null, muted: false };
+    var state = { busy: false, ua: null, session: null, stream: null, tick: null, muted: false, lang: 'en' };
+
+    // ── Call language: the AI greets in the one picked (and still follows
+    //    whatever the visitor then speaks). Remembered for next time.
+    var langs = root.querySelectorAll('.lang');
+    try { state.lang = localStorage.getItem('tva-call-lang') || ''; } catch (e) { state.lang = ''; }
+    if (state.lang !== 'en' && state.lang !== 'ur') {
+        state.lang = /^ur\b/i.test(navigator.language || '') ? 'ur' : 'en';
+    }
+    function paintLangs() {
+        Array.prototype.forEach.call(langs, function (b) {
+            b.classList.toggle('on', b.getAttribute('data-lang') === state.lang);
+            b.setAttribute('aria-pressed', b.getAttribute('data-lang') === state.lang ? 'true' : 'false');
+            b.disabled = state.busy;
+        });
+    }
+    Array.prototype.forEach.call(langs, function (b) {
+        b.addEventListener('click', function () {
+            if (state.busy) return;
+            state.lang = b.getAttribute('data-lang');
+            try { localStorage.setItem('tva-call-lang', state.lang); } catch (e) { /* private mode */ }
+            paintLangs();
+        });
+    });
+    paintLangs();
+
+    // ── Phone tones (Web Audio): ringback while the call connects, and the
+    //    beeps of a real call hanging up.
+    var tones = { ctx: null, nodes: [], timer: null, startedAt: 0 };
+    var MIN_RING_MS = 2000;
+    function audioCtx() {
+        if (!tones.ctx) {
+            var Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) tones.ctx = new Ctx();
+        }
+        if (tones.ctx && tones.ctx.state === 'suspended') tones.ctx.resume();
+        return tones.ctx;
+    }
+    function tone(freqs, at, dur, level) {
+        var ctx = tones.ctx;
+        if (!ctx) return;
+        var gain = ctx.createGain();
+        gain.gain.setValueAtTime(0, at);
+        gain.gain.linearRampToValueAtTime(level, at + 0.02);          // no clicks
+        gain.gain.setValueAtTime(level, at + dur - 0.02);
+        gain.gain.linearRampToValueAtTime(0, at + dur);
+        gain.connect(ctx.destination);
+        freqs.forEach(function (f) {
+            var osc = ctx.createOscillator();
+            osc.frequency.value = f;
+            osc.connect(gain);
+            osc.start(at);
+            osc.stop(at + dur);
+            tones.nodes.push(osc);
+        });
+    }
+    function startRing() {
+        var ctx = audioCtx();
+        if (!ctx) return;
+        stopRing();
+        tones.startedAt = Date.now();
+        var cycle = function () {   // "ring-ring … ring-ring": 0.4 on, 0.2 off, 0.4 on, 2 s off
+            var t = ctx.currentTime + 0.05;
+            tone([400, 450], t, 0.4, 0.12);
+            tone([400, 450], t + 0.6, 0.4, 0.12);
+        };
+        cycle();
+        tones.timer = setInterval(cycle, 3000);
+    }
+    function stopRing() {
+        clearInterval(tones.timer);
+        tones.timer = null;
+        tones.nodes.forEach(function (n) { try { n.stop(); } catch (e) { /* already stopped */ } });
+        tones.nodes = [];
+    }
+    function hangupTone() {
+        var ctx = audioCtx();
+        if (!ctx) return;
+        var t = ctx.currentTime + 0.05;
+        for (var i = 0; i < 3; i++) tone([425], t + i * 0.35, 0.2, 0.15);
+    }
 
     function esc(s) { return String(s).replace(/[&<>"']/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
     function show(el, on) { el.classList.toggle('hidden', !on); }
@@ -133,6 +221,7 @@
         state.busy = on;
         show(ui.go, !on); show(ui.end, on); show(ui.mute, on);
         ui.avatar.classList.toggle('live', on);
+        paintLangs();
         if (!on) { show(ui.timer, false); clearInterval(state.tick); }
     }
 
@@ -143,16 +232,18 @@
             return;
         }
         setCalling(true);
+        audioCtx();   // unlocked by this click, so the ringback can play
         say('Allow the microphone…', 'Your browser will ask for permission.');
 
         navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } })
             .then(function (stream) {
                 state.stream = stream;
-                say('Connecting…', 'Setting up a secure line.');
+                startRing();
+                say('Calling…', '');
                 return fetch(API + '/api/webcall/session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ key: KEY, page: location.href })
+                    body: JSON.stringify({ key: KEY, page: location.href, lang: state.lang })
                 }).then(function (r) { return r.json().catch(function () { return {}; }); });
             })
             .then(function (s) {
@@ -188,6 +279,12 @@
         ua.on('connected', function () {
             if (started) return;
             started = true;
+            // Let it ring a little first, like a real call being answered.
+            setTimeout(place, Math.max(0, tones.startedAt + MIN_RING_MS - Date.now()));
+        });
+
+        function place() {
+            if (!state.busy || state.ua !== ua) return;   // hung up while ringing
             var hear = function (pc) {
                 pc.addEventListener('track', function (ev) {
                     // Asterisk's answer carries no stream id, so ev.streams
@@ -213,14 +310,16 @@
             });
             session.on('progress', function () { say('Ringing…', ''); });
             session.on('confirmed', function () {
-                say('Connected', 'Say hello — the AI agent is listening.');
+                stopRing();
+                say('Connected', 'Say hello, the AI agent is listening.');
                 countdown(s.max_seconds || 60);
             });
-            session.on('ended', function () { finish('Call ended', 'Thanks for talking to us!'); });
+            session.on('ended', function () { hangupTone(); finish('Call ended', 'Thanks for talking to us!'); });
             session.on('failed', function (e) {
+                hangupTone();
                 finish('Call didn’t connect', e && e.cause === 'Rejected' ? 'Please try again later.' : 'Please try again in a moment.');
             });
-        });
+        }
         ua.on('disconnected', function () { if (!started) fail('Couldn’t reach our phone line', 'Please try again in a few minutes.'); });
         ua.start();
     }
@@ -249,11 +348,13 @@
         if (state.session && !state.session.isEnded()) {
             try { state.session.terminate(); } catch (e) { /* already gone */ }
         } else {
+            if (state.busy) hangupTone();   // hung up while it was still ringing
             finish('Call ended', '');
         }
     }
 
     function cleanup() {
+        stopRing();
         if (state.stream) state.stream.getTracks().forEach(function (t) { t.stop(); });
         if (state.ua) { try { state.ua.stop(); } catch (e) { /* ignore */ } }
         audio.srcObject = null;

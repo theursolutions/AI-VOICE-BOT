@@ -120,7 +120,7 @@
 <div class="intro-y flex items-center gap-3 mt-8 mb-5" style="max-width:900px;margin-left:auto;margin-right:auto">
     <div class="mr-auto">
         <h2 class="text-lg font-medium">{{ $isChange ? 'Confirm your plan change' : 'Complete your subscription' }}</h2>
-        <p style="font-size:13px;color:#64748b;margin-top:3px">Secure payment — your card details never reach us.</p>
+        <p style="font-size:13px;color:#64748b;margin-top:3px">Secure payment. Your card details never reach us.</p>
     </div>
     <a href="{{ route('billing.plans', ['client' => $client->slug]) }}" class="bl-btn bl-btn--ghost">
         <i data-lucide="arrow-left" class="w-4 h-4"></i> Back
@@ -193,7 +193,7 @@
                 you see is the price you pay.
             @else
                 Payment is handled by a State Bank of Pakistan licensed processor. Pick whichever
-                method suits you — no card details ever reach {{ $brandName }}.
+                method suits you. No card details ever reach {{ $brandName }}.
             @endif
         </p>
 
@@ -209,7 +209,7 @@
             @else
                 <li>We open a secure checkout with the amount below already filled in.</li>
                 <li>You pay by card, bank account, JazzCash or Easypaisa.</li>
-                <li>You come straight back here and your plan is active — usually within seconds.</li>
+                <li>You come straight back here and your plan is active, usually within seconds.</li>
             @endif
         </ol>
 
@@ -225,7 +225,7 @@
                 @if ($isRenewal)
                     <strong>This adds another {{ strtolower($each) }} to your plan.</strong>
                     Your new date is {{ $subscription->current_period_end?->copy()->addMonths($price->months())->format('j M Y') }}
-                    — the days you've already paid for are kept.
+                    and the days you've already paid for are kept.
                 @elseif ($autoRenews)
                     <strong>Renews automatically every {{ strtolower(rtrim($each, 'ly')) === 'annual' ? 'year' : 'month' }}.</strong>
                     You can cancel any time from this page, and you'll keep access until the
@@ -272,7 +272,7 @@
         </div>
 
         <div class="hk-row">
-            <span>{{ $plan->name }} — {{ $each }}</span>
+            <span>{{ $plan->name }} ({{ strtolower($each) }})</span>
             <span>{{ tva_money($tax['subtotal'], $price->currency, false) }}</span>
         </div>
         @if ($tax['show'])
@@ -319,7 +319,7 @@
              the "≈" is dropped only when it is another real price of ours
              rather than a live conversion. --}}
         @if ($priceAlso)
-            <div class="hk-row" style="margin-top:-4px;justify-content:flex-end">
+            <div class="hk-row" style="margin-top:6px;justify-content:flex-end">
                 <span class="hk-row__usd">
                     {{ $priceAlso['exact'] ? '' : '≈ ' }}{{ $priceAlso['amount'] }}
                     {{ $priceAlso['exact'] ? '' : 'at today’s rate' }}

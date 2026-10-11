@@ -229,7 +229,7 @@
     <p>
         @if ($currentPlan)
             You’re on <strong style="color:#0b1220">{{ $currentPlan->name }}</strong>. Upgrades apply
-            straight away and the difference is prorated on your next invoice — never a surprise charge today.
+            straight away and the difference is prorated on your next invoice, so there is never a surprise charge today.
         @else
             Every plan includes voice cloning, 13 languages and automatic lead capture.
             You only pay more for volume and the power features.
@@ -253,7 +253,7 @@
     <span class="pk-byo__text">
         <strong>Build your own plan</strong>
         Set your own conversations, team size and AI agents, and we price it from what it costs to
-        run &mdash; for when none of the plans below is the right shape.
+        run. Use it when none of the plans below is the right shape.
     </span>
     <span class="pk-byo__go">Start <i data-lucide="arrow-right"></i></span>
 </a>
@@ -443,7 +443,7 @@
 
         @if ($canBuyAddons && $checkoutOpen)
             <p class="pk-addons__note">
-                Set a quantity to 0 to remove an add-on — your next invoice is credited for the
+                Set a quantity to 0 to remove an add-on. Your next invoice is credited for the
                 unused part. Add-ons follow your plan’s billing interval.
             </p>
         @endif
@@ -464,7 +464,7 @@
     All plans are charged in USD.
     @if ($pricing['has_local']) Local amounts are approximate, for reference only. @endif
     <br>
-    Cancel any time — you keep access until the end of the period you’ve paid for.
+    Cancel any time. You keep access until the end of the period you’ve paid for.
 </p>
 
 <script>

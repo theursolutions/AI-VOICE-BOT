@@ -9,7 +9,7 @@
 --}}
 @php
     $brand    = tva_setting('content.brand_name', 'serveAI');
-    $tagline  = tva_setting('content.footer_tagline', 'AI customer support and CRM in one: AI agents that answer every call, chat and message — 24/7, from your own data.');
+    $tagline  = tva_setting('content.footer_tagline', 'AI customer support and CRM in one: AI agents that answer every call, chat and message, 24/7, from your own data.');
     $phone    = tva_setting('content.contact_phone', '');
     $email    = tva_setting('content.contact_email', '');
     $address  = tva_setting('content.contact_address', '');

@@ -377,7 +377,7 @@ return [
 
         // ── Footer / contact (EDIT THESE in /admin/content) ──────────
         // Placeholders below — update with your real business details.
-        'footer_tagline'    => 'AI customer support and CRM in one: AI agents that answer every call, chat and message — 24/7, from your own data.',
+        'footer_tagline'    => 'AI customer support and CRM in one: AI agents that answer every call, chat and message, 24/7, from your own data.',
         'contact_phone'     => '+92 349 149 4383',
         'contact_email'     => 'info@serveai.com.pk',
         // Displayed in the footer, on /contact and /privacy, and in emails.
