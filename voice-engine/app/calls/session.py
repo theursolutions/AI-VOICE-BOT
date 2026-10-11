@@ -85,10 +85,10 @@ TRANSFER_NOTE = (
     "ONE short sentence, in the caller's language, telling them you are connecting "
     "them to a member of the team. Ask nothing else."
 )
-# A time-limited call says its goodbye this long before the limit, at the
-# first pause in the conversation (the goodbye itself takes ~5 s).
-TIME_UP_LEAD_S = 10
-TIME_UP_FORCE_S = 5
+# A time-limited call (website "Call us") says its goodbye this long before
+# the limit — at 55 s of a 1-minute call — whatever is happening: the
+# goodbye itself takes ~5 s and is always cached, so it plays at once.
+TIME_UP_LEAD_S = 5
 
 MOOD_NOTES = {
     "worried": "The caller sounds worried. Before helping, acknowledge it briefly and sincerely in "
@@ -360,23 +360,28 @@ class CallSession:
                 await asyncio.shield(self._profile)
 
             style = delivery_style(self.mood) if self.emotion else None
+            # The opening is spoken the moment it exists (first sentence, or
+            # first clause); everything after it goes to the voice as ONE
+            # request once the model has finished — it plays while the opening
+            # is still being heard. One request per sentence used up Google's
+            # daily voice quota mid-call (live, 2026-10-11).
             pending = ""
             spoken = False
             async for evt in self.s.llm.stream_chat(self._messages(context, user_text, handoff, reply_lang)):
                 if evt["type"] == "delta":
                     reply += evt["text"]
                     pending += evt["text"]
-                    sentences, pending = split_sentences(pending)
-                    if not sentences and not spoken:
-                        # Start talking at the first comma rather than wait
-                        # for the whole first sentence.
-                        clause, pending = split_first_clause(pending)
+                    if spoken:
+                        continue
+                    sentences, rest = split_sentences(pending)
+                    if not sentences:
+                        clause, rest = split_first_clause(pending)
                         sentences = [clause] if clause else []
-                    for sentence in sentences:
-                        if not spoken:
-                            await self._wait_for_floor()
-                            self._reply_started = True
-                        await self._speak(sentence, reply_lang, style, kind="reply", stat=stat)
+                    if sentences:
+                        await self._wait_for_floor()
+                        self._reply_started = True
+                        pending = " ".join(sentences[1:] + [rest]).strip()
+                        await self._speak(sentences[0], reply_lang, style, kind="reply", stat=stat)
                         spoken = True
                 elif evt["type"] == "final":
                     tokens_in = int(evt.get("tokens_in") or 0)
@@ -386,6 +391,9 @@ class CallSession:
                 await self._wait_for_floor()
                 self._reply_started = True
             await self._speak(pending, reply_lang, style, kind="reply", stat=stat)
+            if stat.get("first_audio_ms") is not None:
+                logger.info("call %s timing: heard in %sms, first sound %sms, answer %sms after the caller stopped",
+                            self.key, stat.get("listen_ms"), stat.get("first_audio_ms"), stat.get("reply_audio_ms"))
 
             # The marker, or both sides saying goodbye: the model doesn't
             # always remember the marker.
@@ -597,16 +605,12 @@ class CallSession:
                 self._turn = asyncio.ensure_future(self._say_idle(self._idle_plan.pop(0)))
 
     def _time_is_up(self) -> bool:
-        """Say the time-up goodbye once the limit is near — between turns
-        if possible, over the caller only when the time has run out."""
+        """Say the time-up goodbye TIME_UP_LEAD_S before the limit, cutting
+        off whatever is being said — the caller must hear it."""
         if not self.max_seconds or self._ending or self._handed_off:
             return bool(self._ending) and bool(self.max_seconds)
         left = self.max_seconds - (time.monotonic() - self._started)
-        busy = ((self._turn and not self._turn.done())
-                or self.endpointer.in_speech or self._ai_audible())
-        # Between turns from TIME_UP_LEAD_S out; over a talking caller only
-        # in the last seconds, so the goodbye still ends near the limit.
-        if left > TIME_UP_LEAD_S or (busy and left > TIME_UP_FORCE_S):
+        if left > TIME_UP_LEAD_S:
             return False
         logger.info("call %s: time limit reached (%ss)", self.key, self.max_seconds)
         if self._turn and not self._turn.done():

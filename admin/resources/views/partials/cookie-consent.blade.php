@@ -21,7 +21,7 @@
             <b>We use cookies</b>
             <span>
                 Essential cookies keep you signed in and are always on. Analytics cookies
-                help us see which pages are useful — only if you say yes.
+                help us see which pages are useful, but only if you say yes.
                 <a href="{{ route('cookies') }}">Cookie Policy</a>
             </span>
         </div>

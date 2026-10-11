@@ -257,8 +257,8 @@
 <p class="pp-usd-note reveal">
     <strong>All plans are charged in {{ $chargedIn }}.</strong>
     @if ($hasLocal && $geo)
-        Amounts shown in {{ $geo['currency'] }} are approximate and for reference only —
-        your card is charged the US dollar amount.
+        Amounts shown in {{ $geo['currency'] }} are approximate and for reference only.
+        Your card is charged the US dollar amount.
     @endif
 </p>
 
@@ -393,12 +393,12 @@
     Conversation counts assume
     @if ($replyCounts->count() > 1)
         <strong>{{ $replyCounts->first() }} to {{ $replyCounts->last() }} AI replies</strong>
-        per conversation, depending on the plan
+        per conversation, depending on the plan.
     @else
         <strong>{{ $replyCounts->first() ?? \App\Services\Conversation\ConversationBudget::DEFAULT_LIMIT }} AI replies</strong>
-        per conversation
+        per conversation.
     @endif
-    — after that it moves to your inbox for a person to answer, so nothing
+    After that it moves to your inbox for a person to answer, so nothing
     goes unanswered. You can raise or lower that on your billing page at any time, which
     changes how many conversations your messages cover.
 </p>
@@ -436,8 +436,8 @@
                             <tr>
                                 <th scope="row">{{ $row['feature']->name }}</th>
                                 @foreach ($paid as $plan)
-                                    @php $val = $row['values'][$plan['id']] ?? '—'; @endphp
-                                    <td class="{{ $val === '✓' ? 'pp-yes' : ($val === '—' ? 'pp-no' : '') }}">{{ $val }}</td>
+                                    @php $val = $row['values'][$plan['id']] ?? '✕'; @endphp
+                                    <td class="{{ $val === '✓' ? 'pp-yes' : ($val === '✕' ? 'pp-no' : '') }}">{{ $val }}</td>
                                 @endforeach
                             </tr>
                         @endforeach

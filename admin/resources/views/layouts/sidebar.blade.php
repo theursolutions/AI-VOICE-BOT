@@ -89,7 +89,7 @@
     $planLocked = fn (string $k) => in_array($k, $lockedMods, true);
     $lockCls    = fn (string $k) => in_array($k, $lockedMods, true) ? ' side-menu--plan' : '';
     $lockTip    = fn (string $k) => in_array($k, $lockedMods, true)
-        ? 'Not included in your plan — click to see what unlocks it'
+        ? 'Not included in your plan. Click to see what unlocks it'
         : null;
 
     // Section visibility — a collapsible group shows only if the member can

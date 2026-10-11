@@ -134,7 +134,7 @@
             <i data-lucide="shield-check" class="w-4 h-4" style="flex:none;color:#16a34a"></i>
             <span>
                 Payments are processed by Stripe. Your card details never touch {{ $brandName }}’s servers.
-                Cancel any time — you keep access until the end of the period you’ve paid for.
+                Cancel any time. You keep access until the end of the period you’ve paid for.
             </span>
         </div>
     </div>
@@ -180,14 +180,14 @@
         </div>
 
         @if ($priceDisplay['local'])
-            <div style="text-align:right;font-size:12px;color:#6366f1;margin-top:-4px">
+            <div style="text-align:right;font-size:12px;color:#6366f1;margin-top:6px">
                 ≈ {{ $priceDisplay['local'] }}
             </div>
         @endif
 
         <p class="bl-note">
             Charged in USD.
-            @if ($priceDisplay['local']) The local amount is approximate — your card is charged the USD figure. @endif
+            @if ($priceDisplay['local']) The local amount is approximate. Your card is charged the USD figure. @endif
             Renews {{ strtolower($price->intervalLabel()) }} until cancelled.
             @if ($isChange) Any difference from your current plan is prorated on your next invoice. @endif
         </p>
@@ -208,7 +208,7 @@
             <h3 style="font-size:21px;font-weight:800;color:#0f172a;margin-bottom:9px">Payment successful</h3>
             <p style="font-size:14px;color:#64748b;line-height:1.65;margin-bottom:24px">
                 You’re now on <strong id="ck-success-plan">{{ $plan->name }}</strong>.
-                Everything unlocked instantly — your agent is live on all the channels your plan includes.
+                Everything unlocked instantly. Your agent is live on all the channels your plan includes.
             </p>
             <a href="{{ route('billing.index', ['client' => $client->slug]) }}" class="bl-btn bl-btn--primary" style="width:100%">
                 Go to billing

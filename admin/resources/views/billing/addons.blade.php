@@ -359,7 +359,7 @@
             @endif
 
             <p class="ad-sum__note">
-                Set a quantity to 0 to remove an add-on — your next invoice is credited for the
+                Set a quantity to 0 to remove an add-on. Your next invoice is credited for the
                 unused part.
             </p>
         </div>

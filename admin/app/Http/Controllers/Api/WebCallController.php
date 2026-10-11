@@ -33,6 +33,8 @@ class WebCallController extends Controller
         $data = $request->validate([
             'key'  => 'required|string|max:100',
             'page' => 'nullable|string|max:500',
+            // The visitor's pick in the call box: the AI greets in it.
+            'lang' => 'nullable|in:en,ur',
         ]);
 
         // The same public key the chat widget is embedded with.
@@ -56,7 +58,7 @@ class WebCallController extends Controller
         }
 
         try {
-            $call = $this->calls->issue($project, $ip, $origin, $data['page'] ?? null);
+            $call = $this->calls->issue($project, $ip, $origin, $data['page'] ?? null, $data['lang'] ?? null);
         } catch (\Throwable $e) {
             Log::warning('webcall: account not issued', ['project_id' => $project->id, 'error' => $e->getMessage()]);
             return $this->cors(response()->json(['ok' => false, 'reason' => 'unavailable',

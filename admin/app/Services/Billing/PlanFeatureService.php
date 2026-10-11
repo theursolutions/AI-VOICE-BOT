@@ -415,11 +415,14 @@ class PlanFeatureService
         return $grouped;
     }
 
+    /** What a comparison-table cell shows for a feature a plan doesn't have. */
+    public const NOT_INCLUDED = '✕';
+
     /** What a cell in the comparison table shows. */
     public function displayValue(Feature $feature, ?array $entry): string
     {
         if ($entry === null) {
-            return '—';
+            return self::NOT_INCLUDED;
         }
 
         if ($entry['unlimited']) {
@@ -427,10 +430,10 @@ class PlanFeatureService
         }
 
         return match ($feature->value_type) {
-            Feature::TYPE_BOOLEAN => $entry['value'] ? '✓' : '—',
+            Feature::TYPE_BOOLEAN => $entry['value'] ? '✓' : self::NOT_INCLUDED,
             Feature::TYPE_NUMERIC => number_format((int) $entry['value'])
                                      . ($feature->unit ? ' ' . $feature->unit : ''),
-            default               => (string) ($entry['raw'] ?? '—'),
+            default               => (string) ($entry['raw'] ?? self::NOT_INCLUDED),
         };
     }
 }
