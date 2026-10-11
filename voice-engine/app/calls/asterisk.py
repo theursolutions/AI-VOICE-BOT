@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 
 TRANSFER_CONTEXT = "ai-transfer"  # dialplan context that reaches people
 STT_RATE = 16000
+GREETING_DELAY_S = 0.7  # let the caller's media path settle before speaking
 
 # SIP accounts the admin panel creates (pushed over ARI, kept in astdb —
 # telephony/asterisk/conf/sorcery.conf). Names: "c<client>_<extension>" for
@@ -245,7 +246,7 @@ class AsteriskGateway:
         session.max_seconds = call.max_seconds
         call.session = session
         await session.start()
-        session.greet(greeting)
+        self._spawn(self._greet_after(session, greeting))
 
         resample_state = None
         try:
@@ -267,6 +268,12 @@ class AsteriskGateway:
             await session.close()
             if not call.transferring:
                 await self._teardown(call, hang_up_caller=True)
+
+    async def _greet_after(self, session: CallSession, greeting: str) -> None:
+        # A browser caller's audio path finishes its DTLS/ICE handshake just
+        # after the answer; a greeting sent at once arrived clipped/garbled.
+        await asyncio.sleep(GREETING_DELAY_S)
+        session.greet(greeting)
 
     async def _transfer(self, call: AsteriskCall) -> None:
         """Hand the caller to a person through the dialplan's [ai-transfer]

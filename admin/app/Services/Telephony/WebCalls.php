@@ -122,7 +122,7 @@ class WebCalls
      * A one-call account for this visitor, live on Asterisk. Returns what
      * the browser needs to place the call.
      */
-    public function issue(Project $project, string $ip, ?string $origin, ?string $page): array
+    public function issue(Project $project, string $ip, ?string $origin, ?string $page, ?string $language = null): array
     {
         $username = WebCallSession::PREFIX . Str::lower(Str::random(15));
         $username = preg_replace('/[^a-z0-9]/', 'x', $username);
@@ -136,6 +136,7 @@ class WebCalls
             'ip'           => $ip,
             'origin'       => $origin ? Str::limit($origin, 250, '') : null,
             'page_url'     => $page ? Str::limit($page, 495, '') : null,
+            'language'     => in_array($language, ['en', 'ur'], true) ? $language : null,
             'sip_username' => $username,
             'secret'       => $password,
             'status'       => WebCallSession::ISSUED,

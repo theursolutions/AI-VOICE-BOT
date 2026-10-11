@@ -107,6 +107,19 @@ class AsteriskCallController extends Controller
         if ($web) {
             $web->session_id = $session->id;
             $web->save();
+
+            // The visitor picked English or اردو in the call box: the AI
+            // greets in it (and still follows whatever they then speak).
+            if ($web->language) {
+                $meta = (array) $session->metadata;
+                $meta['call'] = array_merge((array) ($meta['call'] ?? []), [
+                    'language'    => $web->language,
+                    'auto_detect' => true,
+                    'greeting'    => null,
+                ]);
+                $session->metadata = $meta;
+                $session->save();
+            }
         }
 
         Log::info('Asterisk call started', [

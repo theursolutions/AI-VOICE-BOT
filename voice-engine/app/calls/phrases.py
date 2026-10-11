@@ -105,9 +105,9 @@ BUILTIN: Dict[str, Dict[str, Any]] = {
             "It was a pleasure helping you{,hon}. Take care, goodbye!",
             "Thanks for your time{,hon}. Have a great day!",
         ],
+        # One fixed line, no sir/madam: the same recording every time, cached.
         "time_up": [
-            "That's all the time we have on this call{,hon}. Thank you for calling, and feel free to call again later. Goodbye!",
-            "Our call time is up{,hon}. Thanks so much for calling, goodbye!",
+            "Your free call time has ended. Thank you for calling, you're welcome to call again. Goodbye!",
         ],
         "goodbye_silent": [
             "I can't seem to hear you{,hon}, so I'll end the call now. Please call again anytime. Goodbye!",
@@ -184,8 +184,7 @@ BUILTIN: Dict[str, Dict[str, Any]] = {
             "شکریہ{,hon}، کبھی بھی ضرورت ہو تو ضرور کال کیجیے گا۔ اللہ حافظ!",
         ],
         "time_up": [
-            "اس کال کا وقت پورا ہو گیا ہے{,hon}۔ کال کرنے کا بہت شکریہ، آپ بعد میں دوبارہ کال کر سکتے ہیں۔ اللہ حافظ!",
-            "معذرت{,hon}، کال کا وقت ختم ہو گیا ہے۔ بات کرنے کا بہت شکریہ، اللہ حافظ!",
+            "آپ کی فری کال کا وقت ختم ہو گیا ہے۔ کال کرنے کا بہت شکریہ، آپ دوبارہ کال کر سکتے ہیں۔ اللہ حافظ!",
         ],
         "goodbye_silent": [
             "لگتا ہے آواز نہیں آ رہی{,hon}۔ آپ دوبارہ کال کر لیجیے گا، اللہ حافظ!",
@@ -262,8 +261,7 @@ BUILTIN: Dict[str, Dict[str, Any]] = {
             "Shukriya{,hon}, kabhi bhi zaroorat ho to zaroor call kijiye ga. Allah Hafiz!",
         ],
         "time_up": [
-            "Is call ka waqt poora ho gaya hai{,hon}. Call karne ka bohat shukriya, aap baad mein dobara call kar sakte hain. Allah Hafiz!",
-            "Maazrat{,hon}, call ka waqt khatam ho gaya hai. Baat karne ka bohat shukriya, Allah Hafiz!",
+            "Aap ki free call ka waqt khatam ho gaya hai. Call karne ka bohat shukriya, aap dobara call kar sakte hain. Allah Hafiz!",
         ],
         "goodbye_silent": [
             "Lagta hai awaaz nahi aa rahi{,hon}. Aap dobara call kar lijiye ga, Allah Hafiz!",
@@ -427,7 +425,7 @@ GENERATE_PROMPT = (
     ' "still_there": [3 ways to ask hello, are you still there, with {{,hon}}],\n'
     ' "goodbye": [3 warm goodbyes thanking them for calling, with {{,hon}}],\n'
     ' "goodbye_silent": [2 kind goodbyes when you cannot hear the caller, inviting them to call back, with {{,hon}}],\n'
-    ' "time_up": [2 polite goodbyes saying the call time is up, thanking them, with {{,hon}}],\n'
+    ' "time_up": [1 polite goodbye saying the free call time has ended, thanking them and inviting them to call again],\n'
     ' "hon": {{"male": "the word for sir", "female": "the word for madam"}}}}'
 )
 
