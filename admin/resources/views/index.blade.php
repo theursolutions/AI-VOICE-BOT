@@ -89,6 +89,7 @@
             --neon:      #1b3962;
             --neon-btn:  #1b3962;
             --neon-2:    #2f6fb5;
+            --cta-blue:  #1d4ed8;   /* "Get started free", "Reach out", the call button */
             --hot:       #c2185b;
             --warn:      #a15c07;
             --radius:    14px;
@@ -110,6 +111,7 @@
             --neon:      #3b82f6;
             --neon-btn:  #2563eb;
             --neon-2:    #60a5fa;
+            --cta-blue:  #2563eb;
             --hot:       #ff5e87;
             --warn:      #ffcb6b;
             --shadow:    0 1px 2px rgba(0,0,0,.4);
@@ -1901,7 +1903,8 @@
     @endphp
     @if ($tvaCallOn)
         <script src="{{ str_replace('/widget/loader.js', '/webcall/call.js', $tvaLoaderSrc) }}"
-                data-project-key="{{ $tvaDemoKey }}" data-label="{{ $tvaCallLabel }}" async></script>
+                data-project-key="{{ $tvaDemoKey }}" data-label="{{ $tvaCallLabel }}"
+                data-color="var(--cta-blue, #1d4ed8)" async></script>
     @endif
 @elseif ($tvaLegacyIframe)
     {{-- Legacy manual iframe — only used if LANDING_WIDGET_URL is set
