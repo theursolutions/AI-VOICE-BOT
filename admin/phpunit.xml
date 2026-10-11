@@ -45,6 +45,8 @@
         <env name="DB_DATABASE" value="ai-crm-config-testing"/>
         <env name="TENANT_DB_NAME_PREFIX" value="ai-crm-testing-client-"/>
         <env name="MAIL_MAILER" value="array"/>
+        <!-- Team alert emails render on every user/client/project a test creates; OpsNotificationsTest turns them on. -->
+        <env name="OPS_ALERT_MAIL" value="false"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>

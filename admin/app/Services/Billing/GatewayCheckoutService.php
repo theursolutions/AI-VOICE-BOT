@@ -228,6 +228,25 @@ class GatewayCheckoutService
         return ($end && $end->isFuture() && $paid) ? $end : null;
     }
 
+    /** Payment received → super-admin notification panel + ops inbox. */
+    private function alertPaid(object $charge): void
+    {
+        try {
+            $price = $charge->plan_price_id ? PlanPrice::with('plan')->find($charge->plan_price_id) : null;
+            $what  = ($charge->purpose ?? 'plan') === 'addon'
+                ? 'Add-on purchase'
+                : trim(($price?->plan?->name ?? 'Plan') . ' plan' . ($charge->interval ? ', ' . $charge->interval : ''));
+
+            app(\App\Services\Ops\OpsAlerts::class)->payment(
+                Client::find($charge->client_id), (int) $charge->amount_cents, (string) $charge->currency,
+                (string) $charge->gateway, $what, (string) $charge->reference,
+                ['Paid for until' => $charge->period_end ? \Illuminate\Support\Carbon::parse($charge->period_end)->format('j M Y') : null],
+            );
+        } catch (\Throwable $e) {
+            Log::warning('billing.paid_alert_failed', ['charge' => $charge->id ?? null, 'err' => $e->getMessage()]);
+        }
+    }
+
     /**
      * Put the workspace on the plan it just paid for.
      *
@@ -244,6 +263,10 @@ class GatewayCheckoutService
      */
     public function applyPaidCharge(object $charge): ?Subscription
     {
+        // Every caller reaches here only after winning the "pending → paid"
+        // claim, so this alerts the team exactly once per payment.
+        $this->alertPaid($charge);
+
         // An ADD-ON payment is not a plan payment. Falling through to the code
         // below would put the workspace "onto" the seat add-on as though it
         // were their plan, and reset the billing period to the day they bought

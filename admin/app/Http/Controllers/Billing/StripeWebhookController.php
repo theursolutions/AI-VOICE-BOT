@@ -262,6 +262,17 @@ class StripeWebhookController extends Controller
         $this->subscriptions->syncFromStripe($stripeSubscription->toArray());
 
         $this->sendReceipt($invoice);
+
+        // A $0 invoice (trial start, fully credited) is not a payment.
+        if ((int) ($invoice['amount_paid'] ?? 0) > 0) {
+            $client = $this->clientFrom($invoice)
+                ?? Client::query()->where('stripe_customer_ref', $invoice['customer'] ?? null)->first();
+            app(\App\Services\Ops\OpsAlerts::class)->payment(
+                $client, (int) $invoice['amount_paid'], (string) ($invoice['currency'] ?? 'usd'), 'stripe',
+                $client?->currentSubscription()?->plan?->name ? $client->currentSubscription()->plan->name . ' plan' : 'Subscription',
+                (string) ($invoice['number'] ?? $invoice['id'] ?? ''),
+            );
+        }
     }
 
     /**
