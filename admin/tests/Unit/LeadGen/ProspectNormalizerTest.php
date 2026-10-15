@@ -72,6 +72,17 @@ class ProspectNormalizerTest extends TestCase
         $this->assertSame('0300 1234567', $p['field_meta']['phone']['raw']);
     }
 
+    public function test_the_container_built_places_client_targets_the_configured_worker(): void
+    {
+        // Regression: a typed ?Client constructor parameter was autowired with
+        // a bare Guzzle client, so requests went to "http://places/…".
+        config(['leadgen.places.url' => 'http://127.0.0.1:8010', 'services.python.internal_secret' => 's']);
+        $client = app(PlacesClient::class);
+        $http = (fn () => $this->client())->call($client);
+        $this->assertSame('http://127.0.0.1:8010/', (string) $http->getConfig('base_uri'));
+        $this->assertSame('s', $http->getConfig('headers')['X-Internal-Secret']);
+    }
+
     public function test_overture_rows_keep_attribution_and_prefer_the_english_name(): void
     {
         $provider = new OvertureProvider(new PlacesClient());

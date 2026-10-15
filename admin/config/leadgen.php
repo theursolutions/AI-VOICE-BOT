@@ -17,6 +17,22 @@ return [
         'timeout' => (int) env('LEADGEN_PLACES_TIMEOUT', 240),
     ],
 
+    // Languages outreach drafts can be written in (code => name the model is told).
+    'languages' => [
+        'en' => 'English', 'ar' => 'Arabic', 'ur' => 'Urdu', 'ur-Latn' => 'Roman Urdu (Urdu written in English letters)',
+        'hi' => 'Hindi', 'fr' => 'French', 'es' => 'Spanish', 'de' => 'German', 'it' => 'Italian',
+        'pt' => 'Portuguese', 'tr' => 'Turkish', 'nl' => 'Dutch', 'ru' => 'Russian', 'zh' => 'Chinese',
+    ],
+
+    // Default qualification criteria (an offer profile can re-weight or replace them).
+    'criteria' => [
+        'industry_fit'   => ['label' => 'Industry / category fits who we sell to', 'weight' => 35],
+        'location_fit'   => ['label' => 'Location is one we serve',                'weight' => 20],
+        'online_presence'=> ['label' => 'Has a working website / online presence', 'weight' => 15],
+        'contactability' => ['label' => 'We have a verified way to reach them',    'weight' => 20],
+        'signals'        => ['label' => 'Other signals from the profile',          'weight' => 10],
+    ],
+
     // Fetching prospects' own websites (enrichment). See App\Support\SafeFetcher.
     'fetch' => [
         'user_agent'      => env('LEADGEN_FETCH_UA', 'serveAI-LeadGen/1.0 (+' . rtrim((string) env('APP_URL', ''), '/') . '/bot)'),

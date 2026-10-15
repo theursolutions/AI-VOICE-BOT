@@ -3,7 +3,11 @@
 <div class="content">
     @include('leadgen._header', ['title' => 'Import a prospect list'])
 
-    <div class="tva-lg-panel" style="max-width:640px">
+    <div class="tva-wz-card" style="max-width:680px">
+        <div class="flex items-center gap-3 mb-4">
+            <span class="tva-tone tva-tone--violet" style="width:44px;height:44px"><i data-lucide="upload"></i></span>
+            <div><div class="tva-wz-title">Upload your list</div><div class="tva-wz-sub" style="margin-top:2px">Step 1 of 2 — next you’ll match your columns.</div></div>
+        </div>
         <form method="POST" action="{{ route('leadgen.imports.upload', ['client' => $client->slug]) }}" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="project_id" value="{{ hashid($project->id) }}">
@@ -16,7 +20,7 @@
                 <input type="checkbox" name="attested" value="1" class="form-check-input mt-1" required>
                 <span>I confirm this list was collected lawfully and I'm allowed to use it to contact these businesses.</span>
             </label>
-            <button class="btn btn-primary mt-4">Upload and continue</button>
+            <button class="btn btn-primary mt-4"><i data-lucide="upload"></i>Upload and continue</button>
         </form>
     </div>
 </div>

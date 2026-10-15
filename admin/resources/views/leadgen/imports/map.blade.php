@@ -42,7 +42,7 @@
                     <input type="text" name="name" class="form-control" maxlength="160" placeholder="Import: {{ $fileName }}">
                 </div>
                 <div class="tva-lg-hint mt-3">Importing the same rows again won't create duplicates. Imported contact details are marked unverified.</div>
-                <button class="btn btn-primary w-full mt-4">Import {{ number_format(min($rowCount, \App\Services\LeadGen\Providers\ImportSource::MAX_ROWS)) }} rows</button>
+                <button class="btn btn-primary w-full mt-4"><i data-lucide="rocket"></i>Import {{ number_format(min($rowCount, \App\Services\LeadGen\Providers\ImportSource::MAX_ROWS)) }} rows</button>
             </div>
         </div>
     </form>

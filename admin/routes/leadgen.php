@@ -28,11 +28,34 @@ Route::middleware('module.ability:leadgen,view')->group(function () {
     // Bulk actions check their own ability (enrich = search, the rest = edit).
     Route::post('/lead-generation/prospects/bulk',       [LeadGen\ProspectController::class, 'bulk'])->middleware('throttle:30,1')->name('leadgen.prospects.bulk');
     Route::get ('/lead-generation/lists',                [LeadGen\ListController::class, 'index'])->name('leadgen.lists.index');
+    Route::get ('/lead-generation/review',               [LeadGen\QualificationController::class, 'index'])->name('leadgen.review.index');
+    Route::get ('/lead-generation/drafts/{id}',          [LeadGen\DraftController::class, 'edit'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.drafts.edit');
+});
+
+// Offer profiles and templates shape every score and message — `settings`.
+Route::middleware('module.ability:leadgen,settings')->group(function () {
+    Route::get   ('/lead-generation/profiles',           [LeadGen\ProfileController::class, 'index'])->name('leadgen.profiles.index');
+    Route::get   ('/lead-generation/profiles/new',       [LeadGen\ProfileController::class, 'create'])->name('leadgen.profiles.create');
+    Route::post  ('/lead-generation/profiles',           [LeadGen\ProfileController::class, 'store'])->name('leadgen.profiles.store');
+    Route::get   ('/lead-generation/profiles/{id}',      [LeadGen\ProfileController::class, 'edit'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.profiles.edit');
+    Route::patch ('/lead-generation/profiles/{id}',      [LeadGen\ProfileController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.profiles.update');
+    Route::delete('/lead-generation/profiles/{id}',      [LeadGen\ProfileController::class, 'destroy'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.profiles.destroy');
+    Route::get   ('/lead-generation/templates',          [LeadGen\TemplateController::class, 'index'])->name('leadgen.templates.index');
+    Route::get   ('/lead-generation/templates/new',      [LeadGen\TemplateController::class, 'create'])->name('leadgen.templates.create');
+    Route::post  ('/lead-generation/templates',          [LeadGen\TemplateController::class, 'store'])->name('leadgen.templates.store');
+    Route::post  ('/lead-generation/templates/preview',  [LeadGen\TemplateController::class, 'preview'])->name('leadgen.templates.preview');
+    Route::get   ('/lead-generation/templates/{id}',     [LeadGen\TemplateController::class, 'edit'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.templates.edit');
+    Route::patch ('/lead-generation/templates/{id}',     [LeadGen\TemplateController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.templates.update');
+    Route::delete('/lead-generation/templates/{id}',     [LeadGen\TemplateController::class, 'destroy'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.templates.destroy');
 });
 
 Route::middleware('module.ability:leadgen,edit')->group(function () {
     Route::patch ('/lead-generation/prospects/{id}',     [LeadGen\ProspectController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.prospects.update');
     Route::post  ('/lead-generation/prospects/{id}/crm', [LeadGen\ProspectController::class, 'addToCrm'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.prospects.crm');
+    Route::post  ('/lead-generation/prospects/{id}/drafts', [LeadGen\DraftController::class, 'store'])->where('id', Hashid::ROUTE_PATTERN)->middleware('throttle:20,1')->name('leadgen.drafts.store');
+    Route::patch ('/lead-generation/drafts/{id}',        [LeadGen\DraftController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.drafts.update');
+    Route::delete('/lead-generation/drafts/{id}',        [LeadGen\DraftController::class, 'destroy'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.drafts.destroy');
+    Route::post  ('/lead-generation/review/{id}',        [LeadGen\QualificationController::class, 'override'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.review.override');
     Route::post  ('/lead-generation/lists',              [LeadGen\ListController::class, 'store'])->name('leadgen.lists.store');
     Route::patch ('/lead-generation/lists/{id}',         [LeadGen\ListController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.lists.update');
     Route::delete('/lead-generation/lists/{id}',         [LeadGen\ListController::class, 'destroy'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.lists.destroy');
@@ -53,6 +76,9 @@ Route::middleware('module.ability:leadgen,search')->group(function () {
     Route::post('/lead-generation/searches/{id}/resume',    [LeadGen\SearchController::class, 'resume'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.resume');
     Route::post('/lead-generation/searches/{id}/cancel',    [LeadGen\SearchController::class, 'cancel'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.cancel');
     Route::post('/lead-generation/searches/{id}/save',      [LeadGen\SearchController::class, 'toggleSave'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.save');
+    // Scoring uses the AI brain (metered) — same ability as other enrichment.
+    Route::post('/lead-generation/prospects/{id}/qualify',  [LeadGen\QualificationController::class, 'qualifyOne'])->where('id', Hashid::ROUTE_PATTERN)->middleware('throttle:30,1')->name('leadgen.qualify.one');
+    Route::post('/lead-generation/qualify',                 [LeadGen\QualificationController::class, 'queue'])->middleware('throttle:10,1')->name('leadgen.qualify.queue');
     Route::post('/lead-generation/prospects/{id}/enrich',   [LeadGen\ProspectController::class, 'enrich'])->where('id', Hashid::ROUTE_PATTERN)->middleware('throttle:60,1')->name('leadgen.prospects.enrich');
 });
 

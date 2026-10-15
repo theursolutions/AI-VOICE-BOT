@@ -124,6 +124,7 @@ class LeadGenAccessTest extends TestCase
 
     public function test_a_set_up_project_shows_its_own_numbers_and_channel_status(): void
     {
+        config(['leadgen.places.url' => null]);   // independent of the developer's .env
         $file = tempnam(sys_get_temp_dir(), 'lgdash') . '.sqlite';
         touch($file);
         $toSqlite = function () use ($file) {
@@ -145,10 +146,11 @@ class LeadGenAccessTest extends TestCase
 
         $this->dashboard($this->owner, $this->projectA)
             ->assertOk()
-            ->assertSee('Prospects found')
-            ->assertSee('Overture Maps places')
+            ->assertSee('How it works')
+            ->assertSee('Business listings')
             ->assertSee('Not available yet')     // no places worker configured in tests
-            ->assertSee('1 address on your do-not-contact list');
+            ->assertSeeInOrder(['tva-lg-kpi__n">1<', 'Do not contact'], false)   // the one suppression
+            ->assertSee('1/5', false);           // getting started: prospects found
 
         @unlink($file);
     }

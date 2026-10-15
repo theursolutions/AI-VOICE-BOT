@@ -29,17 +29,18 @@
             @if ($canSearch)
             <div class="ml-auto flex gap-2">
                 @if (in_array($search->status, ['queued', 'running'], true))
-                    <form method="POST" action="{{ route('leadgen.searches.pause', $qp) }}">@csrf<button class="btn btn-sm btn-outline-secondary">Pause</button></form>
+                    <form method="POST" action="{{ route('leadgen.searches.pause', $qp) }}">@csrf<button class="btn btn-sm btn-outline-secondary"><i data-lucide="pause"></i>Pause</button></form>
                 @endif
                 @if ($search->status === 'paused')
-                    <form method="POST" action="{{ route('leadgen.searches.resume', $qp) }}">@csrf<button class="btn btn-sm btn-primary">Resume</button></form>
+                    <form method="POST" action="{{ route('leadgen.searches.resume', $qp) }}">@csrf<button class="btn btn-sm btn-primary"><i data-lucide="play"></i>Resume</button></form>
                 @endif
                 @if (in_array($search->status, ['queued', 'running', 'paused'], true))
-                    <form method="POST" action="{{ route('leadgen.searches.cancel', $qp) }}" data-confirm="Stop this search? Prospects already found are kept.">@csrf<button class="btn btn-sm btn-outline-danger">Cancel</button></form>
+                    <form method="POST" action="{{ route('leadgen.searches.cancel', $qp) }}" data-confirm="Stop this search? Prospects already found are kept.">@csrf<button class="btn btn-sm btn-outline-danger"><i data-lucide="x"></i>Cancel</button></form>
                 @endif
                 @if (!$isImport)
-                    <form method="POST" action="{{ route('leadgen.searches.save', $qp) }}">@csrf<button class="btn btn-sm btn-outline-secondary">{{ $search->saved ? 'Unsave' : 'Save' }}</button></form>
-                    <a class="btn btn-sm btn-outline-secondary" href="{{ route('leadgen.searches.create', ['client' => $client->slug, 'project_id' => $project->id, 'from_id' => $search->id]) }}">Run again</a>
+                    <form method="POST" action="{{ route('leadgen.searches.save', $qp) }}">@csrf<button class="btn btn-sm btn-outline-secondary"><i data-lucide="bookmark"></i>{{ $search->saved ? 'Saved' : 'Save' }}</button></form>
+                    <a class="btn btn-sm btn-outline-secondary" href="{{ route('leadgen.searches.create', ['client' => $client->slug, 'project_id' => $project->id, 'from_id' => $search->id]) }}"><i data-lucide="refresh-cw"></i>Run again</a>
+                    <a class="btn btn-sm btn-primary" href="{{ route('leadgen.prospects.index', ['client' => $client->slug, 'project_id' => $project->id, 'search_id' => $search->id]) }}"><i data-lucide="building"></i>Work with these prospects</a>
                 @endif
             </div>
             @endif
@@ -67,49 +68,61 @@
     </div>
 
     <div class="tva-lg-panel tva-lg-panel--flush">
-        <div class="flex gap-4 px-5 pb-3 text-sm">
-            <a href="{{ route('leadgen.searches.show', $qp) }}" class="{{ !$outcome ? 'font-semibold text-primary' : 'text-slate-500' }}">All</a>
-            <a href="{{ route('leadgen.searches.show', $qp + ['outcome' => 'new']) }}" class="{{ $outcome === 'new' ? 'font-semibold text-primary' : 'text-slate-500' }}">New</a>
-            <a href="{{ route('leadgen.searches.show', $qp + ['outcome' => 'duplicate']) }}" class="{{ $outcome === 'duplicate' ? 'font-semibold text-primary' : 'text-slate-500' }}">Already found</a>
-            <a href="{{ route('leadgen.searches.show', $qp + ['outcome' => 'existing_crm']) }}" class="{{ $outcome === 'existing_crm' ? 'font-semibold text-primary' : 'text-slate-500' }}">In your CRM</a>
+        <div class="tva-bulkbar">
+            @foreach (['' => ['All', 'layers'], 'new' => ['New', 'star'], 'duplicate' => ['Already found', 'copy'], 'existing_crm' => ['In your CRM', 'user-check']] as $oc => [$label, $icon])
+                <a href="{{ route('leadgen.searches.show', $qp + ($oc ? ['outcome' => $oc] : [])) }}" class="tva-lg-tab2 {{ ($outcome ?? '') === $oc ? 'tva-lg-tab2--on' : '' }}" style="padding:6px 12px"><i data-lucide="{{ $icon }}"></i>{{ $label }}</a>
+            @endforeach
         </div>
         @if ($results->isEmpty())
-            <div class="tva-lg-empty">{{ $active ? 'Results will appear here as they arrive.' : 'No results.' }}</div>
+            <div class="tva-lg-empty">
+                <span class="tva-tone tva-tone--blue mx-auto" style="width:48px;height:48px"><i data-lucide="{{ $active ? 'clock' : 'inbox' }}"></i></span>
+                <div class="mt-3">{{ $active ? 'Results will appear here as they arrive.' : 'No results for this filter.' }}</div>
+            </div>
         @else
+            <div style="overflow-x:auto">
             <table class="tva-lg-tbl">
-                <thead><tr><th>Business</th><th>Website</th><th>Phone</th><th>Email</th><th>Location</th><th></th></tr></thead>
+                <thead><tr><th>Business</th><th>Website</th><th>Contact</th><th>Location</th><th>Result</th></tr></thead>
                 <tbody>
                 @foreach ($results as $r)
                     @php $pr = $r->prospect; @endphp
                     @continue(!$pr)
                     <tr>
-                        <td>
-                            <div class="tva-lg-name">{{ $pr->business_name }}</div>
-                            <div class="tva-lg-sub">{{ $pr->category ? str_replace('_', ' ', $pr->category) : '—' }}</div>
+                        <td style="min-width:230px">
+                            <div class="tva-who">
+                                @include('leadgen._chips', ['chip' => 'avatar', 'name' => $pr->business_name])
+                                <div style="min-width:0">
+                                    <a class="tva-who__n" href="{{ route('leadgen.prospects.show', ['client' => $client->slug, 'project_id' => $project->id, 'id' => $pr->id]) }}">{{ $pr->business_name }}</a>
+                                    <div class="tva-who__s">{{ $pr->category ? str_replace('_', ' ', $pr->category) : '—' }}</div>
+                                </div>
+                            </div>
                         </td>
                         <td>
                             @if ($pr->website)
-                                <a href="{{ $pr->website }}" target="_blank" rel="noopener nofollow" class="text-primary">{{ $pr->domain_norm ?: parse_url($pr->website, PHP_URL_HOST) }}</a>
-                            @else <span class="tva-lg-sub">—</span> @endif
+                                <a href="{{ $pr->website }}" target="_blank" rel="noopener nofollow" class="tva-cell-ico text-primary"><i data-lucide="globe"></i>{{ $pr->domain_norm ?: parse_url($pr->website, PHP_URL_HOST) }}</a>
+                            @else <span class="tva-empty-dash">—</span> @endif
                         </td>
-                        <td>
-                            {{ $pr->phone_e164 ?: ($pr->field_meta['phone']['raw'] ?? '—') }}
-                            @if ($pr->phone_e164 || isset($pr->field_meta['phone']))<div class="tva-lg-sub">{{ $verLabel[$pr->verificationOf('phone')] ?? 'unverified' }}</div>@endif
+                        <td style="min-width:200px">
+                            @if ($pr->email)
+                                <div class="tva-cell-ico"><i data-lucide="mail"></i>{{ $pr->email }}</div>
+                                <div class="mt-1">@include('leadgen.prospects._verified', ['level' => $pr->verificationOf('email')])</div>
+                            @endif
+                            @if ($pr->phone_e164 || isset($pr->field_meta['phone']['raw']))
+                                <div class="tva-cell-ico {{ $pr->email ? 'mt-2' : '' }}"><i data-lucide="phone"></i>{{ $pr->phone_e164 ?: $pr->field_meta['phone']['raw'] }}</div>
+                            @endif
+                            @if (!$pr->email && !$pr->phone_e164 && !isset($pr->field_meta['phone']['raw']))<span class="tva-empty-dash">—</span>@endif
                         </td>
+                        <td>@if ($pr->city || $pr->country_code)<span class="tva-cell-ico"><i data-lucide="map-pin"></i>{{ trim(($pr->city ?? '') . ($pr->country_code ? ', ' . $pr->country_code : ''), ', ') }}</span>@else<span class="tva-empty-dash">—</span>@endif</td>
                         <td>
-                            {{ $pr->email ?: '—' }}
-                            @if ($pr->email)<div class="tva-lg-sub">{{ $verLabel[$pr->verificationOf('email')] ?? 'unverified' }}</div>@endif
-                        </td>
-                        <td>{{ trim(($pr->city ?? '') . ($pr->country_code ? ', ' . $pr->country_code : ''), ', ') ?: '—' }}</td>
-                        <td>
-                            @if ($r->outcome === 'duplicate')<span class="tva-lg-pill tva-lg-pill--off">already found</span>@endif
-                            @if ($r->outcome === 'existing_crm')<span class="tva-lg-pill tva-lg-pill--ok">in your CRM</span>@endif
+                            @if ($r->outcome === 'new')<span class="tva-st tva-st--new">New</span>@endif
+                            @if ($r->outcome === 'duplicate')<span class="tva-st tva-st--muted">Already found</span>@endif
+                            @if ($r->outcome === 'existing_crm')<span class="tva-st tva-st--in_crm">In your CRM</span>@endif
                         </td>
                     </tr>
                 @endforeach
                 </tbody>
             </table>
-            <div class="px-5 pt-3">@include('partials.pagination', ['paginator' => $results])</div>
+            </div>
+            @include('leadgen._pager', ['paginator' => $results, 'noun' => 'results'])
         @endif
         @if ($attribution)
             <div class="tva-lg-sub px-5 pt-3">Data: {{ $attribution }} Contact details come from public listings and are unverified until confirmed.</div>

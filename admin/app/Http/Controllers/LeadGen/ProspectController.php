@@ -9,8 +9,12 @@ use App\Models\Client;
 use App\Models\LeadGen\Event;
 use App\Models\LeadGen\LeadList;
 use App\Models\LeadGen\LeadListItem;
+use App\Models\LeadGen\OfferProfile;
+use App\Models\LeadGen\OutreachMessage;
 use App\Models\LeadGen\Prospect;
+use App\Models\LeadGen\Qualification;
 use App\Models\LeadGen\SearchResult;
+use App\Models\LeadGen\Template;
 use App\Models\Project;
 use App\Models\User;
 use App\Services\LeadGen\CrmSync;
@@ -47,6 +51,7 @@ class ProspectController extends Controller
 
         return view('leadgen.prospects.index', [
             'client' => $client, 'project' => $project, 'projects' => $projects, 'prospects' => $prospects,
+            'profiles' => OfferProfile::orderBy('name')->get(['id', 'name']),
             'lists'  => LeadList::orderBy('name')->get(['id', 'name']),
             'filters' => $request->only(['q', 'status', 'has', 'city', 'category', 'list_id', 'tag', 'search_id', 'show', 'enrichment']),
             'statuses' => Prospect::STATUSES,
@@ -72,7 +77,11 @@ class ProspectController extends Controller
         $members = $this->members($client, $project);
 
         return view('leadgen.prospects.show', compact('client', 'project', 'projects', 'p', 'similar', 'possibleOf', 'foundBy', 'events', 'members') + [
-            'lists' => LeadList::orderBy('name')->get(['id', 'name']),
+            'lists'         => LeadList::orderBy('name')->get(['id', 'name']),
+            'profiles'      => OfferProfile::orderBy('name')->get(['id', 'name', 'language', 'tone']),
+            'templates'     => Template::orderBy('name')->get(['id', 'name', 'channel']),
+            'qualification' => Qualification::where('prospect_id', $p->id)->where('is_current', true)->with('profile')->first(),
+            'drafts'        => OutreachMessage::where('prospect_id', $p->id)->orderByDesc('id')->limit(20)->get(),
         ]);
     }
 

@@ -16,6 +16,16 @@ class Qualification extends LeadGenModel
         'is_current' => 'boolean',
     ];
 
+    public function prospect()
+    {
+        return $this->belongsTo(Prospect::class, 'prospect_id');
+    }
+
+    public function profile()
+    {
+        return $this->belongsTo(OfferProfile::class, 'profile_id');
+    }
+
     /** The band a person settled on, else the model's. */
     public function effectiveBand(): string
     {

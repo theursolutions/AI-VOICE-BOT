@@ -129,7 +129,7 @@ class SearchHttpTest extends TestCase
         config(['leadgen.places.url' => null]);
 
         $this->actingAs($this->owner)->get($this->url('leadgen.searches.create', ['project_id' => $this->projectA->id]))
-            ->assertOk()->assertSee("isn't available yet", false);
+            ->assertOk()->assertSee('Business search isn’t available yet');
         $this->actingAs($this->owner)->post($this->url('leadgen.searches.store'), $this->searchPayload())
             ->assertSessionHasErrors('source');
     }

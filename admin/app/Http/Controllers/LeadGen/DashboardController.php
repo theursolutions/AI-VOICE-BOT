@@ -5,6 +5,10 @@ namespace App\Http\Controllers\LeadGen;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\LeadGen\Campaign;
+use App\Models\LeadGen\LeadList;
+use App\Models\LeadGen\OfferProfile;
+use App\Models\LeadGen\OutreachMessage;
+use App\Models\LeadGen\Qualification;
 use App\Models\LeadGen\Prospect;
 use App\Models\LeadGen\Search;
 use App\Models\LeadGen\Suppression;
@@ -39,16 +43,23 @@ class DashboardController extends Controller
         }
 
         $stats = null;
+        $recent = collect();
         if ($ready) {
             $stats = [
-                'prospects'   => Prospect::count(),
-                'new'         => Prospect::where('status', 'new')->count(),
+                'prospects'   => Prospect::whereNull('suppressed_at')->count(),
+                'review'      => Prospect::whereIn('status', ['new', 'reviewing'])->whereNull('suppressed_at')->count(),
+                'high_fit'    => Qualification::where('is_current', true)->where(fn ($q) => $q->where('override_band', 'high')
+                                    ->orWhere(fn ($w) => $w->whereNull('override_band')->where('band', 'high')))->count(),
+                'scored'      => Qualification::where('is_current', true)->count(),
                 'in_crm'      => Prospect::where('status', 'in_crm')->count(),
-                'searches'    => Search::count(),
+                'drafts'      => OutreachMessage::where('status', 'draft')->count(),
+                'lists'       => LeadList::count(),
+                'profiles'    => OfferProfile::count(),
                 'running'     => Search::whereIn('status', [Search::QUEUED, Search::RUNNING])->count(),
                 'campaigns'   => Campaign::whereIn('status', ['running', 'paused'])->count(),
                 'suppressed'  => Suppression::count(),
             ];
+            $recent = Search::orderByDesc('id')->limit(5)->get();
         }
 
         $sources = [
@@ -77,6 +88,6 @@ class DashboardController extends Controller
             ];
         }
 
-        return view('leadgen.dashboard', compact('client', 'projects', 'project', 'ready', 'stats', 'sources', 'channels'));
+        return view('leadgen.dashboard', compact('client', 'projects', 'project', 'ready', 'stats', 'sources', 'channels', 'recent'));
     }
 }

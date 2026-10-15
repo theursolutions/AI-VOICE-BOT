@@ -1,6 +1,6 @@
 # Lead Generation & Outreach Automation — Phase 1 Plan
 
-Status: **Phase 4 complete** (2026-10-16) — discovery, import, dedup, enrichment, lists, Add to CRM and export work; no AI or sending yet. Next: Phase 5.
+Status: **Phase 5 complete** (2026-10-16) — everything up to AI scoring and AI drafts works; nothing is sent yet. Next: Phase 6 (campaigns and sending).
 
 **Decisions (2026-10-15):**
 1. First discovery provider: **Overture Maps Places** (+ website enrichment, CSV/XLSX import).
@@ -200,3 +200,10 @@ Admin side: `RunSearch` job processes ≤5 pages × 100 per run then re-queues i
 **Add to CRM** (`CrmSync`): Contact via `ContactResolver::resolve()` with the email (or phone) as the handle — the same identity an inbound reply resolves to — plus a session-less Lead (`fields.source = Lead Generation`) on the existing Leads board. Idempotent via `lg_prospects.lead_id`.
 
 **Export**: XLSX via `App\Support\Xlsx` (all cells text), current filters, do-not-contact rows excluded, source + licence + verification columns, audit-logged.
+
+## 12. AI scoring and drafts (Phase 5)
+
+- **What the AI sees** (`Ai\ProspectFacts`): name, category (+ path), brand, city, country, whether website/email/phone/socials exist **and how verified**, listing status/confidence, tags. Never notes, owners, ids, raw payloads, or the email address itself. Values are flattened to one bounded line (no prompt-like markup).
+- **Scoring** (`Ai\Qualifier`, call type `leadgen_qualify` → machinery brain, metered): schema-checked JSON; then in PHP — evidence must name a supplied fact and quote its value, else dropped; no evidence / "insufficient" / invalid schema → **needs review**; band derived from score (≥70 high, ≥40 medium); **score capped at 85** because listing data shows fit, never need (a live model scored a listing 100 "perfect fit"); WhatsApp never suggested (needs opt-in), email only with an address, none for do-not-contact. Possible needs stored as labelled hypotheses. History kept; one current row per prospect. Human override with reason.
+- **Drafts** (`Ai\Drafter`, call type `leadgen_draft` → reply brain): language (incl. Roman Urdu), tone, length, optional template. After generation: false-familiarity phrases → regenerate once, then saved with a warning; `{{variables}}` filled only from real data, missing/unknown ones reported; drafts are `status=draft` and never sent from here. Template mode fills a template with no AI.
+- **Live check 2026-10-16** (Gemini `gemini-3.5-flash-lite`, real prompts, real prospect): all three calls schema-valid; private note never in a prompt; no false familiarity. Fixed from what it showed: score cap, "never tie a problem to this business or its website", "keep business and product names exactly as written" (Arabic draft had mistranslated the name), sender labelled as a person.

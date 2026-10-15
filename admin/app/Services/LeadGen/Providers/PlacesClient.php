@@ -15,9 +15,14 @@ class PlacesClient
 {
     private ?Client $http = null;
 
-    public function __construct(?Client $http = null)
+    // No constructor parameter on purpose: the container autowires a typed
+    // ?Client with a bare Guzzle client (no base_uri), which sent every
+    // request to "http://places/…". Tests that need a custom handler use
+    // withHttp().
+    public function withHttp(Client $http): static
     {
         $this->http = $http;
+        return $this;
     }
 
     public function configured(): bool
