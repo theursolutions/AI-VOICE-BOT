@@ -107,6 +107,11 @@
                                 <a href="mailto:{{ $cEmail }}" style="color:#64748b; text-decoration:none;">{{ $cEmail }}</a>
                                 &nbsp;·&nbsp;
                                 <a href="tel:{{ preg_replace('/[^0-9+]/', '', $cPhone) }}" style="color:#64748b; text-decoration:none;">{{ $cPhone }}</a>
+                                @php $cWa = trim((string) tva_setting('content.contact_whatsapp', '')); @endphp
+                                @if ($cWa !== '')
+                                    &nbsp;·&nbsp;
+                                    <a href="{{ tva_whatsapp_link($cWa) }}" style="color:#64748b; text-decoration:none;">WhatsApp {{ $cWa }}</a>
+                                @endif
                             </div>
                             <div style="margin-top:14px; padding-top:14px; border-top:1px solid #e2e8f0;">
                                 &copy; {{ $year }} {{ $brand }}. All rights reserved.

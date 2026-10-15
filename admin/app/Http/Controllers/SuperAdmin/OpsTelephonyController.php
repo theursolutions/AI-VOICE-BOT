@@ -156,6 +156,7 @@ class OpsTelephonyController extends Controller
             'max_seconds'   => 'required|integer|min:20|max:1800',
             'calls_per_day' => 'required|integer|min:1|max:50',
             'gap_hours'     => 'required|numeric|min:0|max:24',
+            'network_calls_per_day' => 'nullable|integer|min:1|max:500',
         ], [
             'max_seconds.min' => 'A call needs at least 20 seconds: the greeting and the goodbye take about 5 seconds each.',
             'max_seconds.max' => 'A free call can last at most 30 minutes.',
@@ -166,7 +167,7 @@ class OpsTelephonyController extends Controller
             'max_seconds'   => (int) $data['max_seconds'],
             'calls_per_day' => (int) $data['calls_per_day'],
             'gap_hours'     => (float) $data['gap_hours'],
-        ]);
+        ] + (isset($data['network_calls_per_day']) ? ['network_calls_per_day' => (int) $data['network_calls_per_day']] : []));
 
         return back()->with('success', 'Main website demo call saved. New calls use it straight away.');
     }

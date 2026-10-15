@@ -27,10 +27,21 @@ class OAuthService
         return !empty($this->cfg['id']) && !empty($this->cfg['secret']);
     }
 
-    /** Build the Facebook OAuth consent URL for a provider. */
-    public function authUrl(string $provider, string $redirectUri, string $state): string
+    /**
+     * Build the Facebook OAuth consent URL for a provider.
+     *
+     * $extraScopes are asked for on top of the provider's own — used by the
+     * publishing connect, which needs the messaging scopes too because it
+     * re-imports the same ChannelConnection rows.
+     */
+    public function authUrl(string $provider, string $redirectUri, string $state, array $extraScopes = []): string
     {
         $scope = $this->cfg['scopes'][$provider] ?? 'public_profile';
+        if ($extraScopes) {
+            $scope = implode(',', array_values(array_unique(array_filter(array_map(
+                'trim', array_merge(explode(',', $scope), $extraScopes),
+            )))));
+        }
         $base  = rtrim($this->cfg['login_base'], '/') . '/' . $this->cfg['graph_version'] . '/dialog/oauth';
         return $base . '?' . http_build_query([
             'client_id'     => $this->cfg['id'],

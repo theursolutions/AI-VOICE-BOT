@@ -63,6 +63,57 @@ class WebCallTest extends TestCase
         ]);
     }
 
+    /** A call from a given device (the id the button keeps per browser) that reached the AI. */
+    private function callFrom(string $device, string $ip = '203.0.113.7')
+    {
+        $r = $this->withServerVariables(['REMOTE_ADDR' => $ip])->withHeaders(['Origin' => 'https://serveai.com.pk'])
+            ->postJson('/api/webcall/session', ['key' => 'demo-key-123', 'device' => $device]);
+        if ($r->json('ok')) {
+            app(WebCalls::class)->start($r->json('username'));
+        }
+
+        return $r;
+    }
+
+    public function test_five_devices_on_one_network_each_get_their_own_calls(): void
+    {
+        foreach (range(1, 5) as $i) {
+            $this->callFrom(str_repeat("device{$i}", 4))->assertOk();
+        }
+        $this->assertSame(5, WebCallSession::whereNotNull('started_at')->where('ip', '203.0.113.7')->count());
+
+        // The same device still waits the gap…
+        $this->callFrom(str_repeat('device1', 4))->assertStatus(429)->assertJsonPath('reason', 'too_soon');
+        // …a sixth device on that network does not.
+        $this->callFrom(str_repeat('device6', 4))->assertOk();
+    }
+
+    public function test_the_network_has_an_overall_daily_cap(): void
+    {
+        app(WebCalls::class)->save($this->project, ['network_calls_per_day' => 4]);
+        foreach (range(1, 4) as $i) {
+            $this->callFrom(str_repeat("phone{$i}x", 4))->assertOk();
+        }
+        $this->callFrom(str_repeat('phone5x', 4))->assertStatus(429)->assertJsonPath('reason', 'network_limit');
+        // Another network is not affected.
+        $this->callFrom(str_repeat('phone5x', 4), '198.51.100.40')->assertOk();
+    }
+
+    public function test_the_real_visitor_ip_is_recorded_behind_the_proxies(): void
+    {
+        // HAProxy (172.18.x) forwards Caddy's X-Forwarded-For with the visitor's address.
+        $this->withServerVariables(['REMOTE_ADDR' => '172.18.0.19', 'HTTP_X_FORWARDED_FOR' => '39.45.1.2'])
+            ->withHeaders(['Origin' => 'https://serveai.com.pk'])
+            ->postJson('/api/webcall/session', ['key' => 'demo-key-123', 'device' => str_repeat('a1', 10)])->assertOk();
+        $this->assertSame('39.45.1.2', WebCallSession::latest('id')->value('ip'));
+    }
+
+    public function test_an_old_button_without_a_device_id_is_limited_per_ip(): void
+    {
+        $this->pastCall(1);
+        $this->ask()->assertStatus(429)->assertJsonPath('reason', 'too_soon');
+    }
+
     public function test_a_visitor_gets_a_one_call_account_that_can_only_reach_the_ai(): void
     {
         // Callable from the website's own pages (no cookies, so any origin header works).

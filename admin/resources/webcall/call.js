@@ -116,6 +116,20 @@
     //    whatever the visitor then speaks). Remembered for next time.
     var langs = root.querySelectorAll('.lang');
     try { state.lang = localStorage.getItem('tva-call-lang') || ''; } catch (e) { state.lang = ''; }
+
+    // ── This browser's id: call limits count per device, so several people
+    //    on one Wi-Fi (one public IP) each get their own calls.
+    var DEVICE = (function () {
+        var id = '';
+        try { id = localStorage.getItem('tva-call-device') || ''; } catch (e) { /* private mode */ }
+        if (!/^[A-Za-z0-9_-]{16,64}$/.test(id)) {
+            var bytes = new Uint8Array(16);
+            (window.crypto || window.msCrypto).getRandomValues(bytes);
+            id = Array.prototype.map.call(bytes, function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+            try { localStorage.setItem('tva-call-device', id); } catch (e) { /* private mode: one id per page load */ }
+        }
+        return id;
+    })();
     if (state.lang !== 'en' && state.lang !== 'ur') {
         state.lang = /^ur\b/i.test(navigator.language || '') ? 'ur' : 'en';
     }
@@ -248,7 +262,7 @@
                 return fetch(API + '/api/webcall/session', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                    body: JSON.stringify({ key: KEY, page: location.href, lang: state.lang })
+                    body: JSON.stringify({ key: KEY, page: location.href, lang: state.lang, device: DEVICE })
                 }).then(function (r) { return r.json().catch(function () { return {}; }); });
             })
             .then(function (s) {

@@ -58,13 +58,15 @@ class InstagramLoginService
      * Facebook dialog with an Instagram app id returns a bare "Invalid
      * platform app" page with no indication of what is wrong.
      */
-    public function authUrl(string $redirectUri, string $state): string
+    public function authUrl(string $redirectUri, string $state, array $extraScopes = []): string
     {
+        $scopes = array_values(array_unique(array_merge($this->scopes(), array_filter(array_map('trim', $extraScopes)))));
+
         return rtrim($this->cfg['authorize_base'], '/') . '/oauth/authorize?' . http_build_query([
             'client_id'     => $this->cfg['app_id'],
             'redirect_uri'  => $redirectUri,
             'response_type' => 'code',
-            'scope'         => implode(',', $this->scopes()),
+            'scope'         => implode(',', $scopes),
             'state'         => $state,
         ]);
     }

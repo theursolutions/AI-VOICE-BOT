@@ -21,7 +21,7 @@ class WebCallSession extends Model
     /** Guest account names start with this (the voice engine checks it too). */
     public const PREFIX = 'w';
 
-    protected $fillable = ['project_id', 'client_id', 'ip', 'origin', 'page_url', 'language', 'sip_username',
+    protected $fillable = ['project_id', 'client_id', 'ip', 'device_key', 'origin', 'page_url', 'language', 'sip_username',
                            'secret', 'status', 'counts_toward_limit', 'session_id', 'expires_at',
                            'started_at', 'ended_at'];
 

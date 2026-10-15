@@ -43,6 +43,14 @@ class ChannelOnboardController extends Controller
         'whatsapp'  => ChannelConnection::PROVIDER_WHATSAPP,
     ];
 
+    /**
+     * Why this consent was started: null for channel onboarding, 'publish'
+     * when it came from the Social Posts page. A publish connect asks for
+     * the posting permissions on top and sends the customer back there.
+     * Travels through the OAuth round trip inside the encrypted state.
+     */
+    private ?string $purpose = null;
+
     public function __construct(
         private OAuthService $oauth,
         private OnboardingService $onboarding,
@@ -58,6 +66,10 @@ class ChannelOnboardController extends Controller
         abort_unless($resolved, 404);
 
         $project = $this->resolveProject($client, (int) $request->query('project_id'));
+
+        if ($request->query('purpose') === 'publish' && $resolved !== ChannelConnection::PROVIDER_WHATSAPP) {
+            $this->purpose = 'publish';
+        }
 
         $viaInstagram = $this->usesInstagramLogin($resolved);
 
@@ -78,6 +90,7 @@ class ChannelOnboardController extends Controller
     public function callback(Request $request): Response
     {
         $state   = $this->decodeState((string) $request->query('state'));
+        $this->purpose = $state['purpose'] ?? null;
         $client  = $state ? Client::where('slug', $state['client'])->first() : null;
         $project = $client ? Project::where('client_id', $client->id)->where('id', $state['project'])->first() : null;
         $log     = $state ? ChannelOnboardingLog::find($state['log']) : null;
@@ -140,6 +153,7 @@ class ChannelOnboardController extends Controller
     public function instagramCallback(Request $request): Response
     {
         $state   = $this->decodeState((string) $request->query('state'));
+        $this->purpose = $state['purpose'] ?? null;
         $client  = $state ? Client::where('slug', $state['client'])->first() : null;
         $project = $client ? Project::where('client_id', $client->id)->where('id', $state['project'])->first() : null;
         $log     = $state ? ChannelOnboardingLog::find($state['log']) : null;
@@ -492,6 +506,7 @@ class ChannelOnboardController extends Controller
         return redirect()->away($this->instagram->authUrl(
             $this->instagramCallbackUrl(),
             $this->encodeState($client, $project, ChannelConnection::PROVIDER_INSTAGRAM, $log),
+            $this->purpose === 'publish' ? explode(',', (string) config('meta.instagram.publish_scopes', '')) : [],
         ));
     }
 
@@ -529,6 +544,7 @@ class ChannelOnboardController extends Controller
             $provider,
             $this->callbackUrl(),
             $this->encodeState($client, $project, $provider, $log),
+            $this->purpose === 'publish' ? explode(',', (string) (config('meta.app.publish_scopes')[$provider] ?? '')) : [],
         ));
     }
 
@@ -566,7 +582,7 @@ class ChannelOnboardController extends Controller
     {
         if ($client && $project) {
             session()->flash($type, $message);   // shown when the opener reloads
-            $back = route('channels.index', ['client' => $client->slug, 'project_id' => $project->id]);
+            $back = route($this->purpose === 'publish' ? 'social-posts.index' : 'channels.index', ['client' => $client->slug, 'project_id' => $project->id]);
         } else {
             $back = url('/');
         }
@@ -624,6 +640,7 @@ HTML;
             'project'  => $project->id,
             'provider' => $provider,
             'log'      => $log->id,
+            'purpose'  => $this->purpose,
             'ts'       => time(),
         ]));
     }

@@ -22,7 +22,7 @@
     // Section open-state — used to expand the parent menu that holds the
     // active route, and to rotate its chevron.
     $sec = [
-        'social'   => $is('chat.*', 'channels.*'),
+        'social'   => $is('chat.*', 'channels.*', 'social-posts.*'),
         'ai'       => $is('bot-strategy.*', 'brain-settings.*'),
         'data'     => $is('data-sources.*', 'voices.*', 'telephony.*'),
         'project'  => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*', 'flows.*'),
@@ -94,7 +94,7 @@
 
     // Section visibility — a collapsible group shows only if the member can
     // reach at least one of its children.
-    $showSocial    = $can('messages') || $can('channels');
+    $showSocial    = $can('messages') || $can('channels') || $can('social');
     $showAi        = $can('bot_strategy');
     $showData      = $can('data_sources') || $can('voices') || $can('telephony');
     $showProject   = $can('profile') || $can('agents') || $can('skills') || $can('flows') || $can('widget');
@@ -226,6 +226,16 @@
                        @if ($planLocked('channels')) title="{{ $lockTip('channels') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="radio"></i></div>
                         <div class="side-menu__title">Meta Onboarding</div>
+                    </a>
+                </li>
+                @endif
+                @if($can('social'))
+                <li>
+                    <a href="{{ $clientSlug ? route('social-posts.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('social-posts.*') ? 'side-menu--active' : '' }}{{ $lockCls('social') }}"
+                       @if ($planLocked('social')) title="{{ $lockTip('social') }}" @endif>
+                        <div class="side-menu__icon"><i data-lucide="send"></i></div>
+                        <div class="side-menu__title">Social Posts</div>
                     </a>
                 </li>
                 @endif
