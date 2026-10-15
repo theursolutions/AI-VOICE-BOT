@@ -77,6 +77,7 @@ class Kernel extends HttpKernel
         'workspace.provisioned' => \App\Http\Middleware\EnsureWorkspaceProvisioned::class,
         'module.access' => \App\Http\Middleware\EnsureModuleAccess::class,
         'module.enabled' => \App\Http\Middleware\EnsureModuleEnabled::class,
+        'module.ability' => \App\Http\Middleware\EnsureModuleAbility::class,
         'email.verified.gate' => \App\Http\Middleware\EnsureEmailVerified::class,
         'super-admin' => \App\Http\Middleware\IsSuperAdmin::class,
         // Billing gates. Order in the workspace group matters:

@@ -566,5 +566,8 @@ Route::middleware(['auth', 'active.client'])
         // than a mode of leads.update, which redirects.
         Route::patch ('/leads/{id}/status',                [App\Http\Controllers\Admin\LeadWebController::class, 'updateStatus'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('leads.status');
 
+        // Lead Generation & Outreach — prospect discovery, qualification, campaigns.
+        require __DIR__.'/leadgen.php';
+
         }); // end workspace.provisioned group
     });

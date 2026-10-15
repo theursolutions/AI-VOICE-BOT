@@ -16,7 +16,7 @@
 @endif
 
 <p class="text-slate-500 text-sm mt-2">
-    A role is a named set of modules a teammate can access. <b>Dashboard</b> is always available.
+    A role is a named set of modules a teammate can access; some modules also let you choose which actions it allows. <b>Dashboard</b> is always available.
     Assign roles to people on the <a class="text-primary" href="{{ route('members.index', ['client' => $slug]) }}">Members</a> page.
 </p>
 
@@ -27,15 +27,7 @@
         @csrf
         <input type="text" name="name" required maxlength="80" placeholder="Role name (e.g. Support Agent)"
                class="form-control w-full sm:w-80 mb-4">
-        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            @foreach ($modules as $key => $cfg)
-                @if ($key === 'dashboard') @continue @endif
-                <label class="flex items-center gap-2 p-2 border rounded-md cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" name="modules[]" value="{{ $key }}" class="form-check-input">
-                    <span class="text-sm">{{ $cfg['label'] ?? $key }}</span>
-                </label>
-            @endforeach
-        </div>
+        @include('roles._module-grid', ['role' => null])
         <button class="btn btn-primary mt-4">Create role</button>
     </form>
 </div>
@@ -62,16 +54,7 @@
                     @csrf @method('PATCH')
                     <input type="text" name="name" required maxlength="80" value="{{ $role->name }}"
                            class="form-control w-full sm:w-80 mb-3">
-                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        @foreach ($modules as $key => $cfg)
-                            @if ($key === 'dashboard') @continue @endif
-                            <label class="flex items-center gap-2 p-2 border rounded-md cursor-pointer hover:bg-slate-50">
-                                <input type="checkbox" name="modules[]" value="{{ $key }}" class="form-check-input"
-                                       @checked(in_array($key, $roleMods, true))>
-                                <span class="text-sm">{{ $cfg['label'] ?? $key }}</span>
-                            </label>
-                        @endforeach
-                    </div>
+                    @include('roles._module-grid', ['role' => $role])
                     <button class="btn btn-primary btn-sm mt-3">Save changes</button>
                 </form>
                 <form method="POST" action="{{ route('roles.destroy', ['client' => $slug, 'id' => $role->id]) }}"

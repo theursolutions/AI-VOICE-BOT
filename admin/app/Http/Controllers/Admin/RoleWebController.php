@@ -45,16 +45,14 @@ class RoleWebController extends Controller
     {
         $this->guardOwner($request, $client);
 
-        $data = $request->validate([
-            'name'      => 'required|string|max:80',
-            'modules'   => 'array',
-            'modules.*' => 'string',
-        ]);
+        $data = $request->validate($this->rules());
+        $modules = $this->cleanModules($data['modules'] ?? []);
 
         Role::create([
             'client_id'  => $client->id,
             'name'       => $data['name'],
-            'modules'    => $this->cleanModules($data['modules'] ?? []),
+            'modules'    => $modules,
+            'abilities'  => $this->cleanAbilities($modules, $data),
             'is_owner'   => false,
             'created_at' => time(),
             'updated_at' => time(),
@@ -72,15 +70,13 @@ class RoleWebController extends Controller
             return back()->withErrors(['role' => 'The Owner role cannot be edited.']);
         }
 
-        $data = $request->validate([
-            'name'      => 'required|string|max:80',
-            'modules'   => 'array',
-            'modules.*' => 'string',
-        ]);
+        $data = $request->validate($this->rules());
+        $modules = $this->cleanModules($data['modules'] ?? []);
 
         $role->update([
             'name'       => $data['name'],
-            'modules'    => $this->cleanModules($data['modules'] ?? []),
+            'modules'    => $modules,
+            'abilities'  => $this->cleanAbilities($modules, $data),
             'updated_at' => time(),
         ]);
 
@@ -103,6 +99,42 @@ class RoleWebController extends Controller
 
         $role->delete();
         return back()->with('success', 'Role deleted.');
+    }
+
+    private function rules(): array
+    {
+        return [
+            'name'                => 'required|string|max:80',
+            'modules'             => 'array',
+            'modules.*'           => 'string',
+            'abilities'           => 'array',
+            'abilities.*'         => 'array',
+            'abilities.*.*'       => 'string',
+            'abilities_present'   => 'array',
+        ];
+    }
+
+    /**
+     * Ability lists per module, only for modules the role has and that
+     * declare abilities. Every box ticked is stored as "not narrowed"
+     * (module omitted) so abilities added later are granted too. The
+     * `abilities_present[module]` marker tells "none ticked" (store [])
+     * apart from "the form didn't show this module's abilities" (omit).
+     */
+    private function cleanAbilities(array $modules, array $data): ?array
+    {
+        $map = [];
+        foreach ($modules as $module) {
+            $all = Role::abilityKeys($module);
+            if (!$all || empty($data['abilities_present'][$module])) {
+                continue;
+            }
+            $picked = array_values(array_intersect($all, (array) ($data['abilities'][$module] ?? [])));
+            if (count($picked) < count($all)) {
+                $map[$module] = $picked;
+            }
+        }
+        return $map ?: null;
     }
 
     /** Keep only known module keys (drop 'dashboard' — it's always granted). */

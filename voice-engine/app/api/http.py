@@ -23,6 +23,7 @@ from app.api.routes import extract as extract_route
 from app.api.routes import health as health_route
 from app.api.routes import llm as llm_route
 from app.api.routes import sip as sip_route
+from app.api.routes import structured as structured_route
 from app.api.routes import stt as stt_route
 from app.api.routes import tts as tts_route
 from app.api.routes import audio as audio_route
@@ -197,6 +198,7 @@ def create_app() -> FastAPI:
     app.include_router(health_route.router, tags=["health"])
     app.include_router(llm_route.router, tags=["llm"])
     app.include_router(extract_route.router, tags=["extract"])
+    app.include_router(structured_route.router, tags=["llm"])
     app.include_router(stt_route.router, tags=["stt"])
     app.include_router(tts_route.router, tags=["tts"])
     app.include_router(audio_route.router, tags=["audio"])

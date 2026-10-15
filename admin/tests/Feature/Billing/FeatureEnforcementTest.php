@@ -40,6 +40,7 @@ class FeatureEnforcementTest extends BillingTestCase
             'skills'             => [false, true,  true,  true],   // every plan except Free
             'voice_cloning'      => [false, true,  true,  true],   // above Free
             'crm_connectors'     => [false, false, true,  true],   // Growth+
+            'leadgen'            => [false, false, true,  true],   // Growth+ (2026-10-16)
             'byo_llm'            => [false, false, false, true],   // Scale only
             'database_connector' => [false, false, true,  true],
             'api_access'         => [false, false, true,  true],
@@ -155,6 +156,27 @@ class FeatureEnforcementTest extends BillingTestCase
             app(\App\Services\Billing\PlanFeatureService::class)
                 ->clientHasModule($client->fresh(), 'skills')
         );
+    }
+
+    public function test_lead_generation_is_closed_below_growth_and_open_from_growth(): void
+    {
+        [$client, $user] = $this->makeWorkspace();
+        app(SubscriptionService::class)->startFreeWindow($client);
+        $url = route('leadgen.index', ['client' => $client->slug]);
+
+        $this->actingAs($user)->get($url)->assertStatus(402);
+
+        $this->subscribe($client, 'starter');
+        $this->actingAs($user)->get($url)->assertStatus(402);
+        $this->actingAs($user)->post(route('leadgen.searches.store', ['client' => $client->slug]), [])->assertStatus(402);
+
+        foreach (['growth', 'scale'] as $slug) {
+            $this->subscribe($client, $slug);
+            // Not 402 rather than 200: the page reads the tenant DB, which
+            // this suite doesn't provision — the plan gate is what's tested.
+            $this->assertNotSame(402, $this->actingAs($user)->get($url)->getStatusCode(), "{$slug} must pass the Lead Generation gate.");
+            $this->assertTrue(app(\App\Services\Billing\PlanFeatureService::class)->clientHasModule($client->fresh(), 'leadgen'));
+        }
     }
 
     public function test_brain_settings_stays_scale_only(): void
