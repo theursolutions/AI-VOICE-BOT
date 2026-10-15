@@ -26,14 +26,25 @@ class WebCalls
         'max_seconds'    => 60,
         'calls_per_day'  => 3,
         'gap_hours'      => 4,
+        // calls_per_day and gap_hours are per DEVICE (browser). Everyone on one
+        // network shares a public IP, so the IP only gets this overall cap.
+        'network_calls_per_day' => 20,
         'button_label'   => 'Talk to our AI agent',
     ];
 
     /** An unused account is deleted after this long. */
     public const ACCOUNT_TTL_MINUTES = 5;
 
-    /** Clicks an IP may make in an hour, used or not (keeps account churn sane). */
-    public const ISSUES_PER_HOUR = 10;
+    /** Clicks a network (IP) may make in an hour, used or not (keeps account churn sane). */
+    public const ISSUES_PER_HOUR = 30;
+
+    /** A device id from the call button: a random token it keeps per browser. */
+    public static function deviceKey(?string $raw): ?string
+    {
+        $raw = trim((string) $raw);
+
+        return preg_match('/^[A-Za-z0-9_-]{16,64}$/', $raw) ? $raw : null;
+    }
 
     public function __construct(private SipAccounts $accounts, private SipServer $server) {}
 
@@ -73,19 +84,38 @@ class WebCalls
     }
 
     /**
-     * Why this IP may not call now, or null. Returns
+     * Why this visitor may not call now, or null. Returns
      * ['reason' => …, 'message' => …, 'retry_after' => seconds].
+     *
+     * With a device id the daily allowance and the gap are per device, and
+     * the network (IP) has only an overall cap, so five people on one office
+     * Wi-Fi get five calls. Without one (an old cached button) the IP is the
+     * visitor, as before.
      */
-    public function refusal(Project $project, string $ip, ?CarbonInterface $now = null): ?array
+    public function refusal(Project $project, string $ip, ?CarbonInterface $now = null, ?string $device = null): ?array
     {
         $now ??= now();
         $s = $this->settings($project);
+        $device = self::deviceKey($device);
 
-        $calls = WebCallSession::where('project_id', $project->id)
-            ->where('ip', $ip)
+        $counted = fn () => WebCallSession::where('project_id', $project->id)
             ->where('counts_toward_limit', true)
             ->whereNotNull('started_at')
-            ->where('started_at', '>=', $now->copy()->subDay())
+            ->where('started_at', '>=', $now->copy()->subDay());
+
+        if ($device) {
+            $network = (clone $counted())->where('ip', $ip)->orderBy('started_at')->pluck('started_at');
+            $cap = max((int) $s['calls_per_day'], (int) $s['network_calls_per_day']);
+            if ($network->count() >= $cap) {
+                $retry = (int) max(60, $network->first()->copy()->addDay()->diffInSeconds($now, true));
+
+                return ['reason' => 'network_limit', 'retry_after' => $retry,
+                        'message' => 'Your network has used today\'s free calls. Please try again ' . $this->humanWait($retry) . '.'];
+            }
+        }
+
+        $calls = $counted()
+            ->when($device, fn ($q) => $q->where('device_key', $device), fn ($q) => $q->where('ip', $ip))
             ->orderBy('started_at')
             ->pluck('started_at');
 
@@ -122,7 +152,7 @@ class WebCalls
      * A one-call account for this visitor, live on Asterisk. Returns what
      * the browser needs to place the call.
      */
-    public function issue(Project $project, string $ip, ?string $origin, ?string $page, ?string $language = null): array
+    public function issue(Project $project, string $ip, ?string $origin, ?string $page, ?string $language = null, ?string $device = null): array
     {
         $username = WebCallSession::PREFIX . Str::lower(Str::random(15));
         $username = preg_replace('/[^a-z0-9]/', 'x', $username);
@@ -134,6 +164,7 @@ class WebCalls
             'project_id'   => $project->id,
             'client_id'    => $project->client_id,
             'ip'           => $ip,
+            'device_key'   => self::deviceKey($device),
             'origin'       => $origin ? Str::limit($origin, 250, '') : null,
             'page_url'     => $page ? Str::limit($page, 495, '') : null,
             'language'     => in_array($language, ['en', 'ur'], true) ? $language : null,

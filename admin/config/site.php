@@ -379,6 +379,8 @@ return [
         // Placeholders below — update with your real business details.
         'footer_tagline'    => 'AI customer support and CRM in one: AI agents that answer every call, chat and message, 24/7, from your own data.',
         'contact_phone'     => '+92 349 149 4383',
+        // Separate WhatsApp number; blank hides it everywhere.
+        'contact_whatsapp'  => '',
         'contact_email'     => 'info@serveai.com.pk',
         // Displayed in the footer, on /contact and /privacy, and in emails.
         // MUST match the Google Business Profile listing character-for-character:

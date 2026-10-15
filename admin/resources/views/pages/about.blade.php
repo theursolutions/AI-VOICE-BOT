@@ -6,6 +6,7 @@
     $address = trim((string) tva_setting('content.contact_address', ''));
     $email   = trim((string) tva_setting('content.contact_email', ''));
     $phone   = trim((string) tva_setting('content.contact_phone', ''));
+    $whatsapp = trim((string) tva_setting('content.contact_whatsapp', ''));
 @endphp
 @extends('layouts.public', [
     'pageEyebrow'     => 'About us',
@@ -43,7 +44,7 @@
 
             <h2 id="operator">Who runs {{ $brand }}</h2>
             <p>{{ $brand }} is built and operated @if ($legal !== '' && $legal !== $brand)by <strong>{{ $legal }}</strong>@else by our team @endif @if ($address !== '')from {{ $address }}@endif.
-               @if ($email !== '' || $phone !== '')You can reach us at @if($email !== '')<a href="mailto:{{ $email }}">{{ $email }}</a>@endif @if($email !== '' && $phone !== '') or @endif @if($phone !== '')<a href="tel:{{ preg_replace('/[^\d+]/', '', $phone) }}">{{ $phone }}</a>@endif, or through the <a href="{{ url('/contact') }}">contact page</a>.@endif</p>
+               @if ($email !== '' || $phone !== '')You can reach us at @if($email !== '')<a href="mailto:{{ $email }}">{{ $email }}</a>@endif @if($email !== '' && $phone !== '') or @endif @if($phone !== '')<a href="tel:{{ preg_replace('/[^\d+]/', '', $phone) }}">{{ $phone }}</a>@endif{!! $whatsapp !== '' ? ', on WhatsApp at <a href="' . e(tva_whatsapp_link($whatsapp)) . '" target="_blank" rel="noopener">' . e($whatsapp) . '</a>' : '' !!}, or through the <a href="{{ url('/contact') }}">contact page</a>.@endif</p>
 
             <div class="note">We're just getting started. {{ $brand }} is built to grow with you — new channels, new languages, and smarter automation are always on the way.</div>
         </div>

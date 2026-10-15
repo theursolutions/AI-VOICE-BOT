@@ -72,6 +72,21 @@ return [
             'whatsapp'      => env('META_SCOPES_WHATSAPP',
                 'whatsapp_business_management,whatsapp_business_messaging,business_management'),
         ],
+
+        // Extra scopes requested ON TOP of the ones above, only when a
+        // customer connects from the Social Posts page (purpose=publish).
+        //
+        // Kept separate rather than folded into `scopes` on purpose: an app
+        // that has not added these permissions to its use cases fails the
+        // ENTIRE consent screen with "Invalid Scopes", and merging them would
+        // take messaging onboarding down with it. Missing publish scopes are
+        // reported on the Social Posts page, never treated as a failed connect.
+        // `?:` rather than env()'s default so a blank line in .env (as shipped
+        // in .env.example) still means "use the default", not "ask for none".
+        'publish_scopes' => [
+            'facebook_page' => env('META_PUBLISH_SCOPES_FACEBOOK') ?: 'pages_manage_posts,pages_read_engagement',
+            'instagram'     => env('META_PUBLISH_SCOPES_INSTAGRAM') ?: 'instagram_content_publish,pages_read_engagement',
+        ],
     ],
 
     /**
@@ -115,6 +130,9 @@ return [
         // has not been approved for it, or consent will fail wholesale.
         'scopes' => env('INSTAGRAM_SCOPES',
             'instagram_business_basic,instagram_business_manage_messages,instagram_business_manage_comments'),
+
+        // Added only for a publish-purpose connect — see app.publish_scopes.
+        'publish_scopes' => env('INSTAGRAM_PUBLISH_SCOPES') ?: 'instagram_business_content_publish',
 
         // Webhook fields subscribed per IG account after onboarding.
         'webhook_fields' => env('INSTAGRAM_WEBHOOK_FIELDS', 'messages,messaging_postbacks'),

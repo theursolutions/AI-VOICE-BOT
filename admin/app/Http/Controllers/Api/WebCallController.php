@@ -35,7 +35,10 @@ class WebCallController extends Controller
             'page' => 'nullable|string|max:500',
             // The visitor's pick in the call box: the AI greets in it.
             'lang' => 'nullable|in:en,ur',
+            // Random id the button keeps per browser: limits count per device.
+            'device' => 'nullable|string|max:64',
         ]);
+        $device = WebCalls::deviceKey($data['device'] ?? null);
 
         // The same public key the chat widget is embedded with.
         $project = Project::where('project_api_key', $data['key'])->where('is_active', 'Yes')->first();
@@ -52,13 +55,13 @@ class WebCallController extends Controller
         }
 
         $ip = (string) $request->ip();
-        if ($refusal = $this->calls->refusal($project, $ip)) {
+        if ($refusal = $this->calls->refusal($project, $ip, null, $device)) {
             return $this->cors(response()->json(['ok' => false] + $refusal, 429)
                 ->header('Retry-After', (string) $refusal['retry_after']), $request);
         }
 
         try {
-            $call = $this->calls->issue($project, $ip, $origin, $data['page'] ?? null, $data['lang'] ?? null);
+            $call = $this->calls->issue($project, $ip, $origin, $data['page'] ?? null, $data['lang'] ?? null, $device);
         } catch (\Throwable $e) {
             Log::warning('webcall: account not issued', ['project_id' => $project->id, 'error' => $e->getMessage()]);
             return $this->cors(response()->json(['ok' => false, 'reason' => 'unavailable',

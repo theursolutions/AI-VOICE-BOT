@@ -169,6 +169,7 @@ class SiteContentController extends Controller
             'Footer & Contact' => ['icon' => '🦶', 'fields' => [
                 $a('footer_tagline', 'Footer tagline (under brand)'),
                 $t('contact_phone', 'Contact phone (shown in footer + Contact page)'),
+                $t('contact_whatsapp', 'WhatsApp number (shown in footer + Contact page as a chat link; blank = hidden)'),
                 $t('contact_email', 'Contact email'),
                 $t('contact_address', 'Contact address / location'),
                 $t('social_twitter', 'Social — X/Twitter URL'),

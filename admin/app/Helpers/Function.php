@@ -213,6 +213,28 @@ if (! function_exists('tva_theme')) {
     }
 }
 
+if (! function_exists('tva_whatsapp_link')) {
+    /**
+     * Click-to-chat link for a WhatsApp number typed any way: "+92 300 1234567",
+     * "0300-1234567" or "923001234567" all become https://wa.me/923001234567.
+     * A leading 0 is read as a Pakistani number. '' when there is no number.
+     */
+    function tva_whatsapp_link(?string $number, string $text = ''): string
+    {
+        $digits = preg_replace('/\D/', '', (string) $number);
+        if ($digits === '') {
+            return '';
+        }
+        if (str_starts_with($digits, '00')) {
+            $digits = substr($digits, 2);
+        } elseif (str_starts_with($digits, '0')) {
+            $digits = '92' . substr($digits, 1);
+        }
+
+        return 'https://wa.me/' . $digits . ($text !== '' ? '?text=' . rawurlencode($text) : '');
+    }
+}
+
 if (! function_exists('tva_theme_class')) {
     /** Class for the <html> element — '' in light, 'dark' in dark. */
     function tva_theme_class(string $area = 'public'): string

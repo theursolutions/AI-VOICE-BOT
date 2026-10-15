@@ -11,7 +11,7 @@
     .tva-wcs-bar span { width:100%; background:linear-gradient(180deg,#7c3aed,#4f46e5); border-radius:6px 6px 0 0; min-height:2px; }
     .tva-wcs-bar small { font-size:10px; color:#94a3b8; margin-top:4px; }
     .tva-wcs-bar b { font-size:10px; color:#475569; }
-    .tva-wcs-demo { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)) auto; gap:12px; align-items:end; }
+    .tva-wcs-demo { display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)) auto; gap:12px; align-items:end; }
     .tva-wcs-demo__save { display:flex; align-items:center; gap:14px; white-space:nowrap; }
     @media (max-width: 900px) { .tva-wcs-demo { grid-template-columns:1fr; } }
     html.dark .tva-wcs__card { background:#1e293b; border-color:#334155; }
@@ -55,14 +55,19 @@
                            value="{{ old('max_seconds', $demoSettings['max_seconds']) }}">
                 </div>
                 <div>
-                    <label class="form-label">Calls a day <span class="text-slate-400 font-normal">(per visitor IP)</span></label>
+                    <label class="form-label">Calls a day <span class="text-slate-400 font-normal">(per device)</span></label>
                     <input type="number" name="calls_per_day" class="form-control" min="1" max="50" required
                            value="{{ old('calls_per_day', $demoSettings['calls_per_day']) }}">
                 </div>
                 <div>
-                    <label class="form-label">Hours between calls</label>
+                    <label class="form-label">Hours between calls <span class="text-slate-400 font-normal">(per device)</span></label>
                     <input type="number" name="gap_hours" class="form-control" min="0" max="24" step="0.5" required
                            value="{{ old('gap_hours', $demoSettings['gap_hours']) }}">
+                </div>
+                <div>
+                    <label class="form-label">Calls a day <span class="text-slate-400 font-normal">(per network / IP)</span></label>
+                    <input type="number" name="network_calls_per_day" class="form-control" min="1" max="500" required
+                           value="{{ old('network_calls_per_day', $demoSettings['network_calls_per_day']) }}">
                 </div>
                 <div class="tva-wcs-demo__save">
                     <label class="flex items-center gap-2 text-sm cursor-pointer">
