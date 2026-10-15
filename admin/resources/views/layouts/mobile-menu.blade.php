@@ -5,7 +5,7 @@
         'ai'      => $is('bot-strategy.*', 'brain-settings.*'),
         'data'    => $is('data-sources.*', 'voices.*', 'telephony.*'),
         'project' => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*'),
-        'crm'     => $is('sessions.*', 'leads.*'),
+        'crm'     => $is('sessions.*', 'leads.*', 'leadgen.*'),
     ];
     $client = request()->route('client');
     $clientSlug = is_object($client) ? $client->slug : ($client ?? null);
@@ -244,7 +244,7 @@
             @endif
 
             {{-- CRM --}}
-            @if($modOn('conversations') || $modOn('leads'))
+            @if($modOn('conversations') || $modOn('leads') || $modOn('leadgen'))
             <li>
                 <a href="javascript:;" class="menu {{ $sec['crm'] ? 'menu--active' : '' }}">
                     <div class="menu__icon"><i data-lucide="briefcase"></i></div>
@@ -269,6 +269,15 @@
                            class="menu {{ $is('leads.*') ? 'menu--active' : '' }}">
                             <div class="menu__icon"><i data-lucide="user-check"></i></div>
                             <div class="menu__title">Leads</div>
+                        </a>
+                    </li>
+                    @endif
+                    @if($modOn('leadgen'))
+                    <li>
+                        <a href="{{ $clientSlug ? route('leadgen.index', ['client' => $clientSlug]) : '#' }}"
+                           class="menu {{ $is('leadgen.*') ? 'menu--active' : '' }}">
+                            <div class="menu__icon"><i data-lucide="target"></i></div>
+                            <div class="menu__title">Lead Generation</div>
                         </a>
                     </li>
                     @endif

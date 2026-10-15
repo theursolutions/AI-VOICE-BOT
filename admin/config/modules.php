@@ -8,8 +8,11 @@
  * hides modules the current member's role doesn't include. Owners bypass.
  *
  *   key => [
- *     'label'  => human label (sidebar + roles matrix),
- *     'routes' => route-name prefixes that belong to this module,
+ *     'label'     => human label (sidebar + roles matrix),
+ *     'routes'    => route-name prefixes that belong to this module,
+ *     'abilities' => optional finer actions inside the module (key => label).
+ *                    A role that has the module but no stored ability list
+ *                    for it gets all of them — see Role::allowsAbility().
  *   ]
  */
 return [
@@ -19,6 +22,16 @@ return [
     'messages'     => ['label' => 'Messages',        'routes' => ['chat']],
     'contacts'     => ['label' => 'Contacts',        'routes' => ['contacts']],
     'leads'        => ['label' => 'Leads',           'routes' => ['leads']],
+    'leadgen'      => ['label' => 'Lead Generation', 'routes' => ['leadgen'], 'abilities' => [
+        'view'     => 'View prospects, searches and campaigns',
+        'search'   => 'Run searches and enrichment',
+        'import'   => 'Import CSV / Excel lists',
+        'edit'     => 'Edit, qualify and add prospects to the CRM',
+        'export'   => 'Export prospects',
+        'approve'  => 'Approve and launch campaigns',
+        'send'     => 'Send individual outreach messages',
+        'settings' => 'Manage offer profiles and templates',
+    ]],
     'agents'       => ['label' => 'Agents',          'routes' => ['bot-agents']],
     'channels'     => ['label' => 'Channels',        'routes' => ['channels']],
     'data_sources' => ['label' => 'Data Sources',    'routes' => ['data-sources']],

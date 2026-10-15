@@ -34,6 +34,11 @@ class BrainResolver
     public const CALL_REPLY   = 'reply';
     public const CALL_CAPTURE = 'capture';
     public const CALL_SUMMARY = 'summary';
+    // Lead Generation. Qualifying a prospect is classification, so machinery.
+    // Drafting outreach is text a customer reads, so it is left off the
+    // machinery list below and resolves as a reply.
+    public const CALL_LEADGEN_QUALIFY = 'leadgen_qualify';
+    public const CALL_LEADGEN_DRAFT   = 'leadgen_draft';
 
     /**
      * Resolution is cached briefly.
@@ -140,7 +145,7 @@ class BrainResolver
         // request — the reply just gets worse for whichever feature added the
         // call. Listing machinery explicitly makes the default expensive, which
         // is the direction a mistake here should fail in.
-        return in_array($callType, [self::CALL_ROUTE, self::CALL_CAPTURE, self::CALL_SUMMARY], true)
+        return in_array($callType, [self::CALL_ROUTE, self::CALL_CAPTURE, self::CALL_SUMMARY, self::CALL_LEADGEN_QUALIFY], true)
             ? AiBrain::SERVES_MACHINERY
             : AiBrain::SERVES_REPLY;
     }

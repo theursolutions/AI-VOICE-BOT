@@ -159,6 +159,59 @@ class PythonClient
         return $body;
     }
 
+    /**
+     * JSON matching a schema, for control-plane tasks (Lead Generation scoring
+     * and drafts). Engine route: POST /llm/structured.
+     *
+     * Brain-routed and metered exactly like extract(): pass the result of
+     * BrainResolver::optionsFor() in $options and the tokens land on that
+     * brain. Returns the engine envelope: data, valid, errors, tokens_in,
+     * tokens_out, model. `valid=false` means the model ignored the schema —
+     * callers must not use `data` as if it conformed.
+     */
+    public function structured(string $prompt, array $schema, array $options = []): array
+    {
+        $brainId  = $options['brain_id'] ?? null;
+        $callType = $options['call_type'] ?? BrainResolver::CALL_REPLY;
+        $projectId = $options['project_id'] ?? null;
+
+        // Only the fields the route accepts; the brain's max_tokens is dropped
+        // for the same reason as in extract() — a small ceiling truncates JSON.
+        $payload = array_filter([
+            'prompt'      => $prompt,
+            'json_schema' => $schema,
+            'task'        => $callType,
+            'provider'    => $options['provider'] ?? null,
+            'model'       => $options['model'] ?? null,
+            'api_key'     => $options['api_key'] ?? null,
+            'base_url'    => $options['base_url'] ?? null,
+        ], fn ($v) => $v !== null);
+
+        try {
+            $res  = $this->http->post('llm/structured', ['json' => $payload, 'timeout' => 120]);
+            $body = json_decode((string) $res->getBody(), true) ?: [];
+        } catch (\Throwable $e) {
+            if ($brainId) {
+                app(BrainResolver::class)
+                    ->record((int) $brainId, $projectId ? (int) $projectId : null, $callType, 0, 0);
+            }
+
+            throw $e;
+        }
+
+        if ($brainId) {
+            app(BrainResolver::class)->record(
+                (int) $brainId,
+                $projectId ? (int) $projectId : null,
+                $callType,
+                $body['tokens_in']  ?? null,
+                $body['tokens_out'] ?? null,
+            );
+        }
+
+        return $body;
+    }
+
     public function ragIngest(int $projectId, int $sourceId, string $type, array $config): array
     {
         $res = $this->http->post('rag/ingest', [
