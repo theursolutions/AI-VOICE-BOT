@@ -1,7 +1,7 @@
 @php
     $is = fn (...$names) => collect($names)->some(fn ($n) => request()->routeIs($n));
     $sec = [
-        'social'  => $is('chat.*', 'channels.*'),
+        'social'  => $is('chat.*', 'channels.*', 'social-posts.*'),
         'ai'      => $is('bot-strategy.*', 'brain-settings.*'),
         'data'    => $is('data-sources.*', 'voices.*', 'telephony.*'),
         'project' => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*'),
@@ -87,7 +87,7 @@
                 </a>
             </li>
             {{-- Social — Messages + Channels --}}
-            @if($modOn('messages') || $modOn('channels'))
+            @if($modOn('messages') || $modOn('channels') || $modOn('social'))
             <li>
                 <a href="javascript:;" class="menu {{ $sec['social'] ? 'menu--active' : '' }}">
                     <div class="menu__icon"><i data-lucide="share-2"></i></div>
@@ -112,6 +112,15 @@
                            class="menu {{ $is('channels.*') ? 'menu--active' : '' }}">
                             <div class="menu__icon"><i data-lucide="radio"></i></div>
                             <div class="menu__title">Meta Onboarding</div>
+                        </a>
+                    </li>
+                    @endif
+                    @if($modOn('social'))
+                    <li>
+                        <a href="{{ $clientSlug ? route('social-posts.index', ['client' => $clientSlug]) : '#' }}"
+                           class="menu {{ $is('social-posts.*') ? 'menu--active' : '' }}">
+                            <div class="menu__icon"><i data-lucide="send"></i></div>
+                            <div class="menu__title">Social Posts</div>
                         </a>
                     </li>
                     @endif

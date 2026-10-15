@@ -21,6 +21,7 @@ return [
     'leads'        => ['label' => 'Leads',           'routes' => ['leads']],
     'agents'       => ['label' => 'Agents',          'routes' => ['bot-agents']],
     'channels'     => ['label' => 'Channels',        'routes' => ['channels']],
+    'social'       => ['label' => 'Social Posts',    'routes' => ['social-posts']],
     'data_sources' => ['label' => 'Data Sources',    'routes' => ['data-sources']],
     'flows'        => ['label' => 'Flow Builder',    'routes' => ['flows']],
     // Split deliberately. These were one module, gated by `byo_llm` (Scale

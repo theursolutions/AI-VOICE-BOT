@@ -120,6 +120,16 @@ class Kernel extends ConsoleKernel
         $schedule->command('email:poll-inbound')
             ->everyTwoMinutes()
             ->withoutOverlapping();
+
+        // ── Social Posts ─────────────────────────────────────────────
+        //
+        // Queues scheduled posts as their time arrives, and finishes Instagram
+        // media that Meta was still processing (Reels take a minute or two).
+        // So a post goes out within about a minute of its scheduled time. A
+        // no-op when nothing is scheduled or processing.
+        $schedule->command('social:publish-due')
+            ->everyMinute()
+            ->withoutOverlapping();
     }
 
     /**
