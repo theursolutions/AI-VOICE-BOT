@@ -215,10 +215,7 @@ class SearchController extends Controller
     /** @return array{0: Project, 1: \Illuminate\Support\Collection} */
     private function open(Request $request, Client $client): array
     {
-        $projects = $this->context->projects($request, $client);
-        $project  = $this->context->resolve($request, $client);
-        abort_unless($project && LeadGenContext::tablesReady(), 404);
-        return [$project, $projects];
+        return $this->context->open($request, $client);
     }
 
     private function transition(Request $request, Client $client, int $id, array $from, string $to, string $event): RedirectResponse

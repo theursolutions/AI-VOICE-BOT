@@ -369,9 +369,6 @@ class ProspectController extends Controller
 
     private function open(Request $request, Client $client): array
     {
-        $projects = $this->context->projects($request, $client);
-        $project  = $this->context->resolve($request, $client);
-        abort_unless($project && LeadGenContext::tablesReady(), 404);
-        return [$project, $projects];
+        return $this->context->open($request, $client);
     }
 }
