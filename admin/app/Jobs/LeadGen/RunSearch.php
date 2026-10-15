@@ -120,6 +120,7 @@ class RunSearch implements ShouldQueue
                     'new'        => (int) ($progress['new'] ?? 0) + $counts['new'],
                     'duplicates' => (int) ($progress['duplicates'] ?? 0) + $counts['duplicate'],
                     'in_crm'     => (int) ($progress['in_crm'] ?? 0) + $counts['existing_crm'],
+                    'excluded'   => (int) ($progress['excluded'] ?? 0) + $counts['excluded'],
                     'skipped'    => (int) ($progress['skipped'] ?? 0) + $counts['skipped'],
                 ] + $progress;
                 $search->forceFill(['cursor' => $result->next, 'progress' => $progress])->save();

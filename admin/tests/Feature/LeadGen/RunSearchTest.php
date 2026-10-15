@@ -111,8 +111,8 @@ class RunSearchTest extends TestCase
         $items = app(ProviderRegistry::class)->get('overture')
             ->search(\App\Services\LeadGen\Providers\SearchCriteria::fromArray($s->criteria), null, 5)->items;
 
-        $this->assertSame(['new' => 5, 'duplicate' => 0, 'existing_crm' => 0, 'skipped' => 0], $writer->write($s, $items));
-        $this->assertSame(['new' => 0, 'duplicate' => 0, 'existing_crm' => 0, 'skipped' => 0], $writer->write($s, $items));
+        $this->assertSame(['new' => 5, 'duplicate' => 0, 'existing_crm' => 0, 'excluded' => 0, 'skipped' => 0], $writer->write($s, $items));
+        $this->assertSame(['new' => 0, 'duplicate' => 0, 'existing_crm' => 0, 'excluded' => 0, 'skipped' => 0], $writer->write($s, $items));
         $this->assertSame(5, Prospect::count());
     }
 

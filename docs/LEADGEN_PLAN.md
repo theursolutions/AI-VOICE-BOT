@@ -1,6 +1,6 @@
 # Lead Generation & Outreach Automation — Phase 1 Plan
 
-Status: **Phase 3 complete** (2026-10-15) — discovery (Overture) and CSV/XLSX import work end to end; no AI or sending yet. Next: Phase 4.
+Status: **Phase 4 complete** (2026-10-16) — discovery, import, dedup, enrichment, lists, Add to CRM and export work; no AI or sending yet. Next: Phase 5.
 
 **Decisions (2026-10-15):**
 1. First discovery provider: **Overture Maps Places** (+ website enrichment, CSV/XLSX import).
@@ -188,3 +188,15 @@ Items 3, 4, 5 are fixed as part of Phase 6–7 (the feature needs them). 1 is pa
 - Live check 2026-10-15: "Dubai" → Dubai Emirate; area load 128 s; 2,126 real-estate businesses with a website (confidence ≥ 0.5).
 
 Admin side: `RunSearch` job processes ≤5 pages × 100 per run then re-queues itself; state on the search row (status, cursor, progress) so pause / resume / cancel / crash-retry resume exactly. `ProspectWriter` is idempotent (insertOrIgnore on unique keys). Imports reuse the same job via `ImportSource` (content-hash source ids, max 10,000 rows, rights attestation recorded).
+
+## 11. Dedup, enrichment, CRM (Phase 4)
+
+**Dedup** (`Deduplicator`, applied in `ProspectWriter`): strong = same website host, same email, or same phone + similar name → the record is folded into the existing prospect (empty fields filled with provenance; nothing overwritten; other source kept in `source_meta.also_from`). Same phone + different name → stored separately with `duplicate_of` set as a *possible* duplicate for a person to judge. Name alone never matches; the prospect page lists similar names in the same city.
+
+**Do-not-contact** (`lg_suppressions`): `deleted` (from "Delete — don't add again") makes future searches/imports skip the business; `opt_out` / `bounce` / `complaint` / `manual` keep it visible but marked and excluded from CRM-add and export.
+
+**Enrichment** (`WebsiteEnricher`, `EnrichProspect` job): homepage + ≤4 contact/about pages on the business's own site via SafeFetcher. Fills an empty email only with a generic inbox on the site's own domain (info@, sales@ …); other addresses (named people, free-mail) are listed as alternatives, never auto-selected. Phones only from `tel:` links. MX check on the email domain; no mailbox probing. Verification only moves up the ladder. Live check 2026-10-16 (madaproperties.com → .sa redirect) found and fixed a text-gluing bug.
+
+**Add to CRM** (`CrmSync`): Contact via `ContactResolver::resolve()` with the email (or phone) as the handle — the same identity an inbound reply resolves to — plus a session-less Lead (`fields.source = Lead Generation`) on the existing Leads board. Idempotent via `lg_prospects.lead_id`.
+
+**Export**: XLSX via `App\Support\Xlsx` (all cells text), current filters, do-not-contact rows excluded, source + licence + verification columns, audit-logged.

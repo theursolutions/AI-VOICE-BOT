@@ -40,7 +40,32 @@ trait UsesSqliteTenant
         $p->id = 999999;
         app(TenantManager::class)->useFor($p);
         (require database_path('migrations/tenant/2026_10_15_200000_create_leadgen_tables.php'))->up();
+        (require database_path('migrations/tenant/2026_10_16_100000_add_lead_id_to_lg_prospects.php'))->up();
         app(TenantManager::class)->reset();
+    }
+
+    /** The CRM tables ContactResolver and Lead use, shaped like the tenant migrations. */
+    protected function createCrmTables(): void
+    {
+        $s = \Illuminate\Support\Facades\Schema::connection('tenant');
+        $s->create('contacts', function ($t) {
+            $t->id(); $t->integer('project_id'); $t->string('name')->nullable(); $t->string('email')->nullable();
+            $t->string('phone')->nullable(); $t->string('avatar')->nullable(); $t->text('notes')->nullable(); $t->json('metadata')->nullable();
+            $t->integer('first_seen_at')->nullable(); $t->integer('last_seen_at')->nullable();
+            $t->integer('created_at')->nullable(); $t->integer('update_at')->nullable(); $t->integer('deleted_at')->nullable();
+        });
+        $s->create('contact_identities', function ($t) {
+            $t->id(); $t->integer('project_id'); $t->unsignedBigInteger('contact_id'); $t->string('channel'); $t->string('external_id');
+            $t->string('channel_account')->nullable(); $t->integer('created_at')->nullable();
+            $t->unique(['project_id', 'channel', 'external_id']);
+        });
+        $s->create('sessions', function ($t) { $t->id(); $t->integer('project_id')->nullable(); $t->unsignedBigInteger('contact_id')->nullable(); });
+        $s->create('leads', function ($t) {
+            $t->id(); $t->unsignedBigInteger('session_id')->nullable(); $t->integer('project_id'); $t->unsignedBigInteger('contact_id')->nullable();
+            $t->json('fields')->nullable(); $t->float('confidence')->nullable(); $t->string('status')->default('new');
+            $t->integer('assigned_to')->nullable(); $t->text('notes')->nullable(); $t->integer('created_at')->nullable();
+            $t->integer('update_at')->nullable(); $t->integer('created_by')->nullable(); $t->integer('deleted_at')->nullable();
+        });
     }
 
     protected function tearDownSqliteTenant(): void

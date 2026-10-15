@@ -22,6 +22,24 @@ Route::middleware('module.ability:leadgen,view')->group(function () {
     Route::get('/lead-generation/searches',               [LeadGen\SearchController::class, 'index'])->name('leadgen.searches.index');
     Route::get('/lead-generation/searches/{id}',          [LeadGen\SearchController::class, 'show'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.show');
     Route::get('/lead-generation/searches/{id}/progress', [LeadGen\SearchController::class, 'progress'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.progress');
+
+    Route::get ('/lead-generation/prospects',            [LeadGen\ProspectController::class, 'index'])->name('leadgen.prospects.index');
+    Route::get ('/lead-generation/prospects/{id}',       [LeadGen\ProspectController::class, 'show'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.prospects.show');
+    // Bulk actions check their own ability (enrich = search, the rest = edit).
+    Route::post('/lead-generation/prospects/bulk',       [LeadGen\ProspectController::class, 'bulk'])->middleware('throttle:30,1')->name('leadgen.prospects.bulk');
+    Route::get ('/lead-generation/lists',                [LeadGen\ListController::class, 'index'])->name('leadgen.lists.index');
+});
+
+Route::middleware('module.ability:leadgen,edit')->group(function () {
+    Route::patch ('/lead-generation/prospects/{id}',     [LeadGen\ProspectController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.prospects.update');
+    Route::post  ('/lead-generation/prospects/{id}/crm', [LeadGen\ProspectController::class, 'addToCrm'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.prospects.crm');
+    Route::post  ('/lead-generation/lists',              [LeadGen\ListController::class, 'store'])->name('leadgen.lists.store');
+    Route::patch ('/lead-generation/lists/{id}',         [LeadGen\ListController::class, 'update'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.lists.update');
+    Route::delete('/lead-generation/lists/{id}',         [LeadGen\ListController::class, 'destroy'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.lists.destroy');
+});
+
+Route::middleware('module.ability:leadgen,export')->group(function () {
+    Route::get('/lead-generation/prospects-export', [LeadGen\ProspectController::class, 'export'])->middleware('throttle:10,1')->name('leadgen.prospects.export');
 });
 
 Route::middleware('module.ability:leadgen,search')->group(function () {
@@ -35,6 +53,7 @@ Route::middleware('module.ability:leadgen,search')->group(function () {
     Route::post('/lead-generation/searches/{id}/resume',    [LeadGen\SearchController::class, 'resume'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.resume');
     Route::post('/lead-generation/searches/{id}/cancel',    [LeadGen\SearchController::class, 'cancel'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.cancel');
     Route::post('/lead-generation/searches/{id}/save',      [LeadGen\SearchController::class, 'toggleSave'])->where('id', Hashid::ROUTE_PATTERN)->name('leadgen.searches.save');
+    Route::post('/lead-generation/prospects/{id}/enrich',   [LeadGen\ProspectController::class, 'enrich'])->where('id', Hashid::ROUTE_PATTERN)->middleware('throttle:60,1')->name('leadgen.prospects.enrich');
 });
 
 Route::middleware('module.ability:leadgen,import')->group(function () {

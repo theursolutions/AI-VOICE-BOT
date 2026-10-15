@@ -9,6 +9,8 @@
     $pq   = $project ? ['project_id' => $project->id] : [];
     $tabs = array_filter([
         ['leadgen.index',           'Overview',   'view'],
+        ['leadgen.prospects.index', 'Prospects',  'view'],
+        ['leadgen.lists.index',     'Lists',      'view'],
         ['leadgen.searches.index',  'Searches',   'view'],
         ['leadgen.searches.create', 'New search', 'search'],
         ['leadgen.imports.create',  'Import',     'import'],
@@ -32,7 +34,7 @@
 <nav class="tva-lg-tabs">
     @foreach ($tabs as [$route, $label])
         <a href="{{ route($route, ['client' => $client->slug] + $pq) }}"
-           class="tva-lg-tab {{ request()->routeIs($route) || ($route === 'leadgen.searches.index' && request()->routeIs('leadgen.searches.show')) ? 'tva-lg-tab--on' : '' }}">{{ $label }}</a>
+           class="tva-lg-tab {{ request()->routeIs($route) || ($route === 'leadgen.searches.index' && request()->routeIs('leadgen.searches.show')) || ($route === 'leadgen.prospects.index' && request()->routeIs('leadgen.prospects.show')) ? 'tva-lg-tab--on' : '' }}">{{ $label }}</a>
     @endforeach
 </nav>
 @endif

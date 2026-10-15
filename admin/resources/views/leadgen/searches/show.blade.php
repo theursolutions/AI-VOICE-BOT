@@ -51,6 +51,7 @@
                 <span><b data-k="new">{{ number_format((int) ($p['new'] ?? 0)) }}</b> new prospects</span>
                 <span><b data-k="duplicates">{{ number_format((int) ($p['duplicates'] ?? 0)) }}</b> already found earlier</span>
                 @if (!empty($p['in_crm']))<span><b data-k="in_crm">{{ number_format((int) $p['in_crm']) }}</b> already in your CRM</span>@endif
+                @if (!empty($p['excluded']))<span><b data-k="excluded">{{ number_format((int) $p['excluded']) }}</b> on your do-not-re-add list</span>@endif
                 @if (!empty($p['skipped']))<span><b data-k="skipped">{{ number_format((int) $p['skipped']) }}</b> skipped (no name)</span>@endif
                 @if ($total)<span>{{ number_format($total) }} match{{ $total === 1 ? '' : 'es' }} in total</span>@endif
                 <span data-phase>
@@ -142,7 +143,7 @@
             .then(function (d) {
                 if (!d) return;
                 var p = d.progress || {};
-                ['new', 'duplicates', 'in_crm', 'skipped'].forEach(function (k) {
+                ['new', 'duplicates', 'in_crm', 'excluded', 'skipped'].forEach(function (k) {
                     var el = document.querySelector('[data-k="' + k + '"]');
                     if (el && p[k] != null) el.textContent = Number(p[k]).toLocaleString();
                 });
