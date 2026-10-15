@@ -1,50 +1,9 @@
 @extends('layouts.master')
 @section('content')
-<style>
-    .tva-lg-stats { display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:16px; margin-top:20px; }
-    @media (max-width: 1100px) { .tva-lg-stats { grid-template-columns:repeat(2, minmax(0,1fr)); } }
-    @media (max-width: 600px)  { .tva-lg-stats { grid-template-columns:1fr; gap:12px; } }
-    .tva-lg-stat { display:flex; align-items:center; gap:14px;
-                   background:#fff; border:1px solid #e2e8f0; border-radius:14px; padding:18px 20px; }
-    html.dark .tva-lg-stat { background:#1e293b; border-color:#334155; }
-    .tva-lg-stat__ico { width:42px; height:42px; border-radius:11px; flex-shrink:0;
-                        display:flex; align-items:center; justify-content:center; }
-    .tva-lg-stat__ico svg { width:19px !important; height:19px !important; }
-    .tva-lg-stat__n { font-size:23px; font-weight:700; line-height:1.15; color:#0f172a; font-variant-numeric:tabular-nums; }
-    html.dark .tva-lg-stat__n { color:#f1f5f9; }
-    .tva-lg-stat__l { font-size:11.5px; color:#94a3b8; margin-top:3px; }
-    .tva-lg-panel { background:#fff; border:1px solid #e2e8f0; border-radius:14px; margin-top:18px; padding:18px 20px; }
-    html.dark .tva-lg-panel { background:#1e293b; border-color:#334155; }
-    .tva-lg-h { font-size:13px; font-weight:700; color:#0f172a; margin-bottom:12px; }
-    html.dark .tva-lg-h { color:#f1f5f9; }
-    .tva-lg-row { display:flex; align-items:flex-start; gap:12px; padding:12px 0; border-top:1px solid #e2e8f0; }
-    .tva-lg-row:first-of-type { border-top:0; padding-top:0; }
-    html.dark .tva-lg-row { border-top-color:#334155; }
-    .tva-lg-row__t { font-weight:600; font-size:12.5px; color:#334155; }
-    html.dark .tva-lg-row__t { color:#e2e8f0; }
-    .tva-lg-row__d { font-size:11.5px; color:#94a3b8; margin-top:2px; line-height:1.55; }
-    .tva-lg-pill { font-size:10.5px; font-weight:700; padding:3px 9px; border-radius:999px; white-space:nowrap; margin-left:auto; }
-    .tva-lg-pill--ok   { background:#dcfce7; color:#15803d; }
-    .tva-lg-pill--off  { background:#f1f5f9; color:#64748b; }
-    html.dark .tva-lg-pill--off { background:#334155; color:#cbd5e1; }
-    .tva-lg-grid { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
-    @media (max-width: 900px) { .tva-lg-grid { grid-template-columns:1fr; } }
-</style>
+
 
 <div class="content">
-    <div class="flex items-center gap-3 mt-4 flex-wrap">
-        <h2 class="text-lg font-semibold">Lead Generation</h2>
-        <div class="text-xs text-slate-500">Find businesses that fit what you sell, qualify them, and reach out — with your approval at every send.</div>
-        @if ($projects->count() > 1)
-            <form method="GET" class="ml-auto">
-                <select name="project_id" class="form-select form-select-sm" onchange="this.form.submit()">
-                    @foreach ($projects as $p)
-                        <option value="{{ hashid($p->id) }}" @selected($project && (int) $project->id === (int) $p->id)>{{ $p->name }}</option>
-                    @endforeach
-                </select>
-            </form>
-        @endif
-    </div>
+    @include('leadgen._header', ['subtitle' => 'Find businesses that fit what you sell, qualify them, and reach out — with your approval at every send.'])
 
     @if (!$project)
         <div class="tva-lg-panel" style="padding:44px 20px;text-align:center">
@@ -75,6 +34,19 @@
                     </div>
                 </div>
             @endforeach
+        </div>
+
+        @php $u = auth()->user(); @endphp
+        <div class="flex gap-2 mt-5 flex-wrap">
+            @if ($u->canAbility($client->id, 'leadgen', 'search'))
+                <a href="{{ route('leadgen.searches.create', ['client' => $client->slug, 'project_id' => $project->id]) }}" class="btn btn-primary btn-sm">Find businesses</a>
+            @endif
+            @if ($u->canAbility($client->id, 'leadgen', 'import'))
+                <a href="{{ route('leadgen.imports.create', ['client' => $client->slug, 'project_id' => $project->id]) }}" class="btn btn-outline-secondary btn-sm">Import a list</a>
+            @endif
+            @if ($stats['running'] > 0)
+                <a href="{{ route('leadgen.searches.index', ['client' => $client->slug, 'project_id' => $project->id]) }}" class="btn btn-outline-secondary btn-sm">{{ $stats['running'] }} search{{ $stats['running'] === 1 ? '' : 'es' }} running</a>
+            @endif
         </div>
 
         <div class="tva-lg-grid">

@@ -50,6 +50,8 @@ x-admin-env: &admin-env
   FILESYSTEM_DISK: local
   # admin -> voice-engine (internal, no TLS needed on the private network)
   PYTHON_BASE_URL: http://voice-engine:8000
+  # admin -> places worker (Lead Generation business search; internal only)
+  LEADGEN_PLACES_URL: ${LEADGEN_PLACES_URL:-http://places:8010}
   # browser -> voice-engine WebSocket (public, via Caddy TLS)
   PYTHON_WS_URL: wss://${VOICE_DOMAIN}/ws/turn
   PYTHON_INTERNAL_SECRET: ${PYTHON_INTERNAL_SECRET}
@@ -222,6 +224,35 @@ services:
     # Keep VOICE_REPLICAS=1 (see deploy/production/.env.prod.example).
     networks: [aicrm]
 
+  # ── Places worker (Lead Generation business search) ────────────────────────
+  # Same image as voice-engine, different entrypoint: a small FastAPI app that
+  # queries Overture Maps open data (DuckDB over public S3 Parquet). Kept out
+  # of the voice-engine process so a 1–2 minute area scan never competes with
+  # live calls for CPU or network. Loads no speech/LLM models.
+  places:
+    image: aicrm/voice-engine:latest
+    restart: unless-stopped
+    command: ["uvicorn", "app.places.app:app", "--host", "0.0.0.0", "--port", "8010"]
+    environment:
+      PYTHON_INTERNAL_SECRET: ${PYTHON_INTERNAL_SECRET}
+      PLACES_CACHE_DIR: /app/places_cache
+      # Pin a release for reproducible results; empty = latest from Overture's STAC catalog.
+      OVERTURE_RELEASE: ${OVERTURE_RELEASE:-}
+      PLACES_MAX_BUILDS: ${PLACES_MAX_BUILDS:-2}
+      HOME: /app/places_cache          # DuckDB keeps its extensions under ~/.duckdb
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      # Area and country caches (Parquet). Disposable — rebuilt on demand — but
+      # a named volume saves re-downloading cities after every redeploy.
+      - places_cache:/app/places_cache
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8010/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks: [aicrm]
+
   # ── MySQL (central app DB + per-tenant chat DBs) ───────────────────────────
   mysql:
     image: mysql:8.0
@@ -308,6 +339,7 @@ volumes:
   voice_duckdb:        # tenant snapshots + KB + crawler — BACK THIS UP
   voice_outputs:
   voice_uploads:
+  places_cache:
   mysql_data:
   redis_data:
 

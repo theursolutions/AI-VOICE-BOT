@@ -170,6 +170,16 @@ services:
       update_config: { parallelism: 1, delay: 30s, order: stop-first }
       restart_policy: { condition: any, delay: 10s }
 
+  # ── Places worker: bounded so an area scan can't starve the voice tier ────
+  places:
+    <<: *logging
+    deploy:
+      replicas: 1               # its Parquet cache is a local volume
+      resources:
+        limits:    { cpus: "1", memory: 1536M }
+        reservations: { memory: 256M }
+      restart_policy: { condition: any, delay: 10s }
+
   # ── Data services: hardened with limits + log rotation ─────────────────────
   mysql:
     <<: *logging

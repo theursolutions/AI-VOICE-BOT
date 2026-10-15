@@ -1,6 +1,6 @@
 # Lead Generation & Outreach Automation — Phase 1 Plan
 
-Status: **Phase 2 complete** (2026-10-15) — foundation in place; no discovery, AI or sending yet. Next: Phase 3.
+Status: **Phase 3 complete** (2026-10-15) — discovery (Overture) and CSV/XLSX import work end to end; no AI or sending yet. Next: Phase 4.
 
 **Decisions (2026-10-15):**
 1. First discovery provider: **Overture Maps Places** (+ website enrichment, CSV/XLSX import).
@@ -170,3 +170,21 @@ Caveats: Overture emails come from its upstream sources and are **not verified**
 9. `/llm/stream` ignores brain/BYOK overrides.
 
 Items 3, 4, 5 are fixed as part of Phase 6–7 (the feature needs them). 1 is partly addressed by SafeFetcher (new code); retrofitting the old paths is a small follow-up.
+
+## 10. Places worker (Phase 3)
+
+`uvicorn app.places.app:app --port 8010` — voice-engine image, own container (`places` in docker-compose). Internal only, `X-Internal-Secret`.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /places/geocode {country, q}` | Country index of named divisions (built once per country per release, ~1–1.5 min), then instant lookups. Ranks exact name, prefix, then searchable size. |
+| `POST /places/area {bbox}` | Loads every place in the box from S3 into a local Parquet file (once per area per release; ~1–2 min for a city). Returns `loading` until ready. |
+| `GET /places/area/{id}/categories` | Categories present in the area, with counts — the search form's category picker. |
+| `POST /places/search {area_id, filters, offset, limit}` | Local filtered paging (~60 ms). |
+
+- Cache: `PLACES_CACHE_DIR/<release>/{areas,divisions}/*.parquet`; key includes `AREA_SCHEMA` and the release, so a running search pages one release consistently. Disposable.
+- `OVERTURE_RELEASE` pins a release; empty = latest from `stac.overturemaps.org`.
+- Names: Overture's `names.primary` is often the local-language name (Arabic, Urdu); the English `names.common['en']` is preferred for display, the local name is kept in `source_meta.local_name`.
+- Live check 2026-10-15: "Dubai" → Dubai Emirate; area load 128 s; 2,126 real-estate businesses with a website (confidence ≥ 0.5).
+
+Admin side: `RunSearch` job processes ≤5 pages × 100 per run then re-queues itself; state on the search row (status, cursor, progress) so pause / resume / cancel / crash-retry resume exactly. `ProspectWriter` is idempotent (insertOrIgnore on unique keys). Imports reuse the same job via `ImportSource` (content-hash source ids, max 10,000 rows, rights attestation recorded).
