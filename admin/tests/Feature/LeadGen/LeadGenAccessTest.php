@@ -90,6 +90,18 @@ class LeadGenAccessTest extends TestCase
         $this->dashboard($this->owner)->assertOk()->assertSee('Lead Generation');
     }
 
+    public function test_inner_pages_send_you_to_the_overview_while_the_project_is_not_set_up(): void
+    {
+        // The test projects have no tenant DB — exactly a project nobody has
+        // run `tenant:migrate` for. That used to be a bare 404.
+        foreach (['leadgen.profiles.index', 'leadgen.prospects.index', 'leadgen.searches.create', 'leadgen.templates.index'] as $name) {
+            $this->actingAs($this->owner)
+                ->get(route($name, ['client' => $this->client->slug, 'project_id' => $this->projectA->id]))
+                ->assertRedirect(route('leadgen.index', ['client' => $this->client->slug, 'project_id' => $this->projectA->id]));
+        }
+        $this->dashboard($this->owner, $this->projectA)->assertOk()->assertSee('being set up');
+    }
+
     public function test_a_role_without_the_module_is_refused(): void
     {
         $this->dashboard($this->member($this->role('Support', ['contacts'])))->assertForbidden();

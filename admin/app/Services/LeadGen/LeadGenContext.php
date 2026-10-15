@@ -59,6 +59,35 @@ class LeadGenContext
         return $project;
     }
 
+    /**
+     * Resolve the project for a Lead Generation page that needs its data.
+     *
+     *   - no project the member may use     → 404
+     *   - project not migrated for lead-gen → redirect to the Overview, which
+     *     explains it's being set up (a bare 404 here read as "this page
+     *     doesn't exist" when the real fix is `php artisan tenant:migrate`)
+     *
+     * @return array{0: Project, 1: Collection}
+     */
+    public function open(Request $request, Client $client): array
+    {
+        $projects = $this->projects($request, $client);
+        $project  = $this->resolve($request, $client);
+        abort_unless($project, 404);
+
+        if (!self::tablesReady()) {
+            \Illuminate\Support\Facades\Log::warning('leadgen.tables_missing', [
+                'project_id' => $project->id,
+                'fix'        => 'php artisan tenant:migrate ' . $project->id,
+            ]);
+            throw new \Illuminate\Http\Exceptions\HttpResponseException(
+                redirect()->route('leadgen.index', ['client' => $client->slug, 'project_id' => $project->id])
+            );
+        }
+
+        return [$project, $projects];
+    }
+
     /** Have this project's lg_* tables been migrated (`php artisan tenant:migrate`)? */
     public static function tablesReady(): bool
     {
