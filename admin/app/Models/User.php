@@ -164,6 +164,13 @@ class User extends Authenticatable implements MustVerifyEmailContract
         return $role ? $role->allowsModule($key) : false;
     }
 
+    /** Can this user perform one action inside a module (Role::allowsAbility)? */
+    public function canAbility(int $clientId, string $module, string $ability): bool
+    {
+        $role = $this->roleForClient($clientId);
+        return $role ? $role->allowsAbility($module, $ability) : false;
+    }
+
     /**
      * Project ids this user is scoped to on the client.
      * null = ALL projects (a client-wide membership row exists);

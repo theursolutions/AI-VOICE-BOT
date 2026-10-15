@@ -26,7 +26,7 @@
         'ai'       => $is('bot-strategy.*', 'brain-settings.*'),
         'data'     => $is('data-sources.*', 'voices.*', 'telephony.*'),
         'project'  => $is('bot-agents.*', 'skills.*', 'widget-settings.*', 'project-profile.*', 'flows.*'),
-        'crm'      => $is('sessions.*', 'leads.*'),
+        'crm'      => $is('sessions.*', 'leads.*', 'leadgen.*'),
         'team'     => $is('members.*', 'roles.*', 'invitations.*'),
     ];
 
@@ -98,7 +98,7 @@
     $showAi        = $can('bot_strategy');
     $showData      = $can('data_sources') || $can('voices') || $can('telephony');
     $showProject   = $can('profile') || $can('agents') || $can('skills') || $can('flows') || $can('widget');
-    $showCrm       = $can('conversations') || $can('leads');
+    $showCrm       = $can('conversations') || $can('leads') || $can('leadgen');
     $showWorkspace = $showAi || $showData || $showProject || $showCrm;
 @endphp
 
@@ -431,6 +431,16 @@
                        @if ($planLocked('leads')) title="{{ $lockTip('leads') }}" @endif>
                         <div class="side-menu__icon"><i data-lucide="user-check"></i></div>
                         <div class="side-menu__title">Leads</div>
+                    </a>
+                </li>
+                @endif
+                @if($can('leadgen'))
+                <li>
+                    <a href="{{ $clientSlug ? route('leadgen.index', ['client' => $clientSlug]) : '#' }}"
+                       class="side-menu {{ $is('leadgen.*') ? 'side-menu--active' : '' }}{{ $lockCls('leadgen') }}"
+                       @if ($planLocked('leadgen')) title="{{ $lockTip('leadgen') }}" @endif>
+                        <div class="side-menu__icon"><i data-lucide="target"></i></div>
+                        <div class="side-menu__title">Lead Generation</div>
                     </a>
                 </li>
                 @endif
