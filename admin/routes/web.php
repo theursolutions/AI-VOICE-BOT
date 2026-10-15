@@ -467,6 +467,17 @@ Route::middleware(['auth', 'active.client'])
         Route::post  ('/channels/{id}/toggle', [App\Http\Controllers\Admin\ChannelWebController::class, 'toggle'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.toggle');
         Route::delete('/channels/{id}',        [App\Http\Controllers\Admin\ChannelWebController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('channels.destroy');
 
+        // Social Posts — compose / schedule / publish to Facebook Pages and Instagram.
+        Route::get   ('/social',                [App\Http\Controllers\Admin\SocialPostController::class, 'index'])->name('social-posts.index');
+        Route::post  ('/social',                [App\Http\Controllers\Admin\SocialPostController::class, 'store'])->name('social-posts.store');
+        Route::post  ('/social/caption',        [App\Http\Controllers\Admin\SocialPostController::class, 'caption'])->name('social-posts.caption');
+        Route::post  ('/social/{id}/publish',   [App\Http\Controllers\Admin\SocialPostController::class, 'publishNow'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('social-posts.publish');
+        Route::post  ('/social/{id}/retry',     [App\Http\Controllers\Admin\SocialPostController::class, 'retry'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('social-posts.retry');
+        Route::delete('/social/{id}',           [App\Http\Controllers\Admin\SocialPostController::class, 'destroy'])->where('id', \App\Support\Hashid::ROUTE_PATTERN)->name('social-posts.destroy');
+        // Same consent flow as channels.connect, named under `social` so a
+        // member with Social Posts but not Channels can still grant publishing.
+        Route::get   ('/social/connect/{provider}', [App\Http\Controllers\Admin\ChannelOnboardController::class, 'start'])->whereIn('provider', ['facebook', 'instagram'])->name('social-posts.connect');
+
         // Channels — Email (multiple mailboxes per project, SMTP/IMAP)
         Route::post  ('/channels/email',            [App\Http\Controllers\Admin\EmailAccountController::class, 'store'])->name('channels.email.store');
         Route::post  ('/channels/email/test',       [App\Http\Controllers\Admin\EmailAccountController::class, 'test'])->name('channels.email.test');

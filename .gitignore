@@ -90,3 +90,7 @@ widget/uploads/
 *.log
 coverage/
 .cache/
+
+# ─── Marketing material ──────────────────────────────────────────────
+# Reels, videos, catalogues and growth notes live on disk only, never in git.
+marketing/

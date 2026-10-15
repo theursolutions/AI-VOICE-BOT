@@ -104,6 +104,27 @@ return [
         'redirect'      => env('GOOGLE_REDIRECT_URI'),
     ],
 
+    // YouTube publishing for Social Posts — a Google Cloud OAuth client with
+    // the YouTube Data API v3 enabled. Falls back to the Gmail-connect client
+    // so one Google project (one verification) can serve both; register
+    // /social/youtube/callback as an authorised redirect URI on it.
+    //
+    // Two Google rules that decide whether this works for real customers:
+    //  - An OAuth app left in "Testing" issues refresh tokens that die after
+    //    7 days, so every channel needs reconnecting weekly. Publish the app.
+    //  - Until the API project passes YouTube's compliance audit, every upload
+    //    is forced to Private whatever we ask for. Set YOUTUBE_API_AUDITED=true
+    //    once it has, which hides the warning on the Social Posts page.
+    'youtube' => [
+        'client_id'      => env('YOUTUBE_CLIENT_ID') ?: env('GOOGLE_MAIL_CLIENT_ID'),
+        'client_secret'  => env('YOUTUBE_CLIENT_SECRET') ?: env('GOOGLE_MAIL_CLIENT_SECRET'),
+        'redirect'       => env('YOUTUBE_REDIRECT_URI'),
+        'scopes'         => env('YOUTUBE_SCOPES') ?: 'https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube.readonly',
+        'audited'        => (bool) env('YOUTUBE_API_AUDITED', false),
+        // 22 = People & Blogs, YouTube's own default for uploads.
+        'category_id'    => env('YOUTUBE_CATEGORY_ID', '22'),
+    ],
+
     // Cloudflare Turnstile — CAPTCHA on the public forms (login, register,
     // forgot-password, landing-page contact). Verified server-side by
     // App\Rules\Turnstile; the widget alone stops nothing.
